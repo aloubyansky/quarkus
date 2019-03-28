@@ -35,7 +35,6 @@ import io.quarkus.bootstrap.util.PropertyUtils;
 import io.quarkus.creator.AppCreator;
 import io.quarkus.creator.config.reader.PropertiesConfigReader;
 import io.quarkus.creator.config.reader.PropertiesHandler;
-import io.quarkus.creator.phase.curate.CuratePhase;
 
 /**
  *
@@ -116,8 +115,10 @@ public class ConfigDemoBase {
         if (demoDir != null) {
             props.setProperty("output", demoDir.toString());
         }
-        props.setProperty(CuratePhase.completePropertyName(CuratePhase.CONFIG_PROP_LOCAL_REPO),
-                Paths.get(PropertyUtils.getUserHome(), "quarkus-curate-repo").toString());
+        /*
+         * props.setProperty(CuratePhase.completePropertyName(CuratePhase.CONFIG_PROP_LOCAL_REPO),
+         * Paths.get(PropertyUtils.getUserHome(), "quarkus-curate-repo").toString());
+         */
         initProps(props);
         return props;
     }

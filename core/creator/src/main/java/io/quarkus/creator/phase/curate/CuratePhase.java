@@ -30,9 +30,6 @@ import java.util.Set;
 
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Model;
-import org.apache.maven.model.Repository;
-import org.eclipse.aether.repository.RemoteRepository;
-import org.eclipse.aether.repository.RepositoryPolicy;
 import org.jboss.logging.Logger;
 
 import io.quarkus.bootstrap.BootstrapDependencyProcessingException;
@@ -174,27 +171,29 @@ public class CuratePhase implements AppCreationPhase<CuratePhase> {
                                 .setRepoHome(this.localRepo == null ? ctx.getWorkPath("repo") : this.localRepo)
                                 .build());
                 bsResolver.relink(appArtifact, appJar);
-                final List<RemoteRepository> artifactRepos = bsResolver.resolveArtifactRepos(appArtifact);
-                if (!artifactRepos.isEmpty()) {
-                    bsResolver.addRemoteRepositories(artifactRepos);
-                    final List<Repository> modelRepos = new ArrayList<>(artifactRepos.size());
-                    for (RemoteRepository repo : artifactRepos) {
-                        final Repository modelRepo = new Repository();
-                        modelRepo.setId(repo.getId());
-                        modelRepo.setUrl(repo.getUrl());
-                        modelRepo.setLayout(repo.getContentType());
-                        RepositoryPolicy policy = repo.getPolicy(true);
-                        if (policy != null) {
-                            modelRepo.setSnapshots(toMavenRepoPolicy(policy));
-                        }
-                        policy = repo.getPolicy(false);
-                        if (policy != null) {
-                            modelRepo.setReleases(toMavenRepoPolicy(policy));
-                        }
-                        modelRepos.add(modelRepo);
-                    }
-                    outcome.setArtifactRepos(modelRepos);
-                }
+                /*
+                 * final List<RemoteRepository> artifactRepos = bsResolver.resolveArtifactRepos(appArtifact);
+                 * if (!artifactRepos.isEmpty()) {
+                 * bsResolver.addRemoteRepositories(artifactRepos);
+                 * final List<Repository> modelRepos = new ArrayList<>(artifactRepos.size());
+                 * for (RemoteRepository repo : artifactRepos) {
+                 * final Repository modelRepo = new Repository();
+                 * modelRepo.setId(repo.getId());
+                 * modelRepo.setUrl(repo.getUrl());
+                 * modelRepo.setLayout(repo.getContentType());
+                 * RepositoryPolicy policy = repo.getPolicy(true);
+                 * if (policy != null) {
+                 * modelRepo.setSnapshots(toMavenRepoPolicy(policy));
+                 * }
+                 * policy = repo.getPolicy(false);
+                 * if (policy != null) {
+                 * modelRepo.setReleases(toMavenRepoPolicy(policy));
+                 * }
+                 * modelRepos.add(modelRepo);
+                 * }
+                 * outcome.setArtifactRepos(modelRepos);
+                 * }
+                 */
                 modelResolver = bsResolver;
             } else {
                 modelResolver.relink(appArtifact, appJar);
@@ -300,24 +299,26 @@ public class CuratePhase implements AppCreationPhase<CuratePhase> {
             ctx.pushOutcome(outcome.build());
         }
     }
-
-    private static org.apache.maven.model.RepositoryPolicy toMavenRepoPolicy(RepositoryPolicy policy) {
-        final org.apache.maven.model.RepositoryPolicy mvnPolicy = new org.apache.maven.model.RepositoryPolicy();
-        mvnPolicy.setEnabled(policy.isEnabled());
-        mvnPolicy.setChecksumPolicy(policy.getChecksumPolicy());
-        mvnPolicy.setUpdatePolicy(policy.getUpdatePolicy());
-        return mvnPolicy;
-    }
-
-    private static void logDeps(String header, List<AppDependency> deps) {
-        final List<String> list = new ArrayList<>(deps.size());
-        for (AppDependency dep : deps) {
-            list.add(dep.toString());
-        }
-        Collections.sort(list);
-        System.out.println(header);
-        for (String str : list) {
-            System.out.println("- " + str);
-        }
-    }
+    /*
+     * private static org.apache.maven.model.RepositoryPolicy toMavenRepoPolicy(RepositoryPolicy policy) {
+     * final org.apache.maven.model.RepositoryPolicy mvnPolicy = new org.apache.maven.model.RepositoryPolicy();
+     * mvnPolicy.setEnabled(policy.isEnabled());
+     * mvnPolicy.setChecksumPolicy(policy.getChecksumPolicy());
+     * mvnPolicy.setUpdatePolicy(policy.getUpdatePolicy());
+     * return mvnPolicy;
+     * }
+     */
+    /*
+     * private static void logDeps(String header, List<AppDependency> deps) {
+     * final List<String> list = new ArrayList<>(deps.size());
+     * for (AppDependency dep : deps) {
+     * list.add(dep.toString());
+     * }
+     * Collections.sort(list);
+     * System.out.println(header);
+     * for (String str : list) {
+     * System.out.println("- " + str);
+     * }
+     * }
+     */
 }

@@ -17,12 +17,10 @@
 
 package io.quarkus.creator.demo;
 
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Properties;
 
 import io.quarkus.creator.AppCreator;
-import io.quarkus.creator.phase.runnerjar.RunnerJarOutcome;
+import io.quarkus.creator.phase.nativeimage.NativeImageOutcome;
 
 /**
  *
@@ -32,13 +30,6 @@ public class NativeImageOutcomeDemo extends ConfigDemoBase {
 
     public static void main(String[] args) throws Exception {
         new NativeImageOutcomeDemo().run();
-    }
-
-    @Override
-    protected Path initAppJar() {
-        final Path quarkusRoot = Paths.get("").toAbsolutePath().getParent().getParent();
-        final Path appDir = quarkusRoot.resolve("integration-tests").resolve("bean-validation-strict").resolve("target");
-        return appDir.resolve("quarkus-integration-test-bean-validation-999-SNAPSHOT.jar");
     }
 
     @Override
@@ -53,7 +44,6 @@ public class NativeImageOutcomeDemo extends ConfigDemoBase {
 
     @Override
     public void demo(AppCreator creator) throws Exception {
-        //creator.resolveOutcome(NativeImageOutcome.class);
-        creator.resolveOutcome(RunnerJarOutcome.class);
+        creator.resolveOutcome(NativeImageOutcome.class);
     }
 }
