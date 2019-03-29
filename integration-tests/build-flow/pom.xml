@@ -58,6 +58,19 @@
                 <artifactId>quarkus-build-flow-tests-mock-app</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>io.quarkus.bootstrap</groupId>
+                <artifactId>bootstrap-core</artifactId>
+                <version>${project.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.quarkus.bootstrap</groupId>
+                <artifactId>bootstrap-core</artifactId>
+                <type>test-jar</type>
+                <version>${project.version}</version>
+                <scope>test</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 </project>

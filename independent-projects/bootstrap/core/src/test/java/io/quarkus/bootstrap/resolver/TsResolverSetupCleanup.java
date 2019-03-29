@@ -30,7 +30,7 @@ import org.junit.Before;
  *
  * @author Alexey Loubyansky
  */
-public class ResolverSetupCleanup {
+public class TsResolverSetupCleanup {
 
     protected Path workDir;
     protected Path repoHome;

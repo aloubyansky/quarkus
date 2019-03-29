@@ -46,7 +46,11 @@ public class TsArtifact {
     }
 
     public static TsArtifact jar(String artifactId, String version) {
-        return new TsArtifact(DEFAULT_GROUP_ID, artifactId, "", "jar", version);
+        return jar(DEFAULT_GROUP_ID, artifactId, version);
+    }
+
+    public static TsArtifact jar(String groupId, String artifactId, String version) {
+        return new TsArtifact(groupId, artifactId, "", "jar", version);
     }
 
     protected final String groupId;

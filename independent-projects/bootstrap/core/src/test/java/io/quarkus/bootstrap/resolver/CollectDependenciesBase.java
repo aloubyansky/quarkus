@@ -31,7 +31,7 @@ import io.quarkus.bootstrap.model.AppDependency;
  *
  * @author Alexey Loubyansky
  */
-public abstract class CollectDependenciesBase extends ResolverSetupCleanup {
+public abstract class CollectDependenciesBase extends TsResolverSetupCleanup {
 
     protected TsArtifact root;
     protected List<AppDependency> expectedResult = Collections.emptyList();
