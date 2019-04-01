@@ -43,8 +43,11 @@
         <dependency>
             <groupId>io.quarkus.bootstrap</groupId>
             <artifactId>bootstrap-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus.bootstrap</groupId>
+            <artifactId>bootstrap-core</artifactId>
             <type>test-jar</type>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>junit</groupId>
