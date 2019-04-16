@@ -50,6 +50,10 @@
             <artifactId>quarkus-kubernetes-spi</artifactId>
         </dependency>
         <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-servlet-container-deployment</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.jboss.metadata</groupId>
             <artifactId>jboss-metadata-web</artifactId>
         </dependency>

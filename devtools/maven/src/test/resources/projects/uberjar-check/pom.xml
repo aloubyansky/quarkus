@@ -19,6 +19,11 @@
     </dependency>
     <dependency>
       <groupId>@project.groupId@</groupId>
+      <artifactId>quarkus-undertow</artifactId>
+      <version>${quarkus.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>@project.groupId@</groupId>
       <artifactId>quarkus-arc</artifactId>
       <version>${quarkus.version}</version>
     </dependency>

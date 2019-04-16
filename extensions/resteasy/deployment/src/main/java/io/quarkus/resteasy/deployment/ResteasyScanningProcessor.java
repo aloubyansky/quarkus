@@ -21,6 +21,8 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -49,7 +51,6 @@ import org.jboss.resteasy.microprofile.config.ServletConfigSource;
 import org.jboss.resteasy.microprofile.config.ServletContextConfigSource;
 import org.jboss.resteasy.plugins.server.servlet.HttpServlet30Dispatcher;
 import org.jboss.resteasy.plugins.server.servlet.ResteasyContextParameters;
-import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -84,9 +85,11 @@ import io.quarkus.resteasy.runtime.ResteasyTemplate;
 import io.quarkus.resteasy.runtime.RolesFilterRegistrar;
 import io.quarkus.runtime.annotations.ConfigItem;
 import io.quarkus.runtime.annotations.ConfigRoot;
-import io.quarkus.undertow.deployment.FilterBuildItem;
-import io.quarkus.undertow.deployment.ServletBuildItem;
-import io.quarkus.undertow.deployment.ServletInitParamBuildItem;
+import io.quarkus.servlet.container.integration.QuarkusServletBuildItem;
+import io.quarkus.servlet.container.integration.QuarkusServletFilterBuildItem;
+import io.quarkus.servlet.container.integration.QuarkusServletFilterMappingInfo;
+import io.quarkus.servlet.container.integration.QuarkusServletFilterMappingType;
+import io.quarkus.servlet.container.integration.QuarkusServletInitParamBuildItem;
 
 /**
  * Processor that finds JAX-RS classes in the deployment
@@ -190,9 +193,9 @@ public class ResteasyScanningProcessor {
             BuildProducer<SubstrateProxyDefinitionBuildItem> proxyDefinition,
             BuildProducer<SubstrateResourceBuildItem> resource,
             BuildProducer<RuntimeInitializedClassBuildItem> runtimeClasses,
-            BuildProducer<FilterBuildItem> filterProducer,
-            BuildProducer<ServletBuildItem> servletProducer,
-            BuildProducer<ServletInitParamBuildItem> servletContextParams,
+            BuildProducer<QuarkusServletFilterBuildItem> filterProducer,
+            BuildProducer<QuarkusServletBuildItem> servletProducer,
+            BuildProducer<QuarkusServletInitParamBuildItem> servletContextParams,
             BuildProducer<BytecodeTransformerBuildItem> transformers,
             CombinedIndexBuildItem combinedIndexBuildItem) throws Exception {
         feature.produce(new FeatureBuildItem(FeatureBuildItem.RESTEASY));
@@ -279,13 +282,15 @@ public class ResteasyScanningProcessor {
             //if JAX-RS is installed at the root location we use a filter, otherwise we use a Servlet and take over the whole mapped path
             if (path.equals("/")) {
                 filterProducer
-                        .produce(FilterBuildItem.builder(JAX_RS_FILTER_NAME, ResteasyFilter.class.getName()).setLoadOnStartup(1)
-                                .addFilterServletNameMapping("default", DispatcherType.REQUEST).setAsyncSupported(true)
-                                .build());
+                        .produce(new QuarkusServletFilterBuildItem(JAX_RS_FILTER_NAME, ResteasyFilter.class.getName(), 1, true,
+                                Collections.singletonList(new QuarkusServletFilterMappingInfo(
+                                        QuarkusServletFilterMappingType.SERVLET, "default", DispatcherType.REQUEST)),
+                                new HashMap<>()));
                 reflectiveClass.produce(new ReflectiveClassBuildItem(false, false, ResteasyFilter.class.getName()));
             } else {
-                servletProducer.produce(ServletBuildItem.builder(JAX_RS_SERVLET_NAME, HttpServlet30Dispatcher.class.getName())
-                        .setLoadOnStartup(1).addMapping(mappingPath).setAsyncSupported(true).build());
+                servletProducer
+                        .produce(new QuarkusServletBuildItem(JAX_RS_SERVLET_NAME, HttpServlet30Dispatcher.class.getName(), 1,
+                                true, Collections.singletonList(mappingPath), new HashMap<>()));
                 reflectiveClass.produce(new ReflectiveClassBuildItem(false, false, HttpServlet30Dispatcher.class.getName()));
             }
 
@@ -321,12 +326,12 @@ public class ResteasyScanningProcessor {
 
             if (!resources.isEmpty()) {
                 servletContextParams.produce(
-                        new ServletInitParamBuildItem(ResteasyContextParameters.RESTEASY_SCANNED_RESOURCES,
+                        new QuarkusServletInitParamBuildItem(ResteasyContextParameters.RESTEASY_SCANNED_RESOURCES,
                                 String.join(",", resources)));
             }
-            servletContextParams.produce(new ServletInitParamBuildItem("resteasy.servlet.mapping.prefix", path));
+            servletContextParams.produce(new QuarkusServletInitParamBuildItem("resteasy.servlet.mapping.prefix", path));
             if (appClass != null) {
-                servletContextParams.produce(new ServletInitParamBuildItem(JAX_RS_APPLICATION_PARAMETER_NAME, appClass));
+                servletContextParams.produce(new QuarkusServletInitParamBuildItem(JAX_RS_APPLICATION_PARAMETER_NAME, appClass));
             }
 
             // generate default constructors for suitable concrete @Path classes that don't have them
@@ -401,21 +406,21 @@ public class ResteasyScanningProcessor {
 
     @BuildStep
     void registerProviders(BuildProducer<ReflectiveClassBuildItem> reflectiveClass,
-            BuildProducer<ServletInitParamBuildItem> servletContextParams,
+            BuildProducer<QuarkusServletInitParamBuildItem> servletContextParams,
             BuildProducer<UnremovableBeanBuildItem> unremovableBeans,
             JaxrsProvidersToRegisterBuildItem jaxrsProvidersToRegisterBuildItem) {
 
         if (jaxrsProvidersToRegisterBuildItem.useBuiltIn()) {
             // if we find a wildcard media type, we just use the built-in providers
-            servletContextParams.produce(new ServletInitParamBuildItem("resteasy.use.builtin.providers", "true"));
+            servletContextParams.produce(new QuarkusServletInitParamBuildItem("resteasy.use.builtin.providers", "true"));
 
             if (!jaxrsProvidersToRegisterBuildItem.getContributedProviders().isEmpty()) {
-                servletContextParams.produce(new ServletInitParamBuildItem("resteasy.providers",
+                servletContextParams.produce(new QuarkusServletInitParamBuildItem("resteasy.providers",
                         String.join(",", jaxrsProvidersToRegisterBuildItem.getContributedProviders())));
             }
         } else {
-            servletContextParams.produce(new ServletInitParamBuildItem("resteasy.use.builtin.providers", "false"));
-            servletContextParams.produce(new ServletInitParamBuildItem("resteasy.providers",
+            servletContextParams.produce(new QuarkusServletInitParamBuildItem("resteasy.use.builtin.providers", "false"));
+            servletContextParams.produce(new QuarkusServletInitParamBuildItem("resteasy.providers",
                     String.join(",", jaxrsProvidersToRegisterBuildItem.getProviders())));
         }
 
@@ -438,7 +443,7 @@ public class ResteasyScanningProcessor {
     @Record(STATIC_INIT)
     @BuildStep
     void setupInjection(ResteasyTemplate template,
-            BuildProducer<ServletInitParamBuildItem> servletContextParams,
+            BuildProducer<QuarkusServletInitParamBuildItem> servletContextParams,
             BeanContainerBuildItem beanContainerBuildItem,
             List<ProxyUnwrapperBuildItem> proxyUnwrappers) {
 
@@ -449,7 +454,8 @@ public class ResteasyScanningProcessor {
         template.setupIntegration(beanContainerBuildItem.getValue(), unwrappers);
 
         servletContextParams
-                .produce(new ServletInitParamBuildItem("resteasy.injector.factory", QuarkusInjectorFactory.class.getName()));
+                .produce(new QuarkusServletInitParamBuildItem("resteasy.injector.factory",
+                        QuarkusInjectorFactory.class.getName()));
     }
 
     @BuildStep

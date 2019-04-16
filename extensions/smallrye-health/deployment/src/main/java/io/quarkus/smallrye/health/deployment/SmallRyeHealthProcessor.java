@@ -17,6 +17,8 @@
 package io.quarkus.smallrye.health.deployment;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Set;
 
 import org.eclipse.microprofile.health.Health;
@@ -34,9 +36,9 @@ import io.quarkus.deployment.recording.RecorderContext;
 import io.quarkus.deployment.util.ServiceUtil;
 import io.quarkus.runtime.annotations.ConfigItem;
 import io.quarkus.runtime.annotations.ConfigRoot;
+import io.quarkus.servlet.container.integration.QuarkusServletBuildItem;
 import io.quarkus.smallrye.health.runtime.SmallRyeHealthServlet;
 import io.quarkus.smallrye.health.runtime.SmallRyeHealthTemplate;
-import io.quarkus.undertow.deployment.ServletBuildItem;
 import io.smallrye.health.SmallRyeHealthReporter;
 
 class SmallRyeHealthProcessor {
@@ -62,15 +64,15 @@ class SmallRyeHealthProcessor {
     @SuppressWarnings("unchecked")
     void build(SmallRyeHealthTemplate template, RecorderContext recorder,
             BuildProducer<FeatureBuildItem> feature,
-            BuildProducer<ServletBuildItem> servlet,
+            BuildProducer<QuarkusServletBuildItem> servlet,
             BuildProducer<AdditionalBeanBuildItem> additionalBean,
             BuildProducer<BeanDefiningAnnotationBuildItem> beanDefiningAnnotation) throws IOException {
 
         feature.produce(new FeatureBuildItem(FeatureBuildItem.SMALLRYE_HEALTH));
 
         // Register the servlet
-        ServletBuildItem servletBuildItem = ServletBuildItem.builder("health", SmallRyeHealthServlet.class.getName())
-                .addMapping(health.path).build();
+        QuarkusServletBuildItem servletBuildItem = new QuarkusServletBuildItem("health", SmallRyeHealthServlet.class.getName(),
+                0, false, Collections.singletonList(health.path), new HashMap<>());
         servlet.produce(servletBuildItem);
 
         // Make ArC discover the beans marked with the @Health qualifier

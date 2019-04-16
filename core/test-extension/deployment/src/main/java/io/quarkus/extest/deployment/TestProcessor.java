@@ -17,6 +17,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -64,7 +66,7 @@ import io.quarkus.extest.runtime.config.XmlConfig;
 import io.quarkus.extest.runtime.subst.DSAPublicKeyObjectSubstitution;
 import io.quarkus.extest.runtime.subst.KeyProxy;
 import io.quarkus.runtime.RuntimeValue;
-import io.quarkus.undertow.deployment.ServletBuildItem;
+import io.quarkus.servlet.container.integration.QuarkusServletBuildItem;
 
 /**
  * A test extension deployment processor
@@ -85,7 +87,7 @@ public final class TestProcessor {
 
     /**
      * Register a extension capability and feature
-     * 
+     *
      * @return test-extension feature build item
      */
     @BuildStep(providesCapabilities = "io.quarkus.test-extension")
@@ -95,7 +97,7 @@ public final class TestProcessor {
 
     /**
      * Register a custom bean defining annotation
-     * 
+     *
      * @return
      */
     @BuildStep
@@ -125,7 +127,7 @@ public final class TestProcessor {
 
     /**
      * Parse an XML configuration using JAXB into an XmlConfig instance graph
-     * 
+     *
      * @param template - runtime template
      * @return RuntimeServiceBuildItem
      * @throws JAXBException
@@ -149,7 +151,7 @@ public final class TestProcessor {
 
     /**
      * Have the runtime template start the service and install a shutdown hook
-     * 
+     *
      * @param template - runtime template
      * @param shutdownContextBuildItem - ShutdownContext information
      * @param serviceBuildItem - previously created RuntimeXmlConfigService container
@@ -171,7 +173,7 @@ public final class TestProcessor {
 
     /**
      * Load a DSAPublicKey from a resource and create an instance of it
-     * 
+     *
      * @param template - runtime template
      * @return PublicKeyBuildItem for the DSAPublicKey
      * @throws IOException - on resource load failure
@@ -204,7 +206,7 @@ public final class TestProcessor {
 
     /**
      * Have the runtime register the public key with the public key producer bean
-     * 
+     *
      * @param template - runtime template
      * @param publicKey - previously loaded public key
      * @param beanContainer - BeanContainer build item
@@ -217,15 +219,13 @@ public final class TestProcessor {
 
     /**
      * Register a servlet used for interacting with native image for testing
-     * 
+     *
      * @return ServletBuildItem
      */
     @BuildStep
-    ServletBuildItem createServlet() {
-        ServletBuildItem servletBuildItem = ServletBuildItem.builder("commands", CommandServlet.class.getName())
-                .addMapping("/commands/*")
-                .build();
-        return servletBuildItem;
+    QuarkusServletBuildItem createServlet() {
+        return new QuarkusServletBuildItem("commands", CommandServlet.class.getName(), 0, false,
+                Collections.singletonList("/commands/*"), new HashMap<>());
     }
 
     /**
@@ -327,7 +327,7 @@ public final class TestProcessor {
 
     /**
      * Collect the beans with our custom bean defining annotation and configure them with the runtime config
-     * 
+     *
      * @param template - runtime template
      * @param beanArchiveIndex - index of type information
      * @param testBeanProducer - producer for located Class<IConfigConsumer> bean types
@@ -357,7 +357,7 @@ public final class TestProcessor {
 
     /**
      * For each IConfigConsumer type, have the runtime template create a bean and pass in the runtime related configs
-     * 
+     *
      * @param template - runtime template
      * @param testBeans - types of IConfigConsumer found
      * @param beanContainer - bean container to create test bean in
@@ -376,7 +376,7 @@ public final class TestProcessor {
 
     /**
      * Test for https://github.com/quarkusio/quarkus/issues/1633
-     * 
+     *
      * @param template - runtime template
      */
     @BuildStep

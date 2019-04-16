@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -55,11 +56,11 @@ import io.quarkus.deployment.builditem.substrate.ReflectiveClassBuildItem;
 import io.quarkus.deployment.builditem.substrate.ReflectiveHierarchyBuildItem;
 import io.quarkus.deployment.logging.LogCleanupFilterBuildItem;
 import io.quarkus.resteasy.deployment.ResteasyJaxrsConfig;
+import io.quarkus.servlet.container.integration.QuarkusServletBuildItem;
 import io.quarkus.smallrye.openapi.common.deployment.SmallRyeOpenApiConfig;
 import io.quarkus.smallrye.openapi.runtime.OpenApiDocumentProducer;
 import io.quarkus.smallrye.openapi.runtime.OpenApiServlet;
 import io.quarkus.smallrye.openapi.runtime.SmallRyeOpenApiTemplate;
-import io.quarkus.undertow.deployment.ServletBuildItem;
 import io.smallrye.openapi.api.OpenApiConfig;
 import io.smallrye.openapi.api.OpenApiConfigImpl;
 import io.smallrye.openapi.runtime.OpenApiStaticFile;
@@ -100,9 +101,9 @@ public class SmallRyeOpenApiProcessor {
     }
 
     @BuildStep
-    ServletBuildItem servlet() {
-        return ServletBuildItem.builder("openapi", OpenApiServlet.class.getName())
-                .addMapping(openapi.path).build();
+    QuarkusServletBuildItem servlet() {
+        return new QuarkusServletBuildItem("openapi", OpenApiServlet.class.getName(), 0, false,
+                Collections.singletonList(openapi.path), new HashMap<>());
     }
 
     @BuildStep

@@ -19,6 +19,8 @@ package io.quarkus.smallrye.metrics.deployment;
 import static io.quarkus.deployment.annotations.ExecutionTime.STATIC_INIT;
 
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -42,9 +44,9 @@ import io.quarkus.deployment.builditem.ShutdownContextBuildItem;
 import io.quarkus.deployment.builditem.substrate.ReflectiveClassBuildItem;
 import io.quarkus.runtime.annotations.ConfigItem;
 import io.quarkus.runtime.annotations.ConfigRoot;
+import io.quarkus.servlet.container.integration.QuarkusServletBuildItem;
 import io.quarkus.smallrye.metrics.runtime.SmallRyeMetricsServlet;
 import io.quarkus.smallrye.metrics.runtime.SmallRyeMetricsTemplate;
-import io.quarkus.undertow.deployment.ServletBuildItem;
 import io.smallrye.metrics.MetricProducer;
 import io.smallrye.metrics.MetricRegistries;
 import io.smallrye.metrics.MetricsRequestHandler;
@@ -76,11 +78,9 @@ public class SmallRyeMetricsProcessor {
     SmallRyeMetricsConfig metrics;
 
     @BuildStep
-    ServletBuildItem createServlet() {
-        ServletBuildItem servletBuildItem = ServletBuildItem.builder("metrics", SmallRyeMetricsServlet.class.getName())
-                .addMapping(metrics.path + (metrics.path.endsWith("/") ? "*" : "/*"))
-                .build();
-        return servletBuildItem;
+    QuarkusServletBuildItem createServlet() {
+        return new QuarkusServletBuildItem("metrics", SmallRyeMetricsServlet.class.getName(), 0, false,
+                Collections.singletonList(metrics.path + (metrics.path.endsWith("/") ? "*" : "/*")), new HashMap<>());
     }
 
     @BuildStep

@@ -216,6 +216,11 @@
                 <artifactId>quarkus-netty</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-servlet-container-deployment</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <!-- Quarkus extensions -->
 

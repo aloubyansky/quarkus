@@ -47,8 +47,8 @@ public class IoUtils {
 
     private static final Path TMP_DIR = Paths.get(PropertyUtils.getProperty("java.io.tmpdir"));
 
-    private static void failedToMkDir(final Path dir) {
-        throw new IllegalStateException("Failed to create directory " + dir);
+    private static void failedToMkDir(final Path dir, Exception e) {
+        throw new IllegalStateException("Failed to create directory " + dir, e);
     }
 
     public static Path createTmpDir(String name) {
@@ -67,7 +67,7 @@ public class IoUtils {
         try {
             Files.createDirectories(dir);
         } catch (IOException e) {
-            failedToMkDir(dir);
+            failedToMkDir(dir, e);
         }
         return dir;
     }

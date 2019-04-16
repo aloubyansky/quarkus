@@ -17,6 +17,9 @@
 package io.quarkus.smallrye.opentracing.deployment;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 
 import javax.enterprise.inject.spi.ObserverMethod;
 import javax.servlet.DispatcherType;
@@ -29,9 +32,11 @@ import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.builditem.FeatureBuildItem;
 import io.quarkus.deployment.builditem.substrate.ReflectiveMethodBuildItem;
 import io.quarkus.resteasy.common.deployment.ResteasyJaxrsProviderBuildItem;
+import io.quarkus.servlet.container.integration.QuarkusServletFilterBuildItem;
+import io.quarkus.servlet.container.integration.QuarkusServletFilterMappingInfo;
+import io.quarkus.servlet.container.integration.QuarkusServletFilterMappingType;
 import io.quarkus.smallrye.opentracing.runtime.QuarkusSmallRyeTracingDynamicFeature;
 import io.quarkus.smallrye.opentracing.runtime.TracerProducer;
-import io.quarkus.undertow.deployment.FilterBuildItem;
 
 public class SmallRyeOpenTracingProcessor {
 
@@ -48,21 +53,22 @@ public class SmallRyeOpenTracingProcessor {
 
     @BuildStep
     void setupFilter(BuildProducer<ResteasyJaxrsProviderBuildItem> providers,
-            BuildProducer<FilterBuildItem> filterProducer,
+            BuildProducer<QuarkusServletFilterBuildItem> filterProducer,
             BuildProducer<FeatureBuildItem> feature) {
 
         feature.produce(new FeatureBuildItem(FeatureBuildItem.SMALLRYE_OPENTRACING));
 
         providers.produce(new ResteasyJaxrsProviderBuildItem(QuarkusSmallRyeTracingDynamicFeature.class.getName()));
 
-        FilterBuildItem filterInfo = FilterBuildItem.builder("tracingFilter", SpanFinishingFilter.class.getName())
-                .setAsyncSupported(true)
-                .addFilterUrlMapping("*", DispatcherType.FORWARD)
-                .addFilterUrlMapping("*", DispatcherType.INCLUDE)
-                .addFilterUrlMapping("*", DispatcherType.REQUEST)
-                .addFilterUrlMapping("*", DispatcherType.ASYNC)
-                .addFilterUrlMapping("*", DispatcherType.ERROR)
-                .build();
+        final List<QuarkusServletFilterMappingInfo> mappings = new ArrayList<>();
+        mappings.add(new QuarkusServletFilterMappingInfo(QuarkusServletFilterMappingType.URL, "*", DispatcherType.FORWARD));
+        mappings.add(new QuarkusServletFilterMappingInfo(QuarkusServletFilterMappingType.URL, "*", DispatcherType.INCLUDE));
+        mappings.add(new QuarkusServletFilterMappingInfo(QuarkusServletFilterMappingType.URL, "*", DispatcherType.REQUEST));
+        mappings.add(new QuarkusServletFilterMappingInfo(QuarkusServletFilterMappingType.URL, "*", DispatcherType.ASYNC));
+        mappings.add(new QuarkusServletFilterMappingInfo(QuarkusServletFilterMappingType.URL, "*", DispatcherType.ERROR));
+
+        QuarkusServletFilterBuildItem filterInfo = new QuarkusServletFilterBuildItem("tracingFilter",
+                SpanFinishingFilter.class.getName(), 0, true, mappings, new HashMap<>());
         filterProducer.produce(filterInfo);
     }
 

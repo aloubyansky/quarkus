@@ -114,6 +114,11 @@ import io.quarkus.deployment.builditem.substrate.SubstrateResourceBuildItem;
 import io.quarkus.deployment.recording.RecorderContext;
 import io.quarkus.kubernetes.spi.KubernetesPortBuildItem;
 import io.quarkus.runtime.RuntimeValue;
+import io.quarkus.servlet.container.integration.QuarkusServletBuildItem;
+import io.quarkus.servlet.container.integration.QuarkusServletFilterBuildItem;
+import io.quarkus.servlet.container.integration.QuarkusServletFilterMappingInfo;
+import io.quarkus.servlet.container.integration.QuarkusServletFilterMappingType;
+import io.quarkus.servlet.container.integration.QuarkusServletInitParamBuildItem;
 import io.quarkus.undertow.runtime.HttpConfig;
 import io.quarkus.undertow.runtime.HttpSessionContext;
 import io.quarkus.undertow.runtime.ServletProducer;
@@ -239,10 +244,10 @@ public class UndertowBuildStep {
     @Record(STATIC_INIT)
     @BuildStep()
     public ServletDeploymentManagerBuildItem build(ApplicationArchivesBuildItem applicationArchivesBuildItem,
-            List<ServletBuildItem> servlets,
-            List<FilterBuildItem> filters,
+            List<QuarkusServletBuildItem> servlets,
+            List<QuarkusServletFilterBuildItem> filters,
             List<ListenerBuildItem> listeners,
-            List<ServletInitParamBuildItem> initParams,
+            List<QuarkusServletInitParamBuildItem> initParams,
             List<ServletContextAttributeBuildItem> contextParams,
             UndertowDeploymentTemplate template, RecorderContext context,
             List<ServletExtensionBuildItem> extensions,
@@ -427,34 +432,34 @@ public class UndertowBuildStep {
             }
         }
 
-        for (ServletBuildItem servlet : servlets) {
+        for (QuarkusServletBuildItem servlet : servlets) {
             String servletClass = servlet.getServletClass();
             if (servlet.getLoadOnStartup() == 0) {
                 reflectiveClasses.accept(new ReflectiveClassBuildItem(false, false, servlet.getServletClass()));
             }
             template.registerServlet(deployment, servlet.getName(), context.classProxy(servletClass),
                     servlet.isAsyncSupported(), servlet.getLoadOnStartup(), bc.getValue(), servlet.getInitParams(),
-                    servlet.getInstanceFactory());
+                    null);
 
             for (String m : servlet.getMappings()) {
                 template.addServletMapping(deployment, servlet.getName(), m);
             }
         }
 
-        for (FilterBuildItem filter : filters) {
+        for (QuarkusServletFilterBuildItem filter : filters) {
             String filterClass = filter.getFilterClass();
             reflectiveClasses.accept(new ReflectiveClassBuildItem(false, false, filterClass));
             template.registerFilter(deployment, filter.getName(), context.classProxy(filterClass), filter.isAsyncSupported(),
-                    bc.getValue(), filter.getInitParams(), filter.getInstanceFactory());
-            for (FilterBuildItem.FilterMappingInfo m : filter.getMappings()) {
-                if (m.getMappingType() == FilterBuildItem.FilterMappingInfo.MappingType.URL) {
+                    bc.getValue(), filter.getInitParams(), null);
+            for (QuarkusServletFilterMappingInfo m : filter.getMappings()) {
+                if (m.getMappingType() == QuarkusServletFilterMappingType.URL) {
                     template.addFilterURLMapping(deployment, filter.getName(), m.getMapping(), m.getDispatcher());
                 } else {
                     template.addFilterServletNameMapping(deployment, filter.getName(), m.getMapping(), m.getDispatcher());
                 }
             }
         }
-        for (ServletInitParamBuildItem i : initParams) {
+        for (QuarkusServletInitParamBuildItem i : initParams) {
             template.addServltInitParameter(deployment, i.getKey(), i.getValue());
         }
         for (ServletContextAttributeBuildItem i : contextParams) {
