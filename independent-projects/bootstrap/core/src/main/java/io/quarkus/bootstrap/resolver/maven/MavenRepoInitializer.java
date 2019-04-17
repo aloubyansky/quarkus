@@ -17,10 +17,17 @@
 package io.quarkus.bootstrap.resolver.maven;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+
+import org.apache.maven.artifact.versioning.ArtifactVersion;
+import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 import org.apache.maven.model.building.ModelBuilder;
 import org.apache.maven.model.resolution.WorkspaceModelResolver;
 import org.apache.maven.repository.internal.MavenRepositorySystemUtils;
@@ -75,6 +82,8 @@ public class MavenRepoInitializer {
     private static final File USER_SETTINGS_FILE;
     private static final File GLOBAL_SETTINGS_FILE;
 
+    public static final ArtifactVersion v353 = new DefaultArtifactVersion("3.5.3");
+
     static {
         final String mvnCmd = System.getenv(MAVEN_CMD_LINE_ARGS);
         String userSettings = null;
@@ -95,6 +104,26 @@ public class MavenRepoInitializer {
 
         f = globalSettings != null ? resolveUserSettings(globalSettings) : new File(PropertyUtils.getProperty(MAVEN_HOME, envM2Home != null ? envM2Home : ""), "conf/settings.xml");
         GLOBAL_SETTINGS_FILE = f != null && f.exists() ? f : null;
+    }
+
+    public static void enforce(Class<?> cls, String pomProps, ArtifactVersion lowestVersion) {
+        final long start = System.currentTimeMillis();
+        final Properties props = new Properties();
+        final URL resource = cls.getClassLoader().getResource(pomProps);
+        if (resource != null) {
+            try (InputStream is = resource.openStream()) {
+                props.load(is);
+                final String version = props.getProperty("version");
+                if (version != null && lowestVersion.compareTo(new DefaultArtifactVersion(version)) > 0) {
+                    System.out.println("Unsupported version of " + pomProps + " " + version);
+                } else {
+                    System.out.println("Supported version of " + pomProps + " " + version);
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        System.out.println("Enforcer took " + (System.currentTimeMillis() - start));
     }
 
     private static File resolveUserSettings(String settingsArg) {
@@ -238,6 +267,10 @@ public class MavenRepoInitializer {
         if(settings != null) {
             return settings;
         }
+
+        enforce(org.apache.maven.settings.building.SettingsBuildingResult.class,
+                "META-INF/maven/org.apache.maven/maven-settings-builder/pom.properties", v353);
+
         final Settings effectiveSettings;
         try {
             final SettingsBuildingResult result = new DefaultSettingsBuilderFactory()

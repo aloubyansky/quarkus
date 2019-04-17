@@ -42,6 +42,11 @@ import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
  */
 public class MavenArtifactResolver {
 
+    static {
+        MavenRepoInitializer.enforce(org.apache.maven.repository.internal.MavenRepositorySystemUtils.class,
+                "META-INF/maven/org.apache.maven/maven-resolver-provider/pom.properties", MavenRepoInitializer.v353);
+    }
+
     public static class Builder {
 
         private Path repoHome;
