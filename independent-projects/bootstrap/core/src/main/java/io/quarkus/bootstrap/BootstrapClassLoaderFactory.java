@@ -233,6 +233,17 @@ public class BootstrapClassLoaderFactory {
                 mvn.setOffline(offline);
             }
             final URL[] urls = toURLs(new BootstrapAppModelResolver(mvn.build()).resolveModel(localProject.getAppArtifact()).getDeploymentDependencies(), Collections.emptyList());
+
+            final List<String> ordered = new ArrayList<>(urls.length);
+            for(URL url : urls) {
+                ordered.add(url.toExternalForm());
+            }
+            Collections.sort(ordered);
+            System.out.println("Bootstrap deployment CP");
+            for(String entry : ordered) {
+                System.out.println(entry);
+            }
+
             if(cachedCpPath != null) {
                 persistCp(localProject, urls, cachedCpPath);
             }

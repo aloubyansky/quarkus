@@ -121,7 +121,7 @@ public class LocalProject {
     private final LocalWorkspace workspace;
     private final List<LocalProject> modules = new ArrayList<>(0);
 
-    private LocalProject(Model rawModel, LocalWorkspace workspace) throws BootstrapException {
+    public LocalProject(Model rawModel, LocalWorkspace workspace) throws BootstrapException {
         this.rawModel = rawModel;
         this.dir = rawModel.getProjectDirectory().toPath();
         this.workspace = workspace;
