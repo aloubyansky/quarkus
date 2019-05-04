@@ -1,7 +1,7 @@
 /**
  *
  */
-package io.quarkus.bootstrap.workspace.test;
+package io.quarkus.bootstrap.workspace.maven.test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
