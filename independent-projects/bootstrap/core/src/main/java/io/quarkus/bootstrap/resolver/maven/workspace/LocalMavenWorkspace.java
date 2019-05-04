@@ -31,6 +31,7 @@ import org.eclipse.aether.repository.WorkspaceRepository;
 
 import io.quarkus.bootstrap.model.AppArtifactCoords;
 import io.quarkus.bootstrap.model.AppArtifactKey;
+import io.quarkus.bootstrap.resolver.LocalProject;
 import io.quarkus.bootstrap.resolver.LocalWorkspace;
 
 /**
@@ -89,8 +90,8 @@ public class LocalMavenWorkspace implements LocalWorkspace, WorkspaceModelResolv
     }
 
     @Override
-    public Map<AppArtifactKey, LocalMavenProject> getProjects() {
-        return projects;
+    public Map<AppArtifactKey, LocalProject> getProjects() {
+        return Collections.unmodifiableMap(projects);
     }
 
     @Override
