@@ -16,7 +16,14 @@
 
 package io.quarkus.bootstrap.resolver;
 
+import java.util.Map;
+
+import io.quarkus.bootstrap.model.AppArtifactKey;
+import io.quarkus.bootstrap.resolver.maven.workspace.LocalMavenProject;
+
 public interface LocalWorkspace {
     int getId();
+
+    Map<AppArtifactKey, LocalMavenProject> getProjects();
 
 }

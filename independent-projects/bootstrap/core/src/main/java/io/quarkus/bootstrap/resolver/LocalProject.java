@@ -27,4 +27,7 @@ public interface LocalProject {
     Path getOutputDir();
     LocalWorkspace getWorkspace();
     AppArtifact getAppArtifact();
+    String getGroupId();
+    String getArtifactId();
+    String getVersion();
 }

@@ -88,6 +88,7 @@ public class LocalMavenWorkspace implements LocalWorkspace, WorkspaceModelResolv
         return null;
     }
 
+    @Override
     public Map<AppArtifactKey, LocalMavenProject> getProjects() {
         return projects;
     }

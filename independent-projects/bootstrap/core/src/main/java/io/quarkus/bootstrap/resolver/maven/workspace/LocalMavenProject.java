@@ -158,14 +158,17 @@ public class LocalMavenProject implements LocalProject {
         }
     }
 
+    @Override
     public String getGroupId() {
         return groupId;
     }
 
+    @Override
     public String getArtifactId() {
         return artifactId;
     }
 
+    @Override
     public String getVersion() {
         return version;
     }
