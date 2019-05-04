@@ -18,7 +18,6 @@ package io.quarkus.bootstrap.resolver.gradle.workspace;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +53,7 @@ public class LocalGradleProject implements LocalProject {
     private static final String BUILD_GRADLE = "build.gradle";
     private final ProjectConnection pc;
     private Path projectDir;
+    private EclipseProject eclipseProject;
 
     private LocalGradleProject(Path projectDir) {
         this.projectDir = projectDir;
@@ -96,7 +96,7 @@ public class LocalGradleProject implements LocalProject {
 
     @Override
     public AppArtifact getAppArtifact() {
-        throw new IllegalStateException("Note done yet");
+        return new AppArtifact(getGroupId(), getArtifactId(), "", "jar", getVersion());
     }
 
     @Override
@@ -115,18 +115,23 @@ public class LocalGradleProject implements LocalProject {
     }
 
     public List<AppDependency> getDependencies(boolean offline) {
-        EclipseProject eclipseProject = getModel(EclipseProject.class);
-        if (eclipseProject == null) {
-            return Collections.emptyList();
-        }
-
-        DomainObjectSet<? extends EclipseExternalDependency> deps = eclipseProject.getClasspath();
+        DomainObjectSet<? extends EclipseExternalDependency> deps = getEclipseProject().getClasspath();
         return deps.stream()
             .map(this::toArtifact)
             .map(artifact -> new AppDependency(artifact, "compile"))
             .collect(Collectors.toList());
     }
 
+    private EclipseProject getEclipseProject() {
+        if (eclipseProject == null) {
+            eclipseProject = getModel(EclipseProject.class);
+            if (eclipseProject == null) {
+                throw new IllegalStateException("Unable to get eclipse model from gradle");
+            }
+        }
+        return eclipseProject;
+    }
+    
     private AppArtifact toArtifact(EclipseExternalDependency dep) {
         GradleModuleVersion gav = dep.getGradleModuleVersion();
         if (gav == null) {

@@ -40,8 +40,10 @@ public class GradleArtifactsResolverTest {
         List<AppDependency> deps = new GradleArtifactResolver().getDeploymentDependencies(true, project);
         
         assertThat(deps)
-            .hasSizeGreaterThan(40)
-            .anySatisfy(dep ->
-                assertThat(dep.getArtifact()).matches(a -> a.getGroupId().equals("org.assertj"), "should include assertj"));
+            .hasSizeGreaterThan(40);
+        
+        assertThat(deps)
+            .extracting(ad -> ad.getArtifact().getArtifactId())
+            .contains("assertj-core", "quarkus-resteasy");
     }
 }
