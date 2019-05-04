@@ -16,6 +16,7 @@
 
 package io.quarkus.bootstrap.resolver.gradle;
 
+import java.util.Collections;
 import java.util.List;
 
 import io.quarkus.bootstrap.BootstrapDependencyProcessingException;
@@ -23,6 +24,7 @@ import io.quarkus.bootstrap.model.AppDependency;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
 import io.quarkus.bootstrap.resolver.ArtifactResolver;
 import io.quarkus.bootstrap.resolver.LocalProject;
+import io.quarkus.bootstrap.resolver.gradle.workspace.LocalGradleProject;
 
 /**
  * Resolves artifacts using Gradle model.
@@ -32,6 +34,11 @@ public class GradleArtifactResolver implements ArtifactResolver {
     @Override
     public List<AppDependency> getDeploymentDependencies(boolean offline, LocalProject project)
             throws BootstrapDependencyProcessingException, AppModelResolverException {
-        throw new IllegalStateException("Note done yet");
+        
+        if (project instanceof LocalGradleProject) {
+            return ((LocalGradleProject)project).getDependencies(offline);
+        } else {
+            return Collections.emptyList();
+        }
     }
 }

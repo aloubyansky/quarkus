@@ -18,13 +18,17 @@ package io.quarkus.bootstrap.resolver.gradle.workspace;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.gradle.tooling.GradleConnector;
 import org.gradle.tooling.ProjectConnection;
 import org.gradle.tooling.UnknownModelException;
+import org.gradle.tooling.model.DomainObjectSet;
 import org.gradle.tooling.model.GradleModuleVersion;
 import org.gradle.tooling.model.GradleProject;
 import org.gradle.tooling.model.eclipse.EclipseExternalDependency;
@@ -37,6 +41,7 @@ import org.slf4j.LoggerFactory;
 import io.quarkus.bootstrap.BootstrapException;
 import io.quarkus.bootstrap.model.AppArtifact;
 import io.quarkus.bootstrap.model.AppArtifactKey;
+import io.quarkus.bootstrap.model.AppDependency;
 import io.quarkus.bootstrap.resolver.LocalProject;
 import io.quarkus.bootstrap.resolver.LocalWorkspace;
 
@@ -98,14 +103,13 @@ public class LocalGradleProject implements LocalProject {
     }
     
     private Optional<GradleModuleVersion> getPublication() {
-        try {
-            return pc.getModel(ProjectPublications.class).getPublications().stream()
-                    .map(GradlePublication::getId)
-                    .findFirst();
-        } catch (UnknownModelException e) {
-            logger.warn("Failed to access Gradle publication model", e);
+        ProjectPublications projectPublications = getModel(ProjectPublications.class);
+        if (projectPublications == null) {
             return Optional.empty();
         }
+        return projectPublications.getPublications().stream()
+            .map(GradlePublication::getId)
+            .findFirst();
     }
 
     @Override
@@ -128,6 +132,30 @@ public class LocalGradleProject implements LocalProject {
         return getPublication().map(GradleModuleVersion::getVersion).orElse("na");
     }
 
+    public List<AppDependency> getDependencies(boolean offline) {
+        EclipseProject eclipseProject = getModel(EclipseProject.class);
+        if (eclipseProject == null) {
+            return Collections.emptyList();
+        }
+
+        DomainObjectSet<? extends EclipseExternalDependency> deps = eclipseProject.getClasspath();
+        
+        return deps.stream()
+            .map(this::toArtifact)
+            .map(artifact -> new AppDependency(artifact, "compile"))
+            .collect(Collectors.toList());
+    }
+
+    private AppArtifact toArtifact(EclipseExternalDependency dep) {
+        GradleModuleVersion gav = dep.getGradleModuleVersion();
+        if (gav == null) {
+            throw new IllegalStateException("No GAV found for dependency " + dep.getFile());
+        }
+        AppArtifact artifact = new AppArtifact(gav.getGroup(), gav.getName(), gav.getVersion());
+        artifact.setPath(dep.getFile().toPath());
+        return artifact;
+    }
+    
     /**
      * Note that this will not work from a flatDir child-project.
      */
@@ -142,4 +170,12 @@ public class LocalGradleProject implements LocalProject {
         throw new BootstrapException("Failed to locate project build.gradle for " + path);
     }
 
+    private <T> T getModel(Class<T> type) {
+        try {
+            return pc.getModel(type);
+        } catch (UnknownModelException e) {
+            logger.warn("Failed to access Gradle model of type " + type, e);
+            return null;
+        }
+    }
 }

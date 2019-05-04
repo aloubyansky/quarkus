@@ -15,6 +15,7 @@ dependencies {
     implementation "io.quarkus:quarkus-resteasy:${quarkusVersion}"
     
     testCompile "io.quarkus:quarkus-junit5:${quarkusVersion}"
+    testCompile "org.assertj:assertj-core:3.12.0"
 }
 
 publishing {
