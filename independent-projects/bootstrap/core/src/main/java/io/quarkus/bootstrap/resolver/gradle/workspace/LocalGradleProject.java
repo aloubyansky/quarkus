@@ -69,8 +69,7 @@ public class LocalGradleProject implements LocalProject {
 
     @Override
     public Path getOutputDir() {
-
-        throw new IllegalStateException("Note done yet");
+        return projectDir.resolve("build");
     }
 
     @Override
@@ -97,8 +96,6 @@ public class LocalGradleProject implements LocalProject {
         
         return new LocalGradleWorkspace(projectDir, projects);
     }
-
-    
     
     private Optional<GradleModuleVersion> getPublication() {
         try {

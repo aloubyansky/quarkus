@@ -24,6 +24,13 @@ import io.quarkus.bootstrap.model.AppArtifact;
  * Defines the build context of a local project.
  */
 public interface LocalProject {
+    /**
+     * Returns builder's output directory.
+     * 
+     * This is used for storing cached classpath information.
+     * 
+     * @return builder's output directory.
+     */
     Path getOutputDir();
     LocalWorkspace getWorkspace();
     AppArtifact getAppArtifact();
