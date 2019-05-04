@@ -1,0 +1,15 @@
+plugins {
+    id 'java'
+    id 'io.quarkus'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies { 
+    implementation "io.quarkus:quarkus-resteasy:${quarkusVersion}"
+    
+    testCompile "io.quarkus:quarkus-junit5:${quarkusVersion}"
+    
+}
