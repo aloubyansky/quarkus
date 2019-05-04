@@ -31,12 +31,13 @@ import org.eclipse.aether.repository.WorkspaceRepository;
 
 import io.quarkus.bootstrap.model.AppArtifactCoords;
 import io.quarkus.bootstrap.model.AppArtifactKey;
+import io.quarkus.bootstrap.resolver.LocalWorkspace;
 
 /**
  *
  * @author Alexey Loubyansky
  */
-public class LocalMavenWorkspace implements WorkspaceModelResolver, WorkspaceReader {
+public class LocalMavenWorkspace implements LocalWorkspace, WorkspaceModelResolver, WorkspaceReader {
 
     private final Map<AppArtifactKey, LocalMavenProject> projects = new HashMap<>();
 
@@ -66,6 +67,7 @@ public class LocalMavenWorkspace implements WorkspaceModelResolver, WorkspaceRea
         return lastModified;
     }
 
+    @Override
     public int getId() {
         return id;
     }

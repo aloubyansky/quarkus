@@ -34,7 +34,11 @@ import org.jboss.logging.Logger;
 import io.quarkus.bootstrap.model.AppDependency;
 import io.quarkus.bootstrap.model.AppModel;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
+import io.quarkus.bootstrap.resolver.ArtifactResolver;
+import io.quarkus.bootstrap.resolver.ArtifactResolvers;
 import io.quarkus.bootstrap.resolver.BootstrapAppModelResolver;
+import io.quarkus.bootstrap.resolver.LocalProject;
+import io.quarkus.bootstrap.resolver.LocalProjects;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalMavenProject;
 
@@ -80,11 +84,11 @@ public class BootstrapClassLoaderFactory {
         }
     }
 
-    private static Path resolveCachedCpPath(LocalMavenProject project) {
+    private static Path resolveCachedCpPath(LocalProject project) {
         return project.getOutputDir().resolve(QUARKUS).resolve(BOOTSTRAP).resolve(DEPLOYMENT_CP);
     }
 
-    private static void persistCp(LocalMavenProject project, URL[] urls, Path p) {
+    private static void persistCp(LocalProject project, URL[] urls, Path p) {
         try {
             Files.createDirectories(p.getParent());
             try (BufferedWriter writer = Files.newBufferedWriter(p)) {
@@ -196,9 +200,7 @@ public class BootstrapClassLoaderFactory {
         }
         final URLClassLoader ucl;
         Path cachedCpPath = null;
-        final LocalMavenProject localProject = localProjectsDiscovery || enableClasspathCache
-                ? LocalMavenProject.loadWorkspace(appClasses)
-                : LocalMavenProject.load(appClasses);
+        final LocalProject localProject = LocalProjects.getLocalProject(appClasses, localProjectsDiscovery || enableClasspathCache);
         try {
             if (enableClasspathCache) {
                 cachedCpPath = resolveCachedCpPath(localProject);
@@ -227,12 +229,10 @@ public class BootstrapClassLoaderFactory {
                     }
                 }
             }
-            final MavenArtifactResolver.Builder mvn = MavenArtifactResolver.builder()
-                    .setWorkspace(localProject.getWorkspace());
-            if (offline != null) {
-                mvn.setOffline(offline);
-            }
-            final URL[] urls = toURLs(new BootstrapAppModelResolver(mvn.build()).resolveModel(localProject.getAppArtifact()).getDeploymentDependencies(), Collections.emptyList());
+            boolean isOffline = offline != null && offline.booleanValue();
+            ArtifactResolver ar = ArtifactResolvers.getArtifactResolver();
+            List<AppDependency> deployDeps = ar.getDeploymentDependencies(isOffline, localProject);
+            final URL[] urls = toURLs(deployDeps, Collections.emptyList());
             if(cachedCpPath != null) {
                 persistCp(localProject, urls, cachedCpPath);
             }

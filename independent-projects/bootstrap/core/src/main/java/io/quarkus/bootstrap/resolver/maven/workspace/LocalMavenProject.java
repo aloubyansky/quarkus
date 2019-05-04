@@ -33,12 +33,13 @@ import org.apache.maven.model.Resource;
 import io.quarkus.bootstrap.BootstrapException;
 import io.quarkus.bootstrap.model.AppArtifact;
 import io.quarkus.bootstrap.model.AppArtifactKey;
+import io.quarkus.bootstrap.resolver.LocalProject;
 
 /**
  *
  * @author Alexey Loubyansky
  */
-public class LocalMavenProject {
+public class LocalMavenProject implements LocalProject {
 
     private static final String POM_XML = "pom.xml";
 
@@ -173,6 +174,7 @@ public class LocalMavenProject {
         return dir;
     }
 
+    @Override
     public Path getOutputDir() {
         return dir.resolve("target");
     }
@@ -202,6 +204,7 @@ public class LocalMavenProject {
         return rawModel;
     }
 
+    @Override
     public LocalMavenWorkspace getWorkspace() {
         return workspace;
     }
@@ -210,6 +213,7 @@ public class LocalMavenProject {
         return new AppArtifactKey(groupId, artifactId);
     }
 
+    @Override
     public AppArtifact getAppArtifact() {
         final AppArtifact appArtifact = new AppArtifact(groupId, artifactId, "", rawModel.getPackaging(), version);
         appArtifact.setPath(getClassesDir());
