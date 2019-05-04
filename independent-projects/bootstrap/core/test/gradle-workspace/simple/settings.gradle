@@ -13,4 +13,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = "dns-filter"
+rootProject.name = "simple"
