@@ -20,6 +20,7 @@ import java.util.List;
 
 import io.quarkus.bootstrap.BootstrapDependencyProcessingException;
 import io.quarkus.bootstrap.model.AppDependency;
+import io.quarkus.bootstrap.resolver.gradle.GradleArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalMavenProject;
 
@@ -31,17 +32,21 @@ import io.quarkus.bootstrap.resolver.maven.workspace.LocalMavenProject;
  */
 public class ArtifactResolvers {
     public static ArtifactResolver getArtifactResolver() {
-        return new MavenArtifactResolverFacade();
+        return LocalProjects.USE_MAVEN
+                ? new MavenArtifactResolverFacade()
+                : new GradleArtifactResolver();
     }
 
     static class MavenArtifactResolverFacade implements ArtifactResolver {
         @Override
-        public List<AppDependency> getDeploymentDependencies(boolean offline, LocalProject genericLocalProject) throws BootstrapDependencyProcessingException, AppModelResolverException {
-            LocalMavenProject localProject = (LocalMavenProject)genericLocalProject;
+        public List<AppDependency> getDeploymentDependencies(boolean offline, LocalProject genericLocalProject)
+                throws BootstrapDependencyProcessingException, AppModelResolverException {
+            LocalMavenProject localProject = (LocalMavenProject) genericLocalProject;
             final MavenArtifactResolver.Builder mvn = MavenArtifactResolver.builder()
                     .setWorkspace(localProject.getWorkspace());
             mvn.setOffline(offline);
-            return new BootstrapAppModelResolver(mvn.build()).resolveModel(localProject.getAppArtifact()).getDeploymentDependencies();
+            return new BootstrapAppModelResolver(mvn.build()).resolveModel(localProject.getAppArtifact())
+                    .getDeploymentDependencies();
         }
     }
 }

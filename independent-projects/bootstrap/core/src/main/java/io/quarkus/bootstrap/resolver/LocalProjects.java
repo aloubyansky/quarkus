@@ -29,16 +29,16 @@ import io.quarkus.bootstrap.resolver.maven.workspace.LocalMavenProject;
  * are available on the classpath.
  */
 public class LocalProjects {
-    private static boolean useMaven = true;
+    public static boolean USE_MAVEN = true;
 
     public static LocalProject getLocalProject(Path appClassesDir, boolean useCache) throws BootstrapException {
-        if (useMaven) {
+        if (USE_MAVEN) {
             return useCache
                     ? LocalMavenProject.loadWorkspace(appClassesDir)
                     : LocalMavenProject.load(appClassesDir);
         
         } else {
-            return LocalGradleProject.load(appClassesDir, useCache);
+            return LocalGradleProject.load(appClassesDir);
         }
     }
 }

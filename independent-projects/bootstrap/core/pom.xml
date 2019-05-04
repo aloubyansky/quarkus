@@ -28,6 +28,14 @@
     <artifactId>quarkus-bootstrap-core</artifactId>
     <name>Quarkus - Bootstrap - Core</name>
 
+    <repositories>
+        <repository>
+            <id>gradle-repo</id>
+            <name>Gradle release repo</name>
+            <url>https://repo.gradle.org/gradle/libs-releases</url>
+        </repository>
+    </repositories>
+    
     <dependencies>
         <dependency>
             <groupId>org.apache.maven</groupId>
@@ -52,6 +60,11 @@
         <dependency>
             <groupId>org.apache.maven.resolver</groupId>
             <artifactId>maven-resolver-transport-http</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.gradle</groupId>
+            <artifactId>gradle-tooling-api</artifactId>
+            <version>5.4.1</version>
         </dependency>
         <dependency>
             <groupId>org.jboss.logging</groupId>
