@@ -38,32 +38,32 @@ import io.quarkus.bootstrap.model.AppArtifactKey;
  *
  * @author Alexey Loubyansky
  */
-public class LocalProject {
+public class LocalMavenProject {
 
     private static final String POM_XML = "pom.xml";
 
-    public static LocalProject load(Path path) throws BootstrapException {
-        return new LocalProject(readModel(locateCurrentProjectDir(path).resolve(POM_XML)), null);
+    public static LocalMavenProject load(Path path) throws BootstrapException {
+        return new LocalMavenProject(readModel(locateCurrentProjectDir(path).resolve(POM_XML)), null);
     }
 
-    public static LocalProject loadWorkspace(Path path) throws BootstrapException {
+    public static LocalMavenProject loadWorkspace(Path path) throws BootstrapException {
         final Path currentProjectDir = locateCurrentProjectDir(path);
-        final LocalWorkspace ws = new LocalWorkspace();
-        final LocalProject project = load(ws, null, loadRootModel(currentProjectDir), currentProjectDir);
+        final LocalMavenWorkspace ws = new LocalMavenWorkspace();
+        final LocalMavenProject project = load(ws, null, loadRootModel(currentProjectDir), currentProjectDir);
         return project == null ? load(ws, null, readModel(currentProjectDir.resolve(POM_XML)), currentProjectDir) : project;
     }
 
-    private static LocalProject load(LocalWorkspace workspace, LocalProject parent, Model model, Path currentProjectDir) throws BootstrapException {
-        final LocalProject project = new LocalProject(model, workspace);
+    private static LocalMavenProject load(LocalMavenWorkspace workspace, LocalMavenProject parent, Model model, Path currentProjectDir) throws BootstrapException {
+        final LocalMavenProject project = new LocalMavenProject(model, workspace);
         if(parent != null) {
             parent.modules.add(project);
         }
-        LocalProject result = currentProjectDir == null || !currentProjectDir.equals(project.getDir()) ? null : project;
+        LocalMavenProject result = currentProjectDir == null || !currentProjectDir.equals(project.getDir()) ? null : project;
         final List<String> modules = project.getRawModel().getModules();
         if (!modules.isEmpty()) {
             Path dirArg = result == null ? currentProjectDir : null;
             for (String module : modules) {
-                final LocalProject loaded = load(workspace, project, readModel(project.getDir().resolve(module).resolve(POM_XML)), dirArg);
+                final LocalMavenProject loaded = load(workspace, project, readModel(project.getDir().resolve(module).resolve(POM_XML)), dirArg);
                 if(loaded != null && result == null) {
                     result = loaded;
                     dirArg = null;
@@ -124,10 +124,10 @@ public class LocalProject {
     private final String artifactId;
     private final String version;
     private final Path dir;
-    private final LocalWorkspace workspace;
-    private final List<LocalProject> modules = new ArrayList<>(0);
+    private final LocalMavenWorkspace workspace;
+    private final List<LocalMavenProject> modules = new ArrayList<>(0);
 
-    private LocalProject(Model rawModel, LocalWorkspace workspace) throws BootstrapException {
+    private LocalMavenProject(Model rawModel, LocalMavenWorkspace workspace) throws BootstrapException {
         this.rawModel = rawModel;
         this.dir = rawModel.getProjectDirectory().toPath();
         this.workspace = workspace;
@@ -202,7 +202,7 @@ public class LocalProject {
         return rawModel;
     }
 
-    public LocalWorkspace getWorkspace() {
+    public LocalMavenWorkspace getWorkspace() {
         return workspace;
     }
 
@@ -216,24 +216,24 @@ public class LocalProject {
         return appArtifact;
     }
 
-    public List<LocalProject> getLocalDependencies() {
+    public List<LocalMavenProject> getLocalDependencies() {
         if(workspace == null) {
             return Collections.singletonList(this);
         }
-        final List<LocalProject> ordered = new ArrayList<>();
+        final List<LocalMavenProject> ordered = new ArrayList<>();
         collectLocalDependencies(this, new HashSet<>(),  ordered);
         return ordered;
     }
 
-    private void collectLocalDependencies(LocalProject project, Set<AppArtifactKey> addedDeps, List<LocalProject> ordered) {
+    private void collectLocalDependencies(LocalMavenProject project, Set<AppArtifactKey> addedDeps, List<LocalMavenProject> ordered) {
         if(!modules.isEmpty()) {
-            for(LocalProject module : modules) {
+            for(LocalMavenProject module : modules) {
                 collectLocalDependencies(module, addedDeps, ordered);
             }
         }
         for(Dependency dep : project.getRawModel().getDependencies()) {
             final AppArtifactKey depKey = getKey(dep);
-            final LocalProject localDep = workspace.getProject(depKey);
+            final LocalMavenProject localDep = workspace.getProject(depKey);
             if(localDep == null || addedDeps.contains(depKey)) {
                 continue;
             }

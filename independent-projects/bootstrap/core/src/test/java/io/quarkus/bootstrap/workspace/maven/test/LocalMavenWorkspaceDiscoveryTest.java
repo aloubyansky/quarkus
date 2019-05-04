@@ -15,10 +15,10 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import io.quarkus.bootstrap.model.AppArtifactKey;
-import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
+import io.quarkus.bootstrap.resolver.maven.workspace.LocalMavenProject;
 import io.quarkus.bootstrap.util.IoUtils;
 
-public class LocalWorkspaceDiscoveryTest {
+public class LocalMavenWorkspaceDiscoveryTest {
 
     protected static Path workDir;
 
@@ -65,20 +65,20 @@ public class LocalWorkspaceDiscoveryTest {
 
     @Test
     public void loadIndependentProjectInTheWorkspaceTree() throws Exception {
-        final LocalProject project = LocalProject.loadWorkspace(workDir.resolve("root").resolve("independent").resolve("target").resolve("classes"));
+        final LocalMavenProject project = LocalMavenProject.loadWorkspace(workDir.resolve("root").resolve("independent").resolve("target").resolve("classes"));
         assertNotNull(project);
         assertNotNull(project.getWorkspace());
         assertEquals(MvnProjectBuilder.DEFAULT_GROUP_ID, project.getGroupId());
         assertEquals("independent", project.getArtifactId());
         assertEquals(MvnProjectBuilder.DEFAULT_VERSION, project.getVersion());
-        final Map<AppArtifactKey, LocalProject> projects = project.getWorkspace().getProjects();
+        final Map<AppArtifactKey, LocalMavenProject> projects = project.getWorkspace().getProjects();
         assertEquals(1, projects.size());
         projects.containsKey(new AppArtifactKey(MvnProjectBuilder.DEFAULT_GROUP_ID, "independent"));
     }
 
     @Test
     public void loadModuleProjectWithoutParent() throws Exception {
-        final LocalProject project = LocalProject.load(workDir.resolve("root").resolve("module1").resolve("target").resolve("classes"));
+        final LocalMavenProject project = LocalMavenProject.load(workDir.resolve("root").resolve("module1").resolve("target").resolve("classes"));
         assertNotNull(project);
         assertNull(project.getWorkspace());
         assertEquals(MvnProjectBuilder.DEFAULT_GROUP_ID, project.getGroupId());
@@ -88,20 +88,20 @@ public class LocalWorkspaceDiscoveryTest {
 
     @Test
     public void loadWorkspaceForModuleWithoutParent() throws Exception {
-        final LocalProject project = LocalProject.loadWorkspace(workDir.resolve("root").resolve("module1").resolve("target").resolve("classes"));
+        final LocalMavenProject project = LocalMavenProject.loadWorkspace(workDir.resolve("root").resolve("module1").resolve("target").resolve("classes"));
         assertNotNull(project);
         assertEquals(MvnProjectBuilder.DEFAULT_GROUP_ID, project.getGroupId());
         assertEquals("root-no-parent-module", project.getArtifactId());
         assertEquals(MvnProjectBuilder.DEFAULT_VERSION, project.getVersion());
         assertNotNull(project.getWorkspace());
-        final Map<AppArtifactKey, LocalProject> projects = project.getWorkspace().getProjects();
+        final Map<AppArtifactKey, LocalMavenProject> projects = project.getWorkspace().getProjects();
         assertEquals(1, projects.size());
         projects.containsKey(new AppArtifactKey(MvnProjectBuilder.DEFAULT_GROUP_ID, "root-no-parent-module"));
     }
 
     @Test
     public void loadModuleProjectWithParent() throws Exception {
-        final LocalProject project = LocalProject.load(workDir.resolve("root").resolve("module2").resolve("target").resolve("classes"));
+        final LocalMavenProject project = LocalMavenProject.load(workDir.resolve("root").resolve("module2").resolve("target").resolve("classes"));
         assertNotNull(project);
         assertNull(project.getWorkspace());
         assertEquals(MvnProjectBuilder.DEFAULT_GROUP_ID, project.getGroupId());
@@ -111,7 +111,7 @@ public class LocalWorkspaceDiscoveryTest {
 
     @Test
     public void loadWorkspaceForModuleWithParent() throws Exception {
-        final LocalProject project = LocalProject.loadWorkspace(workDir.resolve("root").resolve("module2").resolve("target").resolve("classes"));
+        final LocalMavenProject project = LocalMavenProject.loadWorkspace(workDir.resolve("root").resolve("module2").resolve("target").resolve("classes"));
         assertNotNull(project);
         assertNotNull(project.getWorkspace());
         assertEquals(MvnProjectBuilder.DEFAULT_GROUP_ID, project.getGroupId());
@@ -123,7 +123,7 @@ public class LocalWorkspaceDiscoveryTest {
 
     @Test
     public void loadWorkspaceForModuleWithNotDirectParentPath() throws Exception {
-        final LocalProject project = LocalProject.loadWorkspace(workDir.resolve("root").resolve("other").resolve("module3").resolve("target").resolve("classes"));
+        final LocalMavenProject project = LocalMavenProject.loadWorkspace(workDir.resolve("root").resolve("other").resolve("module3").resolve("target").resolve("classes"));
         assertNotNull(project);
         assertNotNull(project.getWorkspace());
         assertEquals(MvnProjectBuilder.DEFAULT_GROUP_ID, project.getGroupId());
@@ -133,8 +133,8 @@ public class LocalWorkspaceDiscoveryTest {
         assertCompleteWorkspace(project);
     }
 
-    private void assertCompleteWorkspace(final LocalProject project) {
-        final Map<AppArtifactKey, LocalProject> projects = project.getWorkspace().getProjects();
+    private void assertCompleteWorkspace(final LocalMavenProject project) {
+        final Map<AppArtifactKey, LocalMavenProject> projects = project.getWorkspace().getProjects();
         assertEquals(4, projects.size());
         projects.containsKey(new AppArtifactKey(MvnProjectBuilder.DEFAULT_GROUP_ID, "root-no-parent-module"));
         projects.containsKey(new AppArtifactKey(MvnProjectBuilder.DEFAULT_GROUP_ID, "root-module-with-parent"));
@@ -144,11 +144,11 @@ public class LocalWorkspaceDiscoveryTest {
 
     @Test
     public void loadNonModuleChildProject() throws Exception {
-        final LocalProject project = LocalProject.loadWorkspace(workDir.resolve("root").resolve("non-module-child").resolve("target").resolve("classes"));
+        final LocalMavenProject project = LocalMavenProject.loadWorkspace(workDir.resolve("root").resolve("non-module-child").resolve("target").resolve("classes"));
         assertNotNull(project);
         assertNotNull(project.getWorkspace());
         assertEquals("non-module-child", project.getArtifactId());
-        final Map<AppArtifactKey, LocalProject> projects = project.getWorkspace().getProjects();
+        final Map<AppArtifactKey, LocalMavenProject> projects = project.getWorkspace().getProjects();
         assertEquals(6, projects.size());
         projects.containsKey(new AppArtifactKey(MvnProjectBuilder.DEFAULT_GROUP_ID, "root-no-parent-module"));
         projects.containsKey(new AppArtifactKey(MvnProjectBuilder.DEFAULT_GROUP_ID, "root-module-with-parent"));
