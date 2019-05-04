@@ -30,7 +30,6 @@ import org.gradle.tooling.ProjectConnection;
 import org.gradle.tooling.UnknownModelException;
 import org.gradle.tooling.model.DomainObjectSet;
 import org.gradle.tooling.model.GradleModuleVersion;
-import org.gradle.tooling.model.GradleProject;
 import org.gradle.tooling.model.eclipse.EclipseExternalDependency;
 import org.gradle.tooling.model.eclipse.EclipseProject;
 import org.gradle.tooling.model.gradle.GradlePublication;
@@ -59,12 +58,9 @@ public class LocalGradleProject implements LocalProject {
     private LocalGradleProject(Path projectDir) {
         this.projectDir = projectDir;
 
-        long start = System.currentTimeMillis();
         pc = GradleConnector.newConnector()
                 .forProjectDirectory(projectDir.toFile())
                 .connect();
-
-        System.out.println("connection in " + (System.currentTimeMillis() - start));
     }
 
     public static LocalProject load(Path appClassesDir) throws BootstrapException {
@@ -79,20 +75,6 @@ public class LocalGradleProject implements LocalProject {
 
     @Override
     public LocalWorkspace getWorkspace() {
-        long start = System.currentTimeMillis();
-        GradleProject gradleProject = pc.getModel(GradleProject.class);
-        System.out.println("ID " + gradleProject.getProjectIdentifier()); // 
-
-        System.out.println("Got gradleProject in " + (System.currentTimeMillis() - start));
-
-        EclipseProject m = pc.getModel(EclipseProject.class);
-
-        System.out.println("Got eclipseProject in " + (System.currentTimeMillis() - start));
-
-        for (EclipseExternalDependency gt : m.getClasspath()) {
-            System.out.println(" " + gt.getFile());
-        }
-
         // TODO: Only handles the one main project. Not clear if more is really needed.
         Map<AppArtifactKey, LocalGradleProject> projects = new HashMap<>();
         getPublication()
@@ -139,7 +121,6 @@ public class LocalGradleProject implements LocalProject {
         }
 
         DomainObjectSet<? extends EclipseExternalDependency> deps = eclipseProject.getClasspath();
-        
         return deps.stream()
             .map(this::toArtifact)
             .map(artifact -> new AppDependency(artifact, "compile"))
