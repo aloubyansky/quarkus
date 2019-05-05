@@ -20,6 +20,9 @@ package io.quarkus.bootstrap.resolver;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.quarkus.bootstrap.BootstrapException;
 import io.quarkus.bootstrap.resolver.gradle.GradleBuilderInfo;
 import io.quarkus.bootstrap.resolver.maven.MavenBuilderInfo;
@@ -31,6 +34,7 @@ import io.quarkus.bootstrap.resolver.maven.MavenBuilderInfo;
  * parent directories to determine type.
  */
 public class BuilderInfos {
+    private static final Logger logger = LoggerFactory.getLogger(BuilderInfos.class);
     private static final String BUILD_GRADLE = "build.gradle";
     private static final String POM_XML = "pom.xml";
 
@@ -38,9 +42,11 @@ public class BuilderInfos {
         Path p = path;
         while (p != null) {
             if (Files.exists(p.resolve(POM_XML))) {
+                logger.info("Creating Maven build info from dir {}", p);
                 return new MavenBuilderInfo(p);
             }
             if (Files.exists(p.resolve(BUILD_GRADLE))) {
+                logger.info("Creating Gradle build info from dir {}", p);
                 return new GradleBuilderInfo(p);
             }
             p = p.getParent();

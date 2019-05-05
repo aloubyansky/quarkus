@@ -20,6 +20,9 @@ package io.quarkus.bootstrap.resolver.gradle;
 import java.nio.file.Path;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.quarkus.bootstrap.BootstrapDependencyProcessingException;
 import io.quarkus.bootstrap.model.AppDependency;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
@@ -31,10 +34,13 @@ import io.quarkus.bootstrap.resolver.gradle.workspace.LocalGradleProject;
  * Provides build information from Gradle.
  */
 public class GradleBuilderInfo implements BuilderInfo {
+    private static final Logger logger = LoggerFactory.getLogger(GradleBuilderInfo.class);
     private LocalGradleProject localProject;
 
     public GradleBuilderInfo(Path rootProjectDir) {
+        long start = System.currentTimeMillis();
         localProject = new LocalGradleProject(rootProjectDir);
+        logger.info("Created Gradle connection in {}ms", System.currentTimeMillis() - start);
     }
     
     @Override
@@ -62,6 +68,9 @@ public class GradleBuilderInfo implements BuilderInfo {
     @Override
     public List<AppDependency> getDeploymentDependencies(boolean offline)
             throws BootstrapDependencyProcessingException, AppModelResolverException {
-        return localProject.getDependencies(offline);
+        long start = System.currentTimeMillis();
+        List<AppDependency> deps = localProject.getDependencies(offline);
+        logger.info("Found {} dependencies in {}ms", deps.size(), System.currentTimeMillis() - start);
+        return deps;
     }
 }

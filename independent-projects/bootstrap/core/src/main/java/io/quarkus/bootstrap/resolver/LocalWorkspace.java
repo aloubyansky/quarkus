@@ -24,5 +24,4 @@ public interface LocalWorkspace {
     int getId();
 
     Map<AppArtifactKey, LocalProject> getProjects();
-
 }

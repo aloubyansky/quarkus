@@ -19,6 +19,7 @@ package io.quarkus.bootstrap.resolver.gradle.workspace;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 
@@ -47,10 +48,13 @@ public class LocalGradleWorkspace implements LocalWorkspace {
      */
     @Override
     public int getId() {
+        long start = System.currentTimeMillis();
         Path propsFile = rootProjectDir.resolve("gradle.properties");
         Path buildFile = rootProjectDir.resolve("build.gradle");
         
-        return getHash(propsFile) * 13 + getHash(buildFile);
+        int id = getHash(propsFile) * 13 + getHash(buildFile);
+        logger.info("Computed Gradle workspace id in {}ms: {}", System.currentTimeMillis() - start, id);
+        return id;
     }
     
     @Override
@@ -61,7 +65,7 @@ public class LocalGradleWorkspace implements LocalWorkspace {
     private int getHash(Path file) {
         try {
             if (Files.exists(file)) {
-                return Files.readAllBytes(file).hashCode();
+                return Arrays.hashCode(Files.readAllBytes(file));
             }
         } catch (IOException e) {
             logger.warn("Failed to checksum file {}", file, e);
