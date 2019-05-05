@@ -1,5 +1,6 @@
 /*
- * Copyright 2019 Red Hat, Inc.
+ * Copyright 2018 Red Hat, Inc. and/or its affiliates
+ * and other contributors as indicated by the @author tags.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,12 +20,28 @@ package io.quarkus.bootstrap.resolver;
 import java.util.List;
 
 import io.quarkus.bootstrap.BootstrapDependencyProcessingException;
+import io.quarkus.bootstrap.BootstrapException;
 import io.quarkus.bootstrap.model.AppDependency;
 
 /**
- * Resolves artifacts from a local project's build system.
+ * Provides access to information from builders such as Maven and Gradle.
  */
-public interface ArtifactResolver {
-    List<AppDependency> getDeploymentDependencies(boolean offline, LocalProject project)
+public interface BuilderInfo extends AutoCloseable {
+    /**
+     * Configuring the builder to allow classpath caching.
+     */
+    BuilderInfo withClasspathCaching(boolean classpathCaching);
+
+    /**
+     * Configuring the builder to do local project discovery.
+     */
+    BuilderInfo withLocalProjectsDiscovery(boolean localProjectsDiscovery);
+
+    LocalProject getLocalProject() throws BootstrapException;
+
+    List<AppDependency> getDeploymentDependencies(boolean offline)
             throws BootstrapDependencyProcessingException, AppModelResolverException;
+
+    @Override
+    void close() throws BootstrapException;
 }

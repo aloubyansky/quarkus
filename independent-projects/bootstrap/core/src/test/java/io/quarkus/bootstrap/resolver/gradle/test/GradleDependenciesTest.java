@@ -15,12 +15,11 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import io.quarkus.bootstrap.model.AppDependency;
-import io.quarkus.bootstrap.resolver.LocalProject;
-import io.quarkus.bootstrap.resolver.gradle.GradleArtifactResolver;
-import io.quarkus.bootstrap.resolver.gradle.workspace.LocalGradleProject;
+import io.quarkus.bootstrap.resolver.BuilderInfo;
+import io.quarkus.bootstrap.resolver.gradle.GradleBuilderInfo;
 import io.quarkus.bootstrap.util.IoUtils;
 
-public class GradleArtifactsResolverTest {
+public class GradleDependenciesTest {
     protected static Path workDir;
 
     @BeforeClass
@@ -36,14 +35,15 @@ public class GradleArtifactsResolverTest {
 
     @Test
     public void canExtractDependenciesFromSimpleProject() throws Exception {
-        final LocalProject project = LocalGradleProject.load(workDir.resolve("build").resolve("classes"));
-        List<AppDependency> deps = new GradleArtifactResolver().getDeploymentDependencies(true, project);
-        
-        assertThat(deps)
-            .hasSizeGreaterThan(40);
-        
-        assertThat(deps)
-            .extracting(ad -> ad.getArtifact().getArtifactId())
-            .contains("assertj-core", "quarkus-resteasy");
+        try (BuilderInfo bi = new GradleBuilderInfo(workDir)) {
+            List<AppDependency> deps = bi.getDeploymentDependencies(true);
+            
+            assertThat(deps)
+                .hasSizeGreaterThan(40);
+            
+            assertThat(deps)
+                .extracting(ad -> ad.getArtifact().getArtifactId())
+                .contains("assertj-core", "quarkus-resteasy");
+        }
     }
 }

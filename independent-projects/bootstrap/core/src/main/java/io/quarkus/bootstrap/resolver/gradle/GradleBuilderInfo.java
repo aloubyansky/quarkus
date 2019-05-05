@@ -1,5 +1,6 @@
 /*
- * Copyright 2019 Red Hat, Inc.
+ * Copyright 2018 Red Hat, Inc. and/or its affiliates
+ * and other contributors as indicated by the @author tags.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,29 +17,51 @@
 
 package io.quarkus.bootstrap.resolver.gradle;
 
-import java.util.Collections;
+import java.nio.file.Path;
 import java.util.List;
 
 import io.quarkus.bootstrap.BootstrapDependencyProcessingException;
 import io.quarkus.bootstrap.model.AppDependency;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
-import io.quarkus.bootstrap.resolver.ArtifactResolver;
+import io.quarkus.bootstrap.resolver.BuilderInfo;
 import io.quarkus.bootstrap.resolver.LocalProject;
 import io.quarkus.bootstrap.resolver.gradle.workspace.LocalGradleProject;
 
 /**
- * Resolves artifacts using Gradle model.
+ * Provides build information from Gradle.
  */
-public class GradleArtifactResolver implements ArtifactResolver {
+public class GradleBuilderInfo implements BuilderInfo {
+    private LocalGradleProject localProject;
+
+    public GradleBuilderInfo(Path rootProjectDir) {
+        localProject = new LocalGradleProject(rootProjectDir);
+    }
+    
+    @Override
+    public LocalProject getLocalProject() {
+        return localProject;
+    }
 
     @Override
-    public List<AppDependency> getDeploymentDependencies(boolean offline, LocalProject project)
+    public BuilderInfo withClasspathCaching(boolean caching) {
+        // unused information
+        return this;
+    }
+
+    @Override
+    public BuilderInfo withLocalProjectsDiscovery(boolean localProjectsDiscovery) {
+        // unused information
+        return this;
+    }
+
+    @Override
+    public void close() {
+        localProject.close();
+    }
+
+    @Override
+    public List<AppDependency> getDeploymentDependencies(boolean offline)
             throws BootstrapDependencyProcessingException, AppModelResolverException {
-        
-        if (project instanceof LocalGradleProject) {
-            return ((LocalGradleProject)project).getDependencies(offline);
-        } else {
-            return Collections.emptyList();
-        }
+        return localProject.getDependencies(offline);
     }
 }
