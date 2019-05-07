@@ -63,8 +63,9 @@ import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.model.AppDependency;
 import io.quarkus.bootstrap.model.AppModel;
 import io.quarkus.bootstrap.resolver.BootstrapAppModelResolver;
+import io.quarkus.bootstrap.resolver.LocalProject;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
-import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
+import io.quarkus.bootstrap.resolver.maven.workspace.LocalMavenProject;
 import io.quarkus.deployment.ApplicationInfoUtil;
 import io.quarkus.dev.DevModeContext;
 import io.quarkus.dev.DevModeMain;
@@ -236,7 +237,7 @@ public class DevMojo extends AbstractMojo {
 
             final AppModel appModel;
             try {
-                final LocalProject localProject = LocalProject.loadWorkspace(outputDirectory.toPath());
+                final LocalMavenProject localProject = LocalMavenProject.loadWorkspace(outputDirectory.toPath());
                 //we need to establish a partial ordering of the projects (i.e. 'reactor build order')
 
                 List<AppArtifactKey> orderedProjects = new ArrayList<>();
@@ -253,7 +254,7 @@ public class DevMojo extends AbstractMojo {
                     Iterator<AppArtifactKey> it = toplace.iterator();
                     while (it.hasNext()) {
                         AppArtifactKey current = it.next();
-                        LocalProject project = localProject.getWorkspace().getProjects().get(current);
+                        LocalMavenProject project = (LocalMavenProject) localProject.getWorkspace().getProjects().get(current);
                         boolean canPlace = true;
                         for (Dependency dep : project.getRawModel().getDependencies()) {
                             AppArtifactKey key = new AppArtifactKey(dep.getGroupId(), dep.getArtifactId(), dep.getClassifier(),
@@ -282,7 +283,7 @@ public class DevMojo extends AbstractMojo {
                     String sourcePath = null;
                     String classesPath = null;
                     String resourcePath = null;
-                    LocalProject project = localProject.getWorkspace().getProjects().get(i);
+                    LocalMavenProject project = (LocalMavenProject) localProject.getWorkspace().getProjects().get(i);
                     Path javaSourcesDir = project.getSourcesSourcesDir();
                     if (Files.isDirectory(javaSourcesDir)) {
                         sourcePath = javaSourcesDir.toAbsolutePath().toString();
