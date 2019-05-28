@@ -276,7 +276,7 @@ public class MavenRepoInitializer {
                 }
             });
             for(org.apache.maven.model.Profile modelProfile : modelProfiles) {
-                addProfileRepos(modelProfile, remotes, proxy);
+                addProfileRepos(modelProfile, remotes, proxy, settings.getMirrors());
             }
         }
 
@@ -286,7 +286,7 @@ public class MavenRepoInitializer {
             for (String profileName : activeProfiles) {
                 final Profile profile = getProfile(profileName, settings);
                 if(profile != null) {
-                    addProfileRepos(profile, remotes, proxy);
+                    addProfileRepos(profile, remotes, proxy, settings.getMirrors());
                 }
             }
         }
@@ -339,7 +339,7 @@ public class MavenRepoInitializer {
         log.warn(buf.toString());
     }
 
-    private static void addProfileRepos(final org.apache.maven.model.Profile profile, final List<RemoteRepository> all, final Proxy proxy) {
+    private static void addProfileRepos(final org.apache.maven.model.Profile profile, final List<RemoteRepository> all, final Proxy proxy, List<Mirror> mirrors) {
         final List<org.apache.maven.model.Repository> repositories = profile.getRepositories();
         for (org.apache.maven.model.Repository repo : repositories) {
             final RemoteRepository.Builder repoBuilder = new RemoteRepository.Builder(repo.getId(), repo.getLayout(), repo.getUrl());
@@ -352,11 +352,12 @@ public class MavenRepoInitializer {
                 repoBuilder.setSnapshotPolicy(toAetherRepoPolicy(policy));
             }
             repoBuilder.setProxy(proxy);
+            applyMirrors(repo.getId(), repoBuilder, mirrors);
             all.add(repoBuilder.build());
         }
     }
 
-    private static void addProfileRepos(final Profile profile, final List<RemoteRepository> all, final Proxy proxy) {
+    private static void addProfileRepos(final Profile profile, final List<RemoteRepository> all, final Proxy proxy, List<Mirror> mirrors) {
         final List<Repository> repositories = profile.getRepositories();
         for (Repository repo : repositories) {
             final RemoteRepository.Builder repoBuilder = new RemoteRepository.Builder(repo.getId(), repo.getLayout(), repo.getUrl());
@@ -369,7 +370,22 @@ public class MavenRepoInitializer {
                 repoBuilder.setSnapshotPolicy(toAetherRepoPolicy(policy));
             }
             repoBuilder.setProxy(proxy);
+            applyMirrors(repo.getId(), repoBuilder, mirrors);
             all.add(repoBuilder.build());
+        }
+    }
+
+    private static void applyMirrors(String repoId, final RemoteRepository.Builder repoBuilder, List<Mirror> mirrors) {
+        if(mirrors == null || mirrors.isEmpty()) {
+            return;
+        }
+        for (Mirror mirror : mirrors) {
+            if (mirror.getMirrorOf().equals(repoId)) {
+                repoBuilder.setId(mirror.getId());
+                repoBuilder.setContentType(mirror.getLayout());
+                repoBuilder.setUrl(mirror.getUrl());
+                break;
+            }
         }
     }
 
