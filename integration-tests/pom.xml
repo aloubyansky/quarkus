@@ -18,7 +18,6 @@
     <properties>
         <maven.deploy.skip>true</maven.deploy.skip>
     </properties>
-
     <modules>
         <module>class-transformer</module>
         <module>shared-library</module>
@@ -40,11 +39,7 @@
         <module>elytron-security</module>
         <module>camel-core</module>
         <module>camel-jdbc</module>
-        <module>camel-salesforce</module>
         <module>camel-servlet</module>
-        <module>camel-aws-s3</module>
-        <module>camel-aws-sns</module>
-        <module>camel-aws-sqs</module>
         <module>flyway</module>
         <module>keycloak</module>
         <module>reactive-pg-client</module>
@@ -53,7 +48,6 @@
         <module>kogito</module>
         <module>kubernetes-client</module>
     </modules>
-
     <build>
         <plugins>
             <plugin>

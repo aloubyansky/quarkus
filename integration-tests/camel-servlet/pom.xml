@@ -10,49 +10,61 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>quarkus-integration-test-camel-servlet</artifactId>
+    <artifactId>quarkus-platform-integration-test-camel-servlet</artifactId>
     <name>Quarkus - Integration Tests - Camel - Servlet</name>
     <description>Integration tests for Camel Servlet component</description>
-    <dependencies>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-camel-servlet</artifactId>
-        </dependency>
-
-        <!-- test dependencies -->
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-junit5</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.rest-assured</groupId>
-            <artifactId>rest-assured</artifactId>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
+    
+    <properties>
+        <test.groupId>io.quarkus</test.groupId>
+        <test.artifactId>quarkus-integration-test-camel-servlet</test.artifactId>
+        <test.version>999-SNAPSHOT</test.version>
+    </properties>
 
     <build>
-        <resources>
-            <resource>
-                <directory>src/main/resources</directory>
-                <filtering>true</filtering>
-            </resource>
-        </resources>
         <plugins>
             <plugin>
-                <groupId>${project.groupId}</groupId>
-                <artifactId>quarkus-maven-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>build</goal>
-                        </goals>
-                    </execution>
-                </executions>
+                <groupId>org.sonatype.plugins</groupId>
+                <artifactId>nexus-staging-maven-plugin</artifactId>
+                <version>${nexus-staging-maven-plugin.version}</version>
+                <configuration>
+                    <skipNexusStagingDeployMojo>true</skipNexusStagingDeployMojo>
+                </configuration>
+            </plugin>
+            <!-- Skip enforcer plugin as we want to use jboss marshalling for test class -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <dependenciesToScan>
+                        <dependency>${test.groupId}:${test.artifactId}</dependency>
+                    </dependenciesToScan>
+                </configuration>
             </plugin>
         </plugins>
     </build>
+
+    <dependencies>
+        <dependency>
+            <groupId>${test.groupId}</groupId>
+            <artifactId>${test.artifactId}</artifactId>
+            <version>${test.version}</version>
+            <classifier>tests</classifier>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${test.groupId}</groupId>
+            <artifactId>${test.artifactId}</artifactId>
+            <version>${test.version}</version>
+        </dependency>
+    </dependencies>
 
     <profiles>
         <profile>
@@ -67,6 +79,11 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-failsafe-plugin</artifactId>
+                        <configuration>
+                            <dependenciesToScan>
+                                <dependency>${test.groupId}:${test.artifactId}</dependency>
+                            </dependenciesToScan>
+                        </configuration>
                         <executions>
                             <execution>
                                 <goals>
@@ -91,6 +108,7 @@
                                     <goal>native-image</goal>
                                 </goals>
                                 <configuration>
+                                    <appArtifact>${test.groupId}:${test.artifactId}:${test.version}</appArtifact>
                                     <reportErrorsAtRuntime>true</reportErrorsAtRuntime>
                                     <cleanupServer>true</cleanupServer>
                                     <enableHttpUrlHandler>true</enableHttpUrlHandler>
