@@ -165,6 +165,8 @@ public class QuarkusUnitTest
         }
     }
 
+    boolean createdDeploymentDir;
+
     @Override
     public void beforeAll(ExtensionContext extensionContext) throws Exception {
         if (archiveProducer == null) {
@@ -191,8 +193,11 @@ public class QuarkusUnitTest
 
         Class<?> testClass = extensionContext.getRequiredTestClass();
         try {
-            deploymentDir = Files.createTempDirectory("quarkus-unit-test");
-
+            deploymentDir = PathTestHelper.getTestClassesLocation(testClass);
+            if (!Files.isDirectory(deploymentDir)) {
+                deploymentDir = Files.createTempDirectory("quarkus-unit-test");
+                createdDeploymentDir = true;
+            }
             exportArchive(deploymentDir, testClass);
 
             List<Consumer<BuildChainBuilder>> customiers = new ArrayList<>();
@@ -281,7 +286,7 @@ public class QuarkusUnitTest
                 afterUndeployListener.run();
             }
         } finally {
-            if (deploymentDir != null) {
+            if (createdDeploymentDir && deploymentDir != null) {
                 Files.walkFileTree(deploymentDir, new FileVisitor<Path>() {
                     @Override
                     public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
