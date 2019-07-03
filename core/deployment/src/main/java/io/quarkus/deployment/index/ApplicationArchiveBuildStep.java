@@ -158,26 +158,25 @@ public class ApplicationArchiveBuildStep {
             Enumeration<URL> e = classLoader.getResources(file);
             while (e.hasMoreElements()) {
                 URL url = e.nextElement();
-                ret.add(urlToPath(url));
+                ret.add(urlToPath(url, file));
             }
         }
         return ret;
     }
 
     // package protected for testing purpose
-    static Path urlToPath(URL url) {
+    static Path urlToPath(URL url, String resource) {
         try {
             if (url.getProtocol().equals("jar")) {
                 String jarPath = url.getPath().substring(0, url.getPath().lastIndexOf('!'));
                 return Paths.get(new URI(jarPath));
             } else if (url.getProtocol().equals("file")) {
-                int index = url.getPath().lastIndexOf("/META-INF");
-                if (index == -1) {
+                if (resource.isEmpty()) {
                     return Paths.get(url.getPath());
                 }
-                String pathString = url.getPath().substring(0, index);
-                Path path = Paths.get(new URI(url.getProtocol(), url.getHost(), pathString, null));
-                return path;
+                String pathString = url.getPath();
+                pathString = pathString.substring(0, pathString.length() - resource.length() - 1);
+                return Paths.get(new URI(url.getProtocol(), url.getHost(), pathString, null));
             }
             throw new RuntimeException("Unknown URL type " + url.getProtocol());
         } catch (URISyntaxException e) {

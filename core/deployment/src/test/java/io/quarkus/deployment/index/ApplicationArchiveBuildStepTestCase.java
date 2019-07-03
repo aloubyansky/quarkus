@@ -12,13 +12,15 @@ import org.junit.Test;
 public class ApplicationArchiveBuildStepTestCase {
     @Test
     public void testUrlToPath() throws MalformedURLException {
-        assertEquals(Paths.get("/a/path"), urlToPath(new URL("jar:file:/a/path!/META-INF/services/my.Service")));
-        assertEquals(Paths.get("/a/path"), urlToPath(new URL("file:/a/path/META-INF/services/my.Service")));
-        assertEquals(Paths.get("/a/path"), urlToPath(new URL("file:/a/path")));
+        assertEquals(Paths.get("/a/path"),
+                urlToPath(new URL("jar:file:/a/path!/META-INF/services/my.Service"), "META-INF/services/my.Service"));
+        assertEquals(Paths.get("/a/path"),
+                urlToPath(new URL("file:/a/path/META-INF/services/my.Service"), "META-INF/services/my.Service"));
+        assertEquals(Paths.get("/a/path"), urlToPath(new URL("file:/a/path"), ""));
     }
 
     @Test(expected = RuntimeException.class)
     public void testUrlToPathWithWrongProtocol() throws MalformedURLException {
-        urlToPath(new URL("http://a/path"));
+        urlToPath(new URL("http://a/path"), "META-INF/services/my.Service");
     }
 }
