@@ -55,6 +55,12 @@ import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
  */
 public class MavenArtifactResolver {
 
+    /**
+     * This constant reflects Maven default dependency scope exclusion policy
+     * when processing requests collecting and/or resolving artifact dependencies.
+     */
+    private static final String[] DEFAULT_EXCLUDED_DEP_SCOPES = new String[] {"test", "provided"};
+
     public static class Builder {
 
         private Path repoHome;
@@ -249,37 +255,33 @@ public class MavenArtifactResolver {
         }
     }
 
-    public DependencyResult resolveDependencies(Artifact artifact, String... excludedScopes) throws AppModelResolverException {
-        final ArtifactDescriptorResult descr = resolveDescriptor(artifact);
-        List<Dependency> deps = descr.getDependencies();
-        if(excludedScopes.length > 0) {
-            final Set<String> excluded = new HashSet<>(Arrays.asList(excludedScopes));
-            deps = new ArrayList<>(deps.size());
-            for(Dependency dep : descr.getDependencies()) {
-                if(excluded.contains(dep.getScope())) {
-                    continue;
-                }
-                deps.add(dep);
-            }
-        }
-        final List<RemoteRepository> requestRepos = aggregateRepositories(remoteRepos, newResolutionRepositories(descr.getRepositories()));
-        try {
-            return repoSystem.resolveDependencies(repoSession,
-                    new DependencyRequest().setCollectRequest(
-                            new CollectRequest()
-                            .setRootArtifact(artifact)
-                            .setDependencies(deps)
-                            .setManagedDependencies(descr.getManagedDependencies())
-                            .setRepositories(requestRepos)));
-        } catch (DependencyResolutionException e) {
-            throw new AppModelResolverException("Failed to resolve dependencies for " + artifact, e);
-        }
+    /**
+     * Resolves all the dependencies of a given artifact allowing the caller to provide specific desired direct dependencies
+     * and the dependency management info. In addition, it accepts a list of primary repositories
+     * (the other repos will be taken from the default settings, for example) that should be used to process the request.
+     *
+     * @param artifact  the artifact to resolve the dependencies for
+     * @param deps  desired direct dependencies (can be empty)
+     * @param managedDeps  dependency management that should be applied to the result (can be empty)
+     * @param mainRepos  primary repositories that should be used for the request
+     * @return  collected dependencies
+     * @throws AppModelResolverException  in case of a failure
+     */
+    public DependencyResult resolveManagedDependencies(Artifact artifact, List<Dependency> deps, List<Dependency> managedDeps, List<RemoteRepository> mainRepos) throws AppModelResolverException {
+        return resolveManagedDependencies(artifact, deps, managedDeps, mainRepos, DEFAULT_EXCLUDED_DEP_SCOPES);
     }
 
-    public DependencyResult resolveManagedDependencies(Artifact artifact, List<Dependency> deps, List<Dependency> managedDeps, String... excludedScopes) throws AppModelResolverException {
-        return resolveManagedDependencies(artifact, deps, managedDeps, Collections.emptyList(), excludedScopes);
-    }
-
+    /**
+     * Like {@link #resolveManagedDependencies(Artifact, List, List, List)} but allows to provide excluded dependency scopes explicitly.
+     *
+     * @param artifact  the artifact to resolve the dependencies for
+     * @param deps  desired direct dependencies (can be empty)
+     * @param managedDeps  dependency management that should be applied to the result (can be empty)
+     * @param mainRepos  primary repositories that should be used for the request
+     * @param excludedScopes  dependency scopes that should be excluded
+     * @return  collected dependencies
+     * @throws AppModelResolverException  in case of a failure
+     */
     public DependencyResult resolveManagedDependencies(Artifact artifact, List<Dependency> deps, List<Dependency> managedDeps, List<RemoteRepository> mainRepos, String... excludedScopes) throws AppModelResolverException {
         try {
             return repoSystem.resolveDependencies(repoSession,
@@ -290,10 +292,33 @@ public class MavenArtifactResolver {
         }
     }
 
-    public CollectResult collectManagedDependencies(Artifact artifact, List<Dependency> deps, List<Dependency> managedDeps, String... excludedScopes) throws AppModelResolverException {
-        return collectManagedDependencies(artifact, deps, managedDeps, Collections.emptyList(), excludedScopes);
+    /**
+     * Collects all the dependencies of a given artifact allowing the caller to provide specific desired direct dependencies
+     * and the dependency management info. In addition, it accepts a list of primary repositories
+     * (the other repos will be taken from the default settings, for example) that should be used to process the request.
+     *
+     * @param artifact  the artifact to collect the dependencies for
+     * @param deps  desired direct dependencies (can be empty)
+     * @param managedDeps  dependency management that should be applied to the result (can be empty)
+     * @param mainRepos  primary repositories that should be used for the request
+     * @return  collected dependencies
+     * @throws AppModelResolverException  in case of a failure
+     */
+    public CollectResult collectManagedDependencies(Artifact artifact, List<Dependency> deps, List<Dependency> managedDeps, List<RemoteRepository> mainRepos) throws AppModelResolverException {
+        return collectManagedDependencies(artifact, deps, managedDeps, mainRepos, DEFAULT_EXCLUDED_DEP_SCOPES);
     }
 
+    /**
+     * Like {@link #collectManagedDependencies(Artifact, List, List, List)} but allows to provide excluded dependency scopes explicitly.
+     *
+     * @param artifact  the artifact to collect the dependencies for
+     * @param deps  desired direct dependencies (can be empty)
+     * @param managedDeps  dependency management that should be applied to the result (can be empty)
+     * @param mainRepos  primary repositories that should be used for the request
+     * @param excludedScopes  dependency scopes that should be excluded
+     * @return  collected dependencies
+     * @throws AppModelResolverException  in case of a failure
+     */
     public CollectResult collectManagedDependencies(Artifact artifact, List<Dependency> deps, List<Dependency> managedDeps, List<RemoteRepository> mainRepos, String... excludedScopes) throws AppModelResolverException {
         try {
             return repoSystem.collectDependencies(repoSession, newCollectManagedRequest(artifact, deps, managedDeps, mainRepos, excludedScopes));
@@ -305,22 +330,25 @@ public class MavenArtifactResolver {
     private CollectRequest newCollectManagedRequest(Artifact artifact, List<Dependency> deps, List<Dependency> managedDeps, List<RemoteRepository> mainRepos, String... excludedScopes) throws AppModelResolverException {
         final ArtifactDescriptorResult descr = resolveDescriptor(artifact);
         Collection<String> excluded;
-        if(excludedScopes.length == 0) {
-            excluded = Arrays.asList(new String[] {"test", "provided"});
-        } else if (excludedScopes.length == 1) {
-            excluded = Collections.singleton(excludedScopes[0]);
+        final List<Dependency> originalDeps;
+        if (excludedScopes.length == 0) {
+            originalDeps = descr.getDependencies();
         } else {
-            excluded = Arrays.asList(excludedScopes);
-            if (excludedScopes.length > 3) {
-                excluded = new HashSet<>(Arrays.asList(excludedScopes));
+            originalDeps = new ArrayList<>(descr.getDependencies().size());
+            if (excludedScopes.length == 1) {
+                excluded = Collections.singleton(excludedScopes[0]);
+            } else {
+                excluded = Arrays.asList(excludedScopes);
+                if (excludedScopes.length > 3) {
+                    excluded = new HashSet<>(Arrays.asList(excludedScopes));
+                }
             }
-        }
-        final List<Dependency> originalDeps = new ArrayList<>(descr.getDependencies().size());
-        for(Dependency dep : descr.getDependencies()) {
-            if(excluded.contains(dep.getScope())) {
-                continue;
+            for (Dependency dep : descr.getDependencies()) {
+                if (excluded.contains(dep.getScope())) {
+                    continue;
+                }
+                originalDeps.add(dep);
             }
-            originalDeps.add(dep);
         }
 
         final List<Dependency> mergedManagedDeps = new ArrayList<Dependency>(managedDeps.size() + descr.getManagedDependencies().size());

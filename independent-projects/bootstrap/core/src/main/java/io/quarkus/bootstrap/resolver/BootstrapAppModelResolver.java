@@ -20,6 +20,7 @@ import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.ArtifactDescriptorResult;
 import org.eclipse.aether.resolution.ArtifactRequest;
 import org.eclipse.aether.resolution.ArtifactResult;
+import org.eclipse.aether.resolution.DependencyResult;
 import org.eclipse.aether.resolution.VersionRangeResult;
 import org.eclipse.aether.util.graph.transformer.ConflictIdSorter;
 import org.eclipse.aether.util.graph.transformer.ConflictMarker;
@@ -142,8 +143,12 @@ public class BootstrapAppModelResolver implements AppModelResolver {
             managedRepos = mvn.newResolutionRepositories(managingDescr.getRepositories());
         }
 
-        DependencyNode resolvedDeps = mvn.resolveManagedDependencies(toAetherArtifact(appArtifact),
-                directMvnDeps, managedDeps, managedRepos, devmode ? new String[] { "test" } : new String[0]).getRoot();
+        final DependencyResult depResult = devmode
+                ? mvn.resolveManagedDependencies(toAetherArtifact(appArtifact), directMvnDeps, managedDeps, managedRepos,
+                        new String[] { "test" })
+                : mvn.resolveManagedDependencies(toAetherArtifact(appArtifact), directMvnDeps, managedDeps, managedRepos);
+
+        DependencyNode resolvedDeps = depResult.getRoot();
 
         final Set<AppArtifactKey> appDeps = new HashSet<>();
         final List<AppDependency> userDeps = new ArrayList<>();
