@@ -3,7 +3,7 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
-        <artifactId>quarkus-integration-tests-parent</artifactId>
+        <artifactId>quarkus-test-framework</artifactId>
         <groupId>io.quarkus</groupId>
         <version>999-SNAPSHOT</version>
         <relativePath>../</relativePath>
@@ -11,7 +11,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>quarkus-integration-test-class-transformer-parent</artifactId>
-    <name>Quarkus - Integration Tests - Class tranformer</name>
+    <name>Quarkus - Test framework - Class tranformer</name>
     <description>
 
         An example deployment time processor that tests
@@ -28,5 +28,4 @@
         <module>deployment</module>
         <module>runtime</module>
     </modules>
-
 </project>

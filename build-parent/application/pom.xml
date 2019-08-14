@@ -18,6 +18,7 @@
     <properties>
         <version.quarkus>${project.version}</version.quarkus>
         <flatten-plugin.version>1.1.0</flatten-plugin.version>
+        <surefire-plugin.version>2.22.0</surefire-plugin.version>
         <xml-plugin.version>1.0.2</xml-plugin.version>
     </properties>
 
@@ -41,6 +42,7 @@
             <plugins>
                 <plugin>
                     <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${surefire-plugin.version}</version>
                     <configuration>
                         <systemProperties>
                             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
@@ -53,6 +55,7 @@
                     <version>${version.quarkus}</version>
                     <executions>
                         <execution>
+                            <id>quarkus-build</id>
                             <goals>
                                 <goal>build</goal>
                             </goals>
@@ -63,6 +66,19 @@
                     <groupId>io.quarkus</groupId>
                     <artifactId>quarkus-bootstrap-maven-plugin</artifactId>
                     <version>${version.quarkus}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.jboss.jandex</groupId>
+                    <artifactId>jandex-maven-plugin</artifactId>
+                    <version>1.0.6</version>
+                    <executions>
+                        <execution>
+                            <id>make-index</id>
+                            <goals>
+                                <goal>jandex</goal>
+                            </goals>
+                        </execution>
+                    </executions>
                 </plugin>
             </plugins>
         </pluginManagement>
@@ -178,6 +194,7 @@
                     </plugin>
                     <plugin>
                         <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>${surefire-plugin.version}</version>
                         <executions>
                             <execution>
                                 <goals>

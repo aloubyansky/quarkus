@@ -14,7 +14,7 @@
     <artifactId>quarkus-integration-test-resteasy-jackson</artifactId>
 
     <name>Quarkus - Integration Tests - RESTEasy Jackson</name>
-    
+
 
     <dependencies>
         <dependency>
@@ -33,23 +33,6 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>${project.groupId}</groupId>
-                <artifactId>quarkus-maven-plugin</artifactId>
-                <version>${project.version}</version>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>build</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
 
     <profiles>
         <profile>

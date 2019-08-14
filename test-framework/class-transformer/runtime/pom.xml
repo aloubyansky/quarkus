@@ -11,13 +11,28 @@
   <modelVersion>4.0.0</modelVersion>
 
   <artifactId>quarkus-integration-test-class-transformer</artifactId>
-  <name>Quarkus - Integration Tests - Class tranformer - Runtime</name>
+  <name>Quarkus - Test framework - Class tranformer - Runtime</name>
 
   <build>
     <plugins>
       <plugin>
         <groupId>io.quarkus</groupId>
         <artifactId>quarkus-bootstrap-maven-plugin</artifactId>
+        <version>${project.version}</version>
+
+            <executions>
+                <execution>
+                    <goals>
+                        <goal>extension-descriptor</goal>
+                    </goals>
+                    <phase>compile</phase>
+                    <configuration>
+                        <deployment>${project.groupId}:${project.artifactId}-deployment:${project.version}
+                        </deployment>
+                    </configuration>
+                </execution>
+            </executions>
+
       </plugin>
     </plugins>
   </build>

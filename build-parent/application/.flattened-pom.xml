@@ -15,6 +15,7 @@
     </license>
   </licenses>
   <properties>
+    <surefire-plugin.version>2.22.0</surefire-plugin.version>
     <flatten-plugin.version>1.1.0</flatten-plugin.version>
     <version.quarkus>999-SNAPSHOT</version.quarkus>
     <xml-plugin.version>1.0.2</xml-plugin.version>
@@ -258,6 +259,11 @@
       </dependency>
       <dependency>
         <groupId>io.quarkus</groupId>
+        <artifactId>quarkus-undertow-common-substitutions</artifactId>
+        <version>999-SNAPSHOT</version>
+      </dependency>
+      <dependency>
+        <groupId>io.quarkus</groupId>
         <artifactId>quarkus-smallrye-fault-tolerance</artifactId>
         <version>999-SNAPSHOT</version>
       </dependency>
@@ -424,12 +430,12 @@
       <dependency>
         <groupId>io.quarkus.gizmo</groupId>
         <artifactId>gizmo</artifactId>
-        <version>1.0.0.Alpha6</version>
+        <version>1.0.0.Alpha7</version>
       </dependency>
       <dependency>
         <groupId>io.quarkus.gizmo</groupId>
         <artifactId>gizmo</artifactId>
-        <version>1.0.0.Alpha6</version>
+        <version>1.0.0.Alpha7</version>
         <type>test-jar</type>
       </dependency>
       <dependency>
@@ -2439,6 +2445,7 @@
       <plugins>
         <plugin>
           <artifactId>maven-surefire-plugin</artifactId>
+          <version>${surefire-plugin.version}</version>
           <configuration>
             <systemProperties>
               <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
@@ -2451,6 +2458,7 @@
           <version>${version.quarkus}</version>
           <executions>
             <execution>
+              <id>quarkus-build</id>
               <goals>
                 <goal>build</goal>
               </goals>
@@ -2461,6 +2469,19 @@
           <groupId>io.quarkus</groupId>
           <artifactId>quarkus-bootstrap-maven-plugin</artifactId>
           <version>${version.quarkus}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.jboss.jandex</groupId>
+          <artifactId>jandex-maven-plugin</artifactId>
+          <version>1.0.6</version>
+          <executions>
+            <execution>
+              <id>make-index</id>
+              <goals>
+                <goal>jandex</goal>
+              </goals>
+            </execution>
+          </executions>
         </plugin>
       </plugins>
     </pluginManagement>
@@ -2502,6 +2523,7 @@
           </plugin>
           <plugin>
             <artifactId>maven-failsafe-plugin</artifactId>
+            <version>${surefire-plugin.version}</version>
             <executions>
               <execution>
                 <goals>

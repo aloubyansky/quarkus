@@ -57,9 +57,6 @@
                 <artifactId>quarkus-maven-plugin</artifactId>
                 <executions>
                     <execution>
-                        <goals>
-                            <goal>build</goal>
-                        </goals>
                         <configuration>
                             <uberJar>true</uberJar>
                         </configuration>
