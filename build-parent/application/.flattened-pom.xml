@@ -18,7 +18,9 @@
     <surefire-plugin.version>2.22.0</surefire-plugin.version>
     <flatten-plugin.version>1.1.0</flatten-plugin.version>
     <version.quarkus>999-SNAPSHOT</version.quarkus>
+    <maven.compiler.source>1.8</maven.compiler.source>
     <xml-plugin.version>1.0.2</xml-plugin.version>
+    <maven.compiler.target>1.8</maven.compiler.target>
   </properties>
   <dependencyManagement>
     <dependencies>

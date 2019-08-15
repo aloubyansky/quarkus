@@ -16,6 +16,9 @@
     <packaging>pom</packaging>
 
     <properties>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+
         <version.quarkus>${project.version}</version.quarkus>
         <flatten-plugin.version>1.1.0</flatten-plugin.version>
         <surefire-plugin.version>2.22.0</surefire-plugin.version>
