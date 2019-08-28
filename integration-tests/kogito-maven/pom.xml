@@ -15,10 +15,12 @@
     <name>Quarkus - Integration Tests - Kogito - Maven</name>
 
     <dependencies>
+    <!--
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-kogito-deployment</artifactId>
         </dependency>
+        -->
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-test-maven</artifactId>

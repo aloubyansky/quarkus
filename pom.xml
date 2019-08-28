@@ -34,14 +34,25 @@
         <graalvmHome>${env.GRAALVM_HOME}</graalvmHome>
         <postgres.url>jdbc:postgresql:hibernate_orm_test</postgres.url>
 
+        <!-- Maven plugin versions -->
+        <flatten-plugin.version>1.1.0</flatten-plugin.version>
         <nexus-staging-maven-plugin.version>1.6.8</nexus-staging-maven-plugin.version>
+        <scala-maven-plugin.version>4.1.1</scala-maven-plugin.version>
+        <xml-plugin.version>1.0.2</xml-plugin.version>
+        
         <jacoco.version>0.8.3</jacoco.version>
+        
+        <!-- Supported Maven versions, interpreted as a version range -->
+        <supported-maven-versions>[3.5.3,)</supported-maven-versions>
     </properties>
 
     <modules>
         <module>bom/runtime</module>
         <module>bom/deployment</module>
-        <module>build-parent</module>
+
+        <module>build-parent/application</module>
+        <module>build-parent/extension</module>
+        <module>build-parent/internal</module>
 
         <!-- Core components -->
         <module>core</module>
@@ -67,13 +78,97 @@
         <module>war-launcher</module>
     </modules>
 
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-enforcer-plugin</artifactId>
+                    <executions>
+                        <execution>
+                            <id>enforce</id>
+                            <configuration>
+                                <rules>
+                                    <dependencyConvergence/>
+                                    <requireMavenVersion>
+                                        <version>${supported-maven-versions}</version>
+                                    </requireMavenVersion>
+                                    <bannedDependencies>
+                                        <excludes>
+                                            <!-- Use javax.annotation-api -->
+                                            <exclude>org.jboss.spec.javax.annotation:jboss-annotations-api_1.2_spec
+                                            </exclude>
+                                            <exclude>org.jboss.spec.javax.annotation:jboss-annotations-api_1.3_spec
+                                            </exclude>
+                                            <!-- use our jboss-logmanager -->
+                                            <exclude>org.jboss.logging:jboss-logmanager</exclude>
+                                            <!-- We don't want all the API's in one jar-->
+                                            <exclude>javax:javaee-api</exclude>
+                                            <!-- Prevent incompatible config from coming in -->
+                                            <exclude>org.wildfly.client:wildfly-client-config</exclude>
+                                            <!-- Use Jakarta Activation -->
+                                            <exclude>javax.activation:javax-activation-api</exclude>
+                                            <exclude>javax.activation:activation</exclude>
+                                            <exclude>org.jboss.marshalling:jboss-marshalling-osgi</exclude>
+                                            <exclude>org.jboss.spec.javax.servlet:jboss-servlet-api_3.1_spec</exclude>
+                                            <!-- The API is packaged by the implementation-->
+                                            <exclude>javax.json:javax.json-api</exclude>
+                                            <!-- Do not use Jakarta APIs for JSON -->
+                                            <exclude>org.glassfish:jakarta.json</exclude>
+                                            <exclude>jakarta.json.bind:jakarta.json.bind-api</exclude>
+                                            <exclude>jakarta.json:jakarta.json-api</exclude>
+                                            <!-- Ensure none of the deps use netty-all. This forces deps to use more fine grained netty artifacts -->
+                                            <exclude>io.netty:netty-all</exclude>
+                                        </excludes>
+                                    </bannedDependencies>
+                                </rules>
+                            </configuration>
+                            <goals>
+                                <goal>enforce</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>net.revelc.code.formatter</groupId>
+                    <artifactId>formatter-maven-plugin</artifactId>
+                    <version>2.8.1</version>
+                    <configuration>
+                        <configFile>${maven.multiModuleProjectDirectory}/ide-config/eclipse-format.xml</configFile>
+                        <skip>${format.skip}</skip>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>net.revelc.code</groupId>
+                    <artifactId>impsort-maven-plugin</artifactId>
+                    <version>1.2.0</version>
+                    <configuration>
+                        <groups>java.,javax.,org.,com.</groups>
+                        <staticGroups>*</staticGroups>
+                        <skip>${format.skip}</skip>
+                        <removeUnused>true</removeUnused>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>com.google.code.maven-replacer-plugin</groupId>
+                    <artifactId>maven-resources-plugin</artifactId>
+                    <version>1.5.3</version>
+                </plugin>
+                <plugin>
+                    <artifactId>maven-resources-plugin</artifactId>
+                    <version>3.1.0</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
     <repositories>
         <repository>
             <id>central</id>
             <name>Maven Repository Switchboard</name>
             <url>https://repo.maven.apache.org/maven2</url>
         </repository>
-   </repositories>
+    </repositories>
 
     <distributionManagement>
         <snapshotRepository>
@@ -87,6 +182,223 @@
     </distributionManagement>
 
     <profiles>
+        <profile>
+            <id>jdk-8-classpath</id>
+            <activation>
+                <jdk>[9,</jdk>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <release>8</release>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>format</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+                <property>
+                    <name>!no-format</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>net.revelc.code.formatter</groupId>
+                        <artifactId>formatter-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <phase>process-sources</phase>
+                                <goals>
+                                    <goal>format</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>net.revelc.code</groupId>
+                        <artifactId>impsort-maven-plugin</artifactId>
+                        <configuration>
+                            <removeUnused>true</removeUnused>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>sort-imports</id>
+                                <goals>
+                                    <goal>sort</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>validate</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+                <property>
+                    <name>no-format</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>net.revelc.code.formatter</groupId>
+                        <artifactId>formatter-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <phase>process-sources</phase>
+                                <goals>
+                                    <goal>validate</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>net.revelc.code</groupId>
+                        <artifactId>impsort-maven-plugin</artifactId>
+                        <configuration>
+                            <removeUnused>true</removeUnused>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>check-imports</id>
+                                <goals>
+                                    <goal>check</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>eclipse</id>
+            <activation>
+                <property>
+                    <!-- This is a trick to have the profile automatically activated by Eclipse -->
+                    <name>m2e.version</name>
+                </property>
+            </activation>
+            <build>
+                <pluginManagement>
+                    <plugins>
+                        <!--This plugin's configuration is used to store Eclipse m2e settings only. It has no influence on the Maven build itself.-->
+                        <plugin>
+                            <groupId>org.eclipse.m2e</groupId>
+                            <artifactId>lifecycle-mapping</artifactId>
+                            <version>1.0.0</version>
+                            <configuration>
+                                <lifecycleMappingMetadata>
+                                    <pluginExecutions>
+                                        <pluginExecution>
+                                            <pluginExecutionFilter>
+                                                <groupId>io.fabric8</groupId>
+                                                <artifactId>
+                                                    docker-maven-plugin
+                                                </artifactId>
+                                                <versionRange>
+                                                    [0.26.1,)
+                                                </versionRange>
+                                                <goals>
+                                                    <goal>start</goal>
+                                                    <goal>stop</goal>
+                                                </goals>
+                                            </pluginExecutionFilter>
+                                            <action>
+                                                <ignore></ignore>
+                                            </action>
+                                        </pluginExecution>
+                                        <pluginExecution>
+                                            <pluginExecutionFilter>
+                                                <groupId>
+                                                    org.apache.maven.plugins
+                                                </groupId>
+                                                <artifactId>
+                                                    maven-antrun-plugin
+                                                </artifactId>
+                                                <versionRange>
+                                                    [1.8,)
+                                                </versionRange>
+                                                <goals>
+                                                    <goal>run</goal>
+                                                </goals>
+                                            </pluginExecutionFilter>
+                                            <action>
+                                                <ignore></ignore>
+                                            </action>
+                                        </pluginExecution>
+                                        <pluginExecution>
+                                            <pluginExecutionFilter>
+                                                <groupId>
+                                                    org.apache.maven.plugins
+                                                </groupId>
+                                                <artifactId>
+                                                    maven-dependency-plugin
+                                                </artifactId>
+                                                <versionRange>
+                                                    [3.1.1,)
+                                                </versionRange>
+                                                <goals>
+                                                    <goal>resolve</goal>
+                                                </goals>
+                                            </pluginExecutionFilter>
+                                            <action>
+                                                <ignore></ignore>
+                                            </action>
+                                        </pluginExecution>
+                                        <pluginExecution>
+                                            <pluginExecutionFilter>
+                                                <groupId>
+                                                    org.jboss.jandex
+                                                </groupId>
+                                                <artifactId>
+                                                    jandex-maven-plugin
+                                                </artifactId>
+                                                <versionRange>
+                                                    [1.0.5,)
+                                                </versionRange>
+                                                <goals>
+                                                    <goal>jandex</goal>
+                                                </goals>
+                                            </pluginExecutionFilter>
+                                            <action>
+                                                <ignore></ignore>
+                                            </action>
+                                        </pluginExecution>
+                                        <pluginExecution>
+                                            <pluginExecutionFilter>
+                                                <groupId>io.quarkus</groupId>
+                                                <artifactId>
+                                                    quarkus-extension-plugin
+                                                </artifactId>
+                                                <versionRange>
+                                                    [0.1.0,)
+                                                </versionRange>
+                                                <goals>
+                                                    <goal>extension-list</goal>
+                                                </goals>
+                                            </pluginExecutionFilter>
+                                            <action>
+                                                <ignore></ignore>
+                                            </action>
+                                        </pluginExecution>
+                                    </pluginExecutions>
+                                </lifecycleMappingMetadata>
+                            </configuration>
+                        </plugin>
+                    </plugins>
+                </pluginManagement>
+            </build>
+        </profile>
         <profile>
             <id>release</id>
             <build>
