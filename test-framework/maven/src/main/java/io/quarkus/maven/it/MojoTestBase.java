@@ -39,10 +39,15 @@ public class MojoTestBase {
 
     @BeforeAll
     public static void init() {
+        String parentRelativePath = System.getProperty("parent.relativePath");
+        if (parentRelativePath == null) {
+            parentRelativePath = "..";
+        }
         VARIABLES = ImmutableMap.of(
                 "@project.groupId@", MojoUtils.getPluginGroupId(),
                 "@project.artifactId@", MojoUtils.getPluginArtifactId(),
-                "@project.version@", MojoUtils.getPluginVersion());
+                "@project.version@", MojoUtils.getPluginVersion(),
+                "@parent.relativePath@", parentRelativePath);
     }
 
     public static Invoker initInvoker(File root) {

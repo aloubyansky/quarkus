@@ -158,18 +158,20 @@ public class PostProcessFlattenPomMojo extends AbstractMojo {
         }
         final String quarkusPlugin = "io.quarkus:quarkus-maven-plugin";
         if (plugins.containsKey(quarkusPlugin)) {
-            final Plugin quarkusPluginMgmt = flattenedRawModel.getBuild().getPluginManagement().getPluginsAsMap()
-                    .get(quarkusPlugin);
             boolean keep = false;
-            if (quarkusPluginMgmt != null) {
-                for (PluginExecution execution : quarkusPluginMgmt.getExecutions()) {
-                    final List<String> goals = execution.getGoals();
-                    if (!goals.isEmpty() && (goals.size() > 1 || !goals.get(0).equals(GOAL_NAME))) {
-                        keep = true;
-                        break;
-                    }
-                }
-            }
+            /*
+             * final Plugin quarkusPluginMgmt = flattenedRawModel.getBuild().getPluginManagement().getPluginsAsMap()
+             * .get(quarkusPlugin);
+             * if (quarkusPluginMgmt != null) {
+             * for (PluginExecution execution : quarkusPluginMgmt.getExecutions()) {
+             * final List<String> goals = execution.getGoals();
+             * if (!goals.isEmpty() && (goals.size() > 1 || !goals.get(0).equals(GOAL_NAME))) {
+             * keep = true;
+             * break;
+             * }
+             * }
+             * }
+             */
             if (updatedModel == null) {
                 updatedModel = flattenedRawModel.clone();
             }
@@ -214,7 +216,7 @@ public class PostProcessFlattenPomMojo extends AbstractMojo {
 
     /**
      * Collects properties referenced in the string
-     * 
+     *
      * @param str the string
      * @param propNames set to add the collected properties to
      * @param definedNames property names defined in the plugin configuration

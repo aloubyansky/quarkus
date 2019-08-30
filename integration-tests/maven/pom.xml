@@ -73,6 +73,7 @@
                         <maven.home>${maven.home}</maven.home>
                         <maven.repo>${settings.localRepository}</maven.repo>
                         <project.version>${project.version}</project.version>
+                        <parent.relativePath>../../../../../../build-parent/application/.flattened-pom.xml</parent.relativePath>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>

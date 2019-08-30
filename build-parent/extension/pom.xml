@@ -19,11 +19,9 @@
         <java.version>1.8</java.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
-
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <quarkus.version>${project.version}</quarkus.version>
-        <surefire-plugin.version>2.22.0</surefire-plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -33,7 +31,7 @@
             <dependency>
                 <groupId>io.quarkus</groupId>
                 <artifactId>quarkus-bom-deployment</artifactId>
-                <version>${project.version}</version>
+                <version>${quarkus.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -90,7 +88,7 @@
             </plugins>
         </pluginManagement>
         <plugins>
-            <!-- pom.xml flattening plugins -->
+            <!-- pom.xml flattening plugins
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>flatten-maven-plugin</artifactId>
@@ -149,6 +147,7 @@
                     </execution>
                 </executions>
             </plugin>
+            -->
         </plugins>
     </build>
 
