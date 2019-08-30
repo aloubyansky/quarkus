@@ -16,14 +16,12 @@
     <packaging>pom</packaging>
 
     <properties>
-        <!--
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
-        -->
+        <java.version>1.8</java.version>
+        <maven.compiler.source>${java.version}</maven.compiler.source>
+        <maven.compiler.target>${java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <quarkus.version>${project.version}</quarkus.version>
-        <surefire-plugin.version>2.22.0</surefire-plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -46,6 +44,7 @@
             <plugins>
                 <plugin>
                     <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${surefire-plugin.version}</version>
                     <configuration>
                         <systemProperties>
                             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
@@ -55,7 +54,7 @@
                 <plugin>
                     <groupId>io.quarkus</groupId>
                     <artifactId>quarkus-maven-plugin</artifactId>
-                    <version>${project.version}</version>
+                    <version>${quarkus.version}</version>
                     <executions>
                         <execution>
                             <id>quarkus-build</id>
@@ -68,17 +67,17 @@
                 <plugin>
                     <groupId>io.quarkus</groupId>
                     <artifactId>quarkus-bootstrap-maven-plugin</artifactId>
-                    <version>${project.version}</version>
+                    <version>${quarkus.version}</version>
                 </plugin>
                 <plugin>
                     <groupId>io.fabric8</groupId>
                     <artifactId>docker-maven-plugin</artifactId>
-                    <version>0.29.0</version>
+                    <version>${docker-plugin.version}</version>
                 </plugin>
                 <plugin>
                     <groupId>org.jboss.jandex</groupId>
                     <artifactId>jandex-maven-plugin</artifactId>
-                    <version>1.0.6</version>
+                    <version>${jandex-plugin.version}</version>
                     <executions>
                         <execution>
                             <id>make-index</id>
@@ -92,8 +91,66 @@
         </pluginManagement>
         <plugins>
             <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+                <version>${flatten-plugin.version}</version>
+                <inherited>false</inherited>
+                <executions>
+                    <execution>
+                        <id>flatten-effective-pom</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>flatten</goal>
+                        </goals>
+                        <configuration>
+                            <updatePomFile>true</updatePomFile>
+                            <pomElements>
+                                <parent>remove</parent>
+                                <properties>keep</properties>
+                                <name>keep</name>
+                                <description>keep</description>
+                                <url>expand</url>
+                                <dependencyManagement>expand</dependencyManagement>
+                                <build>keep</build>
+                                <profiles>keep</profiles>
+                            </pomElements>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>flatten-clean</id>
+                        <phase>clean</phase>
+                        <goals>
+                            <goal>clean</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>io.quarkus</groupId>
                 <artifactId>quarkus-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>post-process-flattened-pom</goal>
+                        </goals>
+                        <configuration>
+                            <excludes>
+                                <exclude>flatten-plugin.version</exclude>
+                            </excludes>
+                            <defines>
+                                <define>
+                                    <name>graalvmHome</name>
+                                    <property>env.GRAALVM_HOME</property>
+                                </define>
+                                <define>
+                                    <name>quarkus.version</name>
+                                    <value>${project.version}</value>
+                                </define>
+                            </defines>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
@@ -118,8 +175,6 @@
                                     <goal>verify</goal>
                                 </goals>
                                 <configuration>
-                                    <!-- force the locale as we want to explicitly test message interpolation -->
-                                    <argLine>-Duser.language=en</argLine>
                                     <systemProperties>
                                         <native.image.path>${project.build.directory}/${project.build.finalName}-runner</native.image.path>
                                     </systemProperties>
@@ -130,7 +185,7 @@
                     <plugin>
                         <groupId>io.quarkus</groupId>
                         <artifactId>quarkus-maven-plugin</artifactId>
-                        <version>${project.version}</version>
+                        <version>${quarkus.version}</version>
                         <executions>
                             <execution>
                                 <id>native-image</id>
