@@ -13,6 +13,12 @@
     <artifactId>quarkus-integration-test-hibernate-validator</artifactId>
     <name>Quarkus - Integration Tests - Hibernate Validator</name>
     <description>Module that contains Hibernate Validator/Bean Validation related tests</description>
+
+    <properties>
+        <skipTests>true</skipTests>
+    </properties>
+
+
     <dependencies>
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -61,7 +67,11 @@
                     <execution>
                         <goals>
                             <goal>build</goal>
+                            <goal>it-setup</goal>
                         </goals>
+                        <configuration>
+                            <testApp>${project.groupId}:${project.artifactId}:${project.version}</testApp>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
@@ -69,6 +79,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
+                    <skipTests>${skipTests}</skipTests>
                     <!-- force the locale as we want to explicitly test message interpolation -->
                     <argLine>-Duser.language=en</argLine>
                 </configuration>
