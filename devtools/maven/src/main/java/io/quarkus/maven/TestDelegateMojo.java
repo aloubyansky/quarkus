@@ -3,6 +3,7 @@ package io.quarkus.maven;
 import static org.twdata.maven.mojoexecutor.MojoExecutor.*;
 
 import java.io.File;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -23,6 +24,13 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.shared.invoker.Invoker;
+import org.codehaus.plexus.classworlds.realm.ClassRealm;
+import org.codehaus.plexus.component.configurator.ComponentConfigurationException;
+import org.codehaus.plexus.component.configurator.ComponentConfigurator;
+import org.codehaus.plexus.component.configurator.ConfigurationListener;
+import org.codehaus.plexus.component.configurator.expression.ExpressionEvaluator;
+import org.codehaus.plexus.component.repository.exception.ComponentLookupException;
+import org.codehaus.plexus.configuration.PlexusConfiguration;
 import org.codehaus.plexus.util.xml.Xpp3Dom;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
@@ -160,8 +168,91 @@ public class TestDelegateMojo extends AbstractMojo {
                     + surefirePlugin.getVersion());
         }
 
+        ComponentConfigurator basic;
+        try {
+            basic = mavenSession.getContainer().lookup(ComponentConfigurator.class, "basic");
+        } catch (ComponentLookupException e1) {
+            throw new MojoExecutionException("Failed to resolve the basic configurator", e1);
+        }
+        mavenSession.getContainer().addComponent(new ComponentConfigurator() {
+
+            @Override
+            public void configureComponent(Object component, PlexusConfiguration configuration, ClassRealm realm)
+                    throws ComponentConfigurationException {
+                System.out.println("CONFIGURE 1");
+            }
+
+            @Override
+            public void configureComponent(Object component, PlexusConfiguration configuration, ExpressionEvaluator evaluator,
+                    ClassRealm realm) throws ComponentConfigurationException {
+                System.out.println("CONFIGURE 2");
+            }
+
+            @Override
+            public void configureComponent(Object component, PlexusConfiguration configuration, ExpressionEvaluator evaluator,
+                    ClassRealm realm, ConfigurationListener listener) throws ComponentConfigurationException {
+                System.out.println("CONFIGURE 3 " + component.getClass());
+                basic.configureComponent(component, configuration, evaluator, realm, listener);
+
+                try {
+                    System.out.println("Session " + component.getClass().getMethod("getSession").invoke(component));
+                } catch (IllegalAccessException e1) {
+                    // TODO Auto-generated catch block
+                    e1.printStackTrace();
+                } catch (IllegalArgumentException e1) {
+                    // TODO Auto-generated catch block
+                    e1.printStackTrace();
+                } catch (InvocationTargetException e1) {
+                    // TODO Auto-generated catch block
+                    e1.printStackTrace();
+                } catch (NoSuchMethodException e1) {
+                    // TODO Auto-generated catch block
+                    e1.printStackTrace();
+                } catch (SecurityException e1) {
+                    // TODO Auto-generated catch block
+                    e1.printStackTrace();
+                }
+
+                try {
+                    component.getClass().getMethod("setSession", MavenSession.class).invoke(component, mavenSession);
+                    listener.notifyFieldChangeUsingSetter("session", mavenSession, component);
+
+                    component.getClass().getMethod("setProject", MavenProject.class).invoke(component, mavenProject);
+                    listener.notifyFieldChangeUsingSetter("project", mavenProject, component);
+
+                } catch (Exception e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                }
+                //surefire.setSession(mavenSession);
+                //surefire.setProject(mavenProject);
+            }
+        }, ComponentConfigurator.class, "quarkus-platform");
+
+        mojoDescriptor.setComponentConfigurator("quarkus-platform");
+
+        try {
+            PluginDescriptor pluginDescr = pluginManager.loadPlugin(surefirePlugin, this.repos, repoSession);
+            System.out.println("Plugin descr: " + pluginDescr);
+            ClassRealm pluginRealm = pluginManager.getPluginRealm(mavenSession, pluginDescr);
+            System.out.println("Plugin realm: " + pluginRealm);
+            mojoDescriptor.setRealm(pluginRealm);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        System.out.println(
+                "HINT " + mojoDescriptor.getRoleHint() + " " + mojoDescriptor.getRole() + " " + mojoDescriptor.getRoleClass());
+
+        try {
+            System.out.println(mavenSession.getContainer().lookup(mojoDescriptor.getRole(), mojoDescriptor.getRoleHint()));
+        } catch (ComponentLookupException e1) {
+            // TODO Auto-generated catch block
+            e1.printStackTrace();
+        }
+
         //MojoExecution exe = new MojoExecution(mojoDescriptor, "quarkus-platform-test");
-        MojoExecution exe = new MojoExecution(mojoDescriptor, (Xpp3Dom) surefirePlugin.getConfiguration());
+        //MojoExecution exe = new MojoExecution(mojoDescriptor, (Xpp3Dom) surefirePlugin.getConfiguration());
+        MojoExecution exe = new MojoExecution(mojoDescriptor, config);
 
         try {
             pluginManager.executeMojo(mavenSession, exe);
