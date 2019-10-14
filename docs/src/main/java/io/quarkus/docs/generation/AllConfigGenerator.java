@@ -1,7 +1,6 @@
 package io.quarkus.docs.generation;
 
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
@@ -20,55 +19,46 @@ import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.resolution.ArtifactRequest;
 import org.eclipse.aether.resolution.ArtifactResult;
 
-import com.fasterxml.jackson.core.JsonParseException;
-import com.fasterxml.jackson.databind.JsonMappingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.quarkus.annotation.processor.generate_doc.ConfigDocItem;
 import io.quarkus.annotation.processor.generate_doc.ConfigDocItemScanner;
 import io.quarkus.annotation.processor.generate_doc.ConfigDocSection;
 import io.quarkus.annotation.processor.generate_doc.ConfigDocWriter;
 import io.quarkus.annotation.processor.generate_doc.DocGeneratorUtil;
-import io.quarkus.bootstrap.resolver.AppModelResolverException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
-import io.quarkus.docs.generation.ExtensionJson.Extension;
+import io.quarkus.dependencies.Extension;
+import io.quarkus.platform.descriptor.loader.json.util.QuarkusJsonDescriptorUtils;
 
 public class AllConfigGenerator {
     public static void main(String[] args)
-            throws AppModelResolverException, JsonParseException, JsonMappingException, IOException {
+            throws Exception {
         if (args.length != 1) {
             System.err.println("Missing version parameter.");
             System.exit(1);
         }
         String version = args[0];
 
-        // This is where we produce the entire list of extensions
-        File jsonFile = new File("devtools/core-extensions-json/target/extensions.json");
-        if (!jsonFile.exists()) {
-            System.err.println("WARNING: could not generate all-config file because extensions list is missing: " + jsonFile);
-            System.exit(0);
-        }
-        ObjectMapper mapper = new ObjectMapper();
-        MavenArtifactResolver resolver = MavenArtifactResolver.builder().build();
+        final MavenArtifactResolver resolver = MavenArtifactResolver.builder().build();
 
-        // let's read it (and ignore the fields we don't need)
-        ExtensionJson extensionJson = mapper.readValue(jsonFile, ExtensionJson.class);
+        final List<Extension> extensions = QuarkusJsonDescriptorUtils
+                .loadDescriptor(resolver,
+                        new DefaultArtifact("io.quarkus", "quarkus-bom-descriptor-json", null, "json", version))
+                .getExtensions();
 
         // now get all the listed extension jars via Maven
-        List<ArtifactRequest> requests = new ArrayList<>(extensionJson.extensions.size());
+        List<ArtifactRequest> requests = new ArrayList<>(extensions.size());
         Map<String, Extension> extensionsByGav = new HashMap<>();
         Map<String, Extension> extensionsByConfigRoots = new HashMap<>();
-        for (Extension extension : extensionJson.extensions) {
+        for (Extension extension : extensions) {
             ArtifactRequest request = new ArtifactRequest();
-            Artifact artifact = new DefaultArtifact(extension.groupId, extension.artifactId, "jar", version);
+            Artifact artifact = new DefaultArtifact(extension.getGroupId(), extension.getArtifactId(), "jar", version);
             request.setArtifact(artifact);
             requests.add(request);
             // record the extension for this GAV
-            extensionsByGav.put(extension.groupId + ":" + extension.artifactId, extension);
+            extensionsByGav.put(extension.getGroupId() + ":" + extension.getArtifactId(), extension);
         }
 
-        // examine all the extension jars 
-        List<ArtifactRequest> deploymentRequests = new ArrayList<>(extensionJson.extensions.size());
+        // examine all the extension jars
+        List<ArtifactRequest> deploymentRequests = new ArrayList<>(extensions.size());
         for (ArtifactResult result : resolver.resolve(requests)) {
             Artifact artifact = result.getArtifact();
             // which extension was this for?
@@ -124,9 +114,9 @@ public class AllConfigGenerator {
         for (Entry<String, Extension> entry : extensionsByConfigRoots.entrySet()) {
             List<ConfigDocItem> items = docItemsByConfigRoots.get(entry.getKey());
             if (items != null) {
-                String extensionName = entry.getValue().name;
+                String extensionName = entry.getValue().getName();
                 if (extensionName == null) {
-                    String extensionGav = entry.getValue().groupId + ":" + entry.getValue().artifactId;
+                    String extensionGav = entry.getValue().getGroupId() + ":" + entry.getValue().getArtifactId();
                     // compute the docs file name for this extension
                     String docFileName = DocGeneratorUtil.computeExtensionDocFileName(entry.getKey());
                     // now approximate an extension file name based on it

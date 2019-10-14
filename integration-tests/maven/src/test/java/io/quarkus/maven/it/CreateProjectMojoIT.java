@@ -316,7 +316,7 @@ public class CreateProjectMojoIT extends MojoTestBase {
         InvocationRequest request = new DefaultInvocationRequest();
         request.setBatchMode(true);
         request.setGoals(Collections.singletonList(
-                CreateProjectMojo.PLUGIN_KEY + ":" + MojoUtils.getPluginVersion() + ":create"));
+                CreateProjectMojo.getPluginKey() + ":" + MojoUtils.getPluginVersion() + ":create"));
         request.setProperties(params);
         getEnv().forEach(request::addShellEnvironment);
         File log = new File(testDir, "build-create-" + testDir.getName() + ".log");

@@ -32,14 +32,13 @@
             <version>1.12.1</version>
         </dependency>
         <dependency>
-            <groupId>${project.groupId}</groupId>
+            <groupId>io.quarkus</groupId>
             <artifactId>quarkus-extension-processor</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>${project.groupId}</groupId>
+            <groupId>io.quarkus</groupId>
             <artifactId>quarkus-bootstrap-core</artifactId>
-            <version>${project.version}</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.slf4j</groupId>
@@ -50,6 +49,10 @@
                     <artifactId>jsoup</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-platform-descriptor-json</artifactId>
         </dependency>
     </dependencies>
 
@@ -73,6 +76,7 @@
                     </arguments>
                     <environmentVariables>
                         <MAVEN_CMD_LINE_ARGS>${env.MAVEN_CMD_LINE_ARGS}</MAVEN_CMD_LINE_ARGS>
+                        <QUARKUS_LOCAL_REPO>${env.QUARKUS_LOCAL_REPO}</QUARKUS_LOCAL_REPO>
                     </environmentVariables>
                 </configuration>
             </plugin>
