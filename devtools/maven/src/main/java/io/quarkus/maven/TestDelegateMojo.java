@@ -3,7 +3,6 @@ package io.quarkus.maven;
 import static org.twdata.maven.mojoexecutor.MojoExecutor.*;
 
 import java.io.File;
-import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -11,11 +10,8 @@ import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Plugin;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.BuildPluginManager;
-import org.apache.maven.plugin.MojoExecution;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
-import org.apache.maven.plugin.PluginConfigurationException;
-import org.apache.maven.plugin.PluginManagerException;
 import org.apache.maven.plugin.descriptor.MojoDescriptor;
 import org.apache.maven.plugin.descriptor.PluginDescriptor;
 import org.apache.maven.plugins.annotations.Component;
@@ -24,13 +20,6 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.shared.invoker.Invoker;
-import org.codehaus.plexus.classworlds.realm.ClassRealm;
-import org.codehaus.plexus.component.configurator.ComponentConfigurationException;
-import org.codehaus.plexus.component.configurator.ComponentConfigurator;
-import org.codehaus.plexus.component.configurator.ConfigurationListener;
-import org.codehaus.plexus.component.configurator.expression.ExpressionEvaluator;
-import org.codehaus.plexus.component.repository.exception.ComponentLookupException;
-import org.codehaus.plexus.configuration.PlexusConfiguration;
 import org.codehaus.plexus.util.xml.Xpp3Dom;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
@@ -152,8 +141,9 @@ public class TestDelegateMojo extends AbstractMojo {
                 pluginManager);
         PluginDescriptor pluginDescriptor;
         try {
-            pluginDescriptor = MavenCompatibilityHelper.loadPluginDescriptor(surefirePlugin, env,
-                    mavenSession);
+            //pluginDescriptor = pluginManager.loadPlugin(surefirePlugin,
+            //        mavenSession.getCurrentProject().getRemotePluginRepositories(), repoSession);
+            pluginDescriptor = MavenCompatibilityHelper.loadPluginDescriptor(surefirePlugin, env, mavenSession);
         } catch (Exception e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
@@ -168,6 +158,8 @@ public class TestDelegateMojo extends AbstractMojo {
                     + surefirePlugin.getVersion());
         }
 
+        /*
+        @formatter:off
         ComponentConfigurator basic;
         try {
             basic = mavenSession.getContainer().lookup(ComponentConfigurator.class, "basic");
@@ -230,30 +222,16 @@ public class TestDelegateMojo extends AbstractMojo {
         }, ComponentConfigurator.class, "quarkus-platform");
 
         mojoDescriptor.setComponentConfigurator("quarkus-platform");
-
-        try {
-            PluginDescriptor pluginDescr = pluginManager.loadPlugin(surefirePlugin, this.repos, repoSession);
-            System.out.println("Plugin descr: " + pluginDescr);
-            ClassRealm pluginRealm = pluginManager.getPluginRealm(mavenSession, pluginDescr);
-            System.out.println("Plugin realm: " + pluginRealm);
-            mojoDescriptor.setRealm(pluginRealm);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
         System.out.println(
-                "HINT " + mojoDescriptor.getRoleHint() + " " + mojoDescriptor.getRole() + " " + mojoDescriptor.getRoleClass());
-
-        try {
-            System.out.println(mavenSession.getContainer().lookup(mojoDescriptor.getRole(), mojoDescriptor.getRoleHint()));
-        } catch (ComponentLookupException e1) {
-            // TODO Auto-generated catch block
-            e1.printStackTrace();
-        }
+                "HINT " + mojoDescriptor.getRoleHint() + " " + mojoDescriptor.getRole());
+@formatter:on
+*/
 
         //MojoExecution exe = new MojoExecution(mojoDescriptor, "quarkus-platform-test");
         //MojoExecution exe = new MojoExecution(mojoDescriptor, (Xpp3Dom) surefirePlugin.getConfiguration());
-        MojoExecution exe = new MojoExecution(mojoDescriptor, config);
+        //MojoExecution exe = new MojoExecution(mojoDescriptor, config);
 
+        /* @formatter:off
         try {
             pluginManager.executeMojo(mavenSession, exe);
         } catch (PluginConfigurationException e) {
@@ -263,13 +241,15 @@ public class TestDelegateMojo extends AbstractMojo {
             // TODO Auto-generated catch block
             e.printStackTrace();
         }
-        /* @formatter:off
+        @formatter:on
+        */
         executeMojo(
                 surefirePlugin,
-                goal("test#quarkus-platform-test"),
+                //goal("test#quarkus-platform-test"),
+                goal("test"),
                 config,
                 env);
-@formatter:on */
+
         getLog().info("DONE");
     }
 
