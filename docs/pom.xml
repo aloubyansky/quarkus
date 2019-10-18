@@ -74,6 +74,7 @@
                     <environmentVariables>
                         <MAVEN_CMD_LINE_ARGS>${env.MAVEN_CMD_LINE_ARGS}</MAVEN_CMD_LINE_ARGS>
                         <QUARKUS_LOCAL_REPO>${env.QUARKUS_LOCAL_REPO}</QUARKUS_LOCAL_REPO>
+                        <MAVEN_PROJECTBASEDIR>${env.MAVEN_PROJECTBASEDIR}</MAVEN_PROJECTBASEDIR>
                     </environmentVariables>
                 </configuration>
             </plugin>
