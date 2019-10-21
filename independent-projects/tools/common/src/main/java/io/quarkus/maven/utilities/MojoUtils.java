@@ -82,7 +82,7 @@ public class MojoUtils {
     }
 
     public static String getPluginVersion() {
-        return getPlatformDescriptor().getBomVersion();
+        return getPlatformDescriptor().getQuarkusVersion();
     }
 
     public static String getBomArtifactId() {

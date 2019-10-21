@@ -77,8 +77,8 @@ public final class CreateUtils {
     public static void setupQuarkusJsonPlatformDescriptor(MavenArtifactResolver mvn, Artifact platformArtifact, final Log log)
             throws MojoExecutionException {
 
-        if (platformArtifact.getVersion() == null) {
-            platformArtifact.setVersion(CreateUtils.resolvePluginInfo(CreateUtils.class).getVersion());
+        if (platformArtifact.getVersion() == null || platformArtifact.getVersion().isEmpty()) {
+            platformArtifact = platformArtifact.setVersion(resolvePluginInfo(CreateUtils.class).getVersion());
         }
 
         final MessageWriter msgWriter = new MojoMessageWriter(log);
@@ -87,7 +87,7 @@ public final class CreateUtils {
             platformDescr = QuarkusJsonDescriptorUtils.loadDescriptor(mvn, platformArtifact, msgWriter);
         } catch (Throwable t) {
             log.warn(
-                    "The JSON platform descriptor couldn't be loaded for the requested version of the platform. Falling back to the legacy platform descriptor.");
+                    "The JSON platform descriptor couldn't be loaded for " + platformArtifact + ". Falling back to the legacy platform descriptor.");
             platformDescr = newLegacyDescriptor(msgWriter);
         }
         QuarkusPlatformConfig.defaultConfigBuilder()
@@ -153,8 +153,8 @@ public final class CreateUtils {
     }
 
     private static String getChildElementTextValue(final Node parentNode, String childName) throws MojoExecutionException {
-        Node node = getElement(parentNode.getChildNodes(), childName);
-        String text = getText(node);
+        final Node node = getElement(parentNode.getChildNodes(), childName);
+        final String text = getText(node);
         if (text.isEmpty()) {
             throw new MojoExecutionException(
                     "The " + parentNode.getNodeName() + " element description is missing child " + childName);
@@ -183,9 +183,9 @@ public final class CreateUtils {
     }
 
     private static String getText(Node node) {
-        if (!node.hasChildNodes())
+        if (!node.hasChildNodes()) {
             return "";
-
+        }
         StringBuffer result = new StringBuffer();
         NodeList list = node.getChildNodes();
         for (int i = 0; i < list.getLength(); i++) {
