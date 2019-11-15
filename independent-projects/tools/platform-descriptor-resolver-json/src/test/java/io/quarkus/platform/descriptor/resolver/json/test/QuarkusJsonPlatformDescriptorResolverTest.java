@@ -10,7 +10,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.nio.file.Path;
 
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -18,7 +17,6 @@ import io.quarkus.bootstrap.model.AppArtifact;
 import io.quarkus.bootstrap.resolver.ResolverSetupCleanup;
 import io.quarkus.bootstrap.resolver.TsArtifact;
 import io.quarkus.bootstrap.resolver.TsDependency;
-import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.platform.descriptor.QuarkusPlatformDescriptor;
 import io.quarkus.platform.descriptor.resolver.json.QuarkusJsonPlatformDescriptorResolver;
 import io.quarkus.platform.tools.DefaultMessageWriter;
@@ -30,7 +28,7 @@ public class QuarkusJsonPlatformDescriptorResolverTest extends ResolverSetupClea
     private static Path testDir;
 
     private MessageWriter log = new DefaultMessageWriter();
-
+/*
     @BeforeEach
     @Override
     public void setup() throws Exception {
@@ -53,9 +51,11 @@ public class QuarkusJsonPlatformDescriptorResolverTest extends ResolverSetupClea
             IoUtils.recursiveDelete(testDir);
         }
     }
-
+*/
+    @BeforeEach
     protected void doSetup() throws Exception {
 
+        super.setup();
         final TsArtifact quarkusCore = new TsArtifact(IO_QUARKUS, QUARKUS_CORE_ARTIFACT_ID, null, "jar", "0.28.5");
         install(quarkusCore, newJar().getPath(workDir));
 
