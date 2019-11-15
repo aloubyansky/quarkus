@@ -27,7 +27,7 @@ public class QuarkusJsonPlatformDescriptorResolverTest extends ResolverSetupClea
 
     private static Path testDir;
 
-    private MessageWriter log = new DefaultMessageWriter();
+    private MessageWriter log = new DefaultMessageWriter().setDebugEnabled(true);
 /*
     @BeforeEach
     @Override
