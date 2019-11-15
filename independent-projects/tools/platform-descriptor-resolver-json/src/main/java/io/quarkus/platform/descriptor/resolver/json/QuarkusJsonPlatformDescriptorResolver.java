@@ -137,6 +137,7 @@ public class QuarkusJsonPlatformDescriptorResolver {
             log = new DefaultMessageWriter();
         }
 
+        log.info("RESOLVER " + artifactResolver);
         if(artifactResolver == null) {
             try {
                 artifactResolver = new BootstrapAppModelResolver(MavenArtifactResolver.builder().build());

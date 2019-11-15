@@ -13,7 +13,6 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import io.quarkus.bootstrap.model.AppArtifact;
 import io.quarkus.bootstrap.resolver.ResolverSetupCleanup;
 import io.quarkus.bootstrap.resolver.TsArtifact;
 import io.quarkus.bootstrap.resolver.TsDependency;
@@ -83,7 +82,7 @@ public class QuarkusJsonPlatformDescriptorResolverTest extends ResolverSetupClea
         assertDefaultPlatform(platform, "0.28.7");
         assertEquals("0.28.5", platform.getQuarkusVersion());
     }
-
+/* @formatter:off
     @Test
     public void testResolveFromJsonVersion() throws Exception {
         final QuarkusPlatformDescriptor platform = newResolver().resolveFromJson(DEFAULT_PLATFORM_BOM_GROUP_ID, DEFAULT_PLATFORM_BOM_ARTIFACT_ID, "0.28.6");
@@ -146,7 +145,7 @@ public class QuarkusJsonPlatformDescriptorResolverTest extends ResolverSetupClea
         assertDefaultPlatform(platform, "0.28.6");
         assertEquals("0.28.5", platform.getQuarkusVersion());
     }
-
+ @formatter:on */
     private void installDefaultUniverse(final TsArtifact quarkusCore, String platformVersion) {
         final TsArtifact universeBom = new TsArtifact(DEFAULT_PLATFORM_BOM_GROUP_ID, DEFAULT_PLATFORM_BOM_ARTIFACT_ID, null, "pom", platformVersion)
                 .addManagedDependency(new TsDependency(quarkusCore));
