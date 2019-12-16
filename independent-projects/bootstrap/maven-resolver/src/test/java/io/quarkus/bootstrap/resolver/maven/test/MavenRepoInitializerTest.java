@@ -3,7 +3,6 @@ package io.quarkus.bootstrap.resolver.maven.test;
 import java.util.Arrays;
 import java.util.List;
 
-import io.quarkus.bootstrap.resolver.AppModelResolverException;
 import io.quarkus.bootstrap.resolver.maven.MavenRepoInitializer;
 import org.apache.maven.settings.Mirror;
 import org.apache.maven.settings.Profile;
@@ -92,7 +91,7 @@ class MavenRepoInitializerTest {
     }
 
     @Test
-    void getRemoteRepoFromSettingsWithNeitherProxyNorMirror() throws AppModelResolverException {
+    void getRemoteRepoFromSettingsWithNeitherProxyNorMirror() throws Exception {
         final Settings settings = baseSettings.clone();
 
         List<RemoteRepository> repos = MavenRepoInitializer.getRemoteRepos(settings);
@@ -109,7 +108,7 @@ class MavenRepoInitializerTest {
     }
 
     @Test
-    void getRemoteRepoFromSettingsWithProxyButWithoutMirror() throws AppModelResolverException {
+    void getRemoteRepoFromSettingsWithProxyButWithoutMirror() throws Exception {
         final Settings settings = baseSettings.clone();
         settings.addProxy(localProxy);
 
@@ -127,7 +126,7 @@ class MavenRepoInitializerTest {
     }
 
     @Test
-    void getRemoteRepoFromSettingsWithProxyAndMirror() throws AppModelResolverException {
+    void getRemoteRepoFromSettingsWithProxyAndMirror() throws Exception {
         final Settings settings = baseSettings.clone();
         settings.addProxy(localProxy);
         settings.addMirror(mirrorA);

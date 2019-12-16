@@ -59,7 +59,6 @@ import io.quarkus.bootstrap.model.AppDependency;
 import io.quarkus.bootstrap.model.AppModel;
 import io.quarkus.bootstrap.resolver.BootstrapAppModelResolver;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
-import io.quarkus.bootstrap.resolver.maven.MavenRepoInitializer;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
 import io.quarkus.dev.DevModeContext;
 import io.quarkus.dev.DevModeMain;
@@ -525,9 +524,10 @@ public class DevMojo extends AbstractMojo {
 
             final AppModel appModel;
             try {
-                RepositorySystem repoSystem = DevMojo.this.repoSystem;
+                RepositorySystem repoSystem = null;
                 final LocalProject localProject;
                 if (noDeps) {
+                    repoSystem = DevMojo.this.repoSystem;
                     localProject = LocalProject.load(outputDirectory.toPath());
                     addProject(devModeContext, localProject);
                     pomFiles.add(localProject.getDir().resolve("pom.xml"));
@@ -546,7 +546,6 @@ public class DevMojo extends AbstractMojo {
                         addProject(devModeContext, project);
                         pomFiles.add(project.getDir().resolve("pom.xml"));
                     }
-                    repoSystem = MavenRepoInitializer.getRepositorySystem(repoSession.isOffline(), localProject.getWorkspace());
                 }
 
                 appModel = new BootstrapAppModelResolver(MavenArtifactResolver.builder()
@@ -554,6 +553,7 @@ public class DevMojo extends AbstractMojo {
                         .setRepositorySystemSession(repoSession)
                         .setRemoteRepositories(repos)
                         .setWorkspace(localProject.getWorkspace())
+                        .setOffline(repoSession.isOffline())
                         .build())
                                 .setDevMode(true)
                                 .resolveModel(localProject.getAppArtifact());

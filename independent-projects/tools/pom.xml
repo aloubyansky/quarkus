@@ -38,6 +38,7 @@
 
         <!-- Versions -->
         <assertj.version>3.14.0</assertj.version>
+        <commons-lang3.version>3.9</commons-lang3.version>
         <eclipse-minimal-json.version>0.9.5</eclipse-minimal-json.version>
         <jackson.version>2.9.10</jackson.version>
         <jakarta.enterprise.cdi-api.version>2.0.2</jakarta.enterprise.cdi-api.version>
@@ -58,6 +59,11 @@
     </modules>
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-lang3</artifactId>
+                <version>${commons-lang3.version}</version>
+            </dependency>
             <dependency>
                 <groupId>com.eclipsesource.minimal-json</groupId>
                 <artifactId>minimal-json</artifactId>
@@ -148,7 +154,7 @@
                 <scope>import</scope>
                 <type>pom</type>
             </dependency>
-            
+
         </dependencies>
     </dependencyManagement>
 

@@ -25,7 +25,6 @@ import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import io.quarkus.bootstrap.model.AppArtifact;
 import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.model.AppDependency;
-import io.quarkus.bootstrap.util.PropertyUtils;
 
 
 /**
@@ -180,21 +179,6 @@ public class ModelUtils {
             }
         }
         throw new IllegalStateException("Failed to determine version for project model");
-    }
-
-    /**
-     * If the model contains properties, this method overrides those that appear to be
-     * defined as system properties.
-     */
-    public static Model applySystemProperties(Model model) {
-        final Properties props = model.getProperties();
-        for(Map.Entry<Object, Object> prop : model.getProperties().entrySet()) {
-            final String systemValue = PropertyUtils.getProperty(prop.getKey().toString());
-            if(systemValue != null) {
-                props.put(prop.getKey(), systemValue);
-            }
-        }
-        return model;
     }
 
     private static Properties loadPomProps(Path appJar, Path artifactIdPath) throws IOException {

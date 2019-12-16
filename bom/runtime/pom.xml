@@ -261,6 +261,17 @@
             </dependency>
 
             <!-- Quarkus libraries -->
+            <dependency>
+                 <groupId>io.quarkus</groupId>
+                 <artifactId>quarkus-bootstrap-maven-resolver</artifactId>
+                 <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-bootstrap-maven-resolver-minimal-deps</artifactId>
+                <type>pom</type>
+                <version>${project.version}</version>
+            </dependency>
 
             <dependency>
                 <groupId>io.quarkus</groupId>

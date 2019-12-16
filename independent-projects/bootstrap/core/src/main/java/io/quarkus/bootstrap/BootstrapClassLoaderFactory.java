@@ -235,7 +235,7 @@ public class BootstrapClassLoaderFactory {
             try {
                 mvn = mvnBuilder.build();
             } catch (AppModelResolverException e) {
-                throw new BootstrapException("Failed to initialize bootstrap Maven artifact resolver", e);
+                throw new BootstrapException("Failed to initialize Quarkus Maven artifact resolver", e);
             }
 
             final List<AppDependency> deploymentDeps;

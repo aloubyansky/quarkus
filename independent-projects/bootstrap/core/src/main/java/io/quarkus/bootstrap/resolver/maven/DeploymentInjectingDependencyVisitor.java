@@ -15,7 +15,6 @@ import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.repository.RemoteRepository;
-import org.eclipse.aether.util.artifact.JavaScopes;
 import org.jboss.logging.Logger;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.BootstrapDependencyProcessingException;
@@ -121,8 +120,8 @@ public class DeploymentInjectingDependencyVisitor {
             }
             node.setData(QUARKUS_DEPLOYMENT_ARTIFACT, deploymentArtifact);
             runtimeNodes.add(node);
-            managedDeps.add(new Dependency(node.getArtifact(), JavaScopes.COMPILE));
-            managedDeps.add(new Dependency(deploymentArtifact, JavaScopes.COMPILE));
+            managedDeps.add(new Dependency(node.getArtifact(), "compile"));
+            managedDeps.add(new Dependency(deploymentArtifact, "compile"));
         }
     }
 

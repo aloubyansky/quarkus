@@ -1,0 +1,4 @@
+org.drools.project.model.SessionRuleUnit_simpleKS
+org.drools.project.model.SessionRuleUnit_canDrinkKS
+io.quarkus.it.kogito.jbpm.OrderItemsProcess
+io.quarkus.it.kogito.jbpm.OrdersProcess

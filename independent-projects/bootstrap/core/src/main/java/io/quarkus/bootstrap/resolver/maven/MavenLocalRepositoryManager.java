@@ -3,6 +3,7 @@ package io.quarkus.bootstrap.resolver.maven;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
@@ -16,7 +17,6 @@ import org.eclipse.aether.repository.LocalMetadataResult;
 import org.eclipse.aether.repository.LocalRepository;
 import org.eclipse.aether.repository.LocalRepositoryManager;
 import org.eclipse.aether.repository.RemoteRepository;
-import io.quarkus.bootstrap.util.IoUtils;
 
 /**
  *
@@ -68,7 +68,7 @@ public class MavenLocalRepositoryManager implements LocalRepositoryManager {
     public void relink(String groupId, String artifactId, String classifier, String type, String version, Path p) {
         final Path creatorRepoPath = getLocalPath(appCreatorRepo, groupId, artifactId, classifier, type, version);
         try {
-            IoUtils.copy(p, creatorRepoPath);
+            Files.copy(p, creatorRepoPath, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to copy " + p + " to a staging repo", e);
         }
@@ -89,7 +89,7 @@ public class MavenLocalRepositoryManager implements LocalRepositoryManager {
             final Path creatorRepoPath = getLocalPath(appCreatorRepo, artifact.getGroupId(), artifact.getArtifactId(),
                     artifact.getClassifier(), artifact.getExtension(), artifact.getVersion());
             try {
-                IoUtils.copy(userRepoPath, creatorRepoPath);
+                Files.copy(userRepoPath, creatorRepoPath, StandardCopyOption.REPLACE_EXISTING);
             } catch (IOException e) {
                 throw new IllegalStateException("Failed to copy " + userRepoPath + " to a staging repo", e);
             }
@@ -122,7 +122,7 @@ public class MavenLocalRepositoryManager implements LocalRepositoryManager {
             final Path creatorRepoPath = getMetadataPath(appCreatorRepo, metadata.getGroupId(), metadata.getArtifactId(),
                     metadata.getType(), metadata.getVersion());
             try {
-                IoUtils.copy(userRepoPath, creatorRepoPath);
+                Files.copy(userRepoPath, creatorRepoPath, StandardCopyOption.REPLACE_EXISTING);
             } catch (IOException e) {
                 throw new IllegalStateException("Failed to copy " + userRepoPath + " to a staging repo", e);
             }

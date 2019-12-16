@@ -17,6 +17,7 @@ import java.util.function.Consumer;
 
 import javax.enterprise.event.Event;
 import javax.enterprise.event.Observes;
+import javax.inject.Inject;
 import javax.inject.Qualifier;
 import javax.inject.Singleton;
 
@@ -27,8 +28,6 @@ import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
-
-import com.google.inject.Inject;
 
 import io.quarkus.arc.deployment.ObserverTransformerBuildItem;
 import io.quarkus.arc.processor.ObserverTransformer;

@@ -332,7 +332,7 @@ public class QuarkusTestExtension
                     .setEnableClasspathCache(PropertyUtils.getBoolean(BootstrapClassLoaderFactory.PROP_CP_CACHE, true))
                     .newDeploymentClassLoader();
         } catch (BootstrapException e) {
-            throw new IllegalStateException("Failed to create the boostrap class loader", e);
+            throw new IllegalStateException("Failed to create Quarkus boostrap class loader", e);
         }
     }
 
