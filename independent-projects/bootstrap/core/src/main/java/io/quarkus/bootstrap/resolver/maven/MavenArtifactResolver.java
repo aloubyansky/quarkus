@@ -148,7 +148,7 @@ public class MavenArtifactResolver {
         }
 
         public MavenArtifactResolver build() throws AppModelResolverException {
-            final MavenArtifactResolver build = MavenArtifactResolver.build(this);
+            final MavenArtifactResolver build = IsolatedServiceLoader.loadFunctionService(BuildMavenArtifactResolver.class).apply(this);
             //URL resource = build.getSystem().getClass().getClassLoader().getResource(build.getSystem().getClass().getName().replace('.', '/') + ".class");
             //System.out.println("URL " + resource);
             return build;
@@ -429,9 +429,5 @@ public class MavenArtifactResolver {
 
     private static AppArtifactKey getId(Artifact a) {
         return new AppArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
-    }
-
-    private static MavenArtifactResolver build(Builder builder) throws AppModelResolverException {
-        return IsolatedServiceLoader.loadFunctionService(BuildMavenArtifactResolver.class).apply(builder);
     }
 }

@@ -48,7 +48,12 @@ public class MavenResolverImplClassLoader extends ClassLoader implements Closeab
         if (url != null) {
             return url;
         }
-        return super.getResource(name);
+        url = super.getResource(name);
+        if(url != null) {
+            return url;
+        }
+        final ClassLoader mvnHomeLib = getMvnHomeLib();
+        return mvnHomeLib == null ? null : mvnHomeLib.getResource(name);
     }
 
     @Override
@@ -74,7 +79,13 @@ public class MavenResolverImplClassLoader extends ClassLoader implements Closeab
         if (is != null) {
             return is;
         }
-        return super.getResourceAsStream(name);
+        is = super.getResourceAsStream(name);
+        if(is != null) {
+            return is;
+        }
+        //System.out.println("getResourceAsStream " + name);
+        final ClassLoader mvnHomeLib = getMvnHomeLib();
+        return mvnHomeLib == null ? null : mvnHomeLib.getResourceAsStream(name);
     }
 
     @Override

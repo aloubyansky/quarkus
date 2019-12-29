@@ -8,6 +8,7 @@ import org.apache.maven.model.building.ModelBuildingException;
 import org.apache.maven.model.building.ModelBuildingRequest;
 import org.apache.maven.model.building.ModelBuildingResult;
 import org.apache.maven.model.building.Result;
+import org.apache.maven.model.merge.MavenModelMerger;
 import org.apache.maven.model.resolution.WorkspaceModelResolver;
 
 /**
@@ -29,7 +30,14 @@ public class MavenModelBuilder implements ModelBuilder {
         if(modelResolver != null) {
             request.setWorkspaceModelResolver(modelResolver);
         }
+        logClass(MavenModelMerger.class);
+        logClass(Model.class);
         return builder.build(request);
+    }
+
+    private void logClass(Class<?> cls) {
+        System.out.println(cls + " loaded by " + cls.getClassLoader() + " from "
+        + cls.getClassLoader().getResource(cls.getName().replace('.', '/') + ".class"));
     }
 
     @Override

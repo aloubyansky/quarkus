@@ -26,9 +26,9 @@
         <eclipse-minimal-json.version>0.9.5</eclipse-minimal-json.version>
         <jboss-logging.version>3.3.2.Final</jboss-logging.version>
         <junit.version>5.5.2</junit.version>
-        <maven-core.version>3.5.4</maven-core.version>
+        <maven-core.version>3.6.3</maven-core.version>
         <maven-plugin-annotations.version>3.5.2</maven-plugin-annotations.version>
-        <maven-resolver.version>1.1.1</maven-resolver.version>
+        <maven-resolver.version>1.4.1</maven-resolver.version>
         <maven-wagon.version>3.0.0</maven-wagon.version>
         <plexus-cypher.version>1.7</plexus-cypher.version>
         <nexus-staging-maven-plugin.version>1.6.8</nexus-staging-maven-plugin.version>
@@ -107,6 +107,17 @@
             </dependency>
             <dependency>
                 <groupId>org.apache.maven</groupId>
+                <artifactId>maven-model-builder</artifactId>
+                <version>${maven-core.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>javax.inject</groupId>
+                        <artifactId>javax.inject</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.maven</groupId>
                 <artifactId>maven-core</artifactId>
                 <version>${maven-core.version}</version>
                 <exclusions>
@@ -140,6 +151,10 @@
                     <exclusion>
                         <groupId>javax.enterprise</groupId>
                         <artifactId>cdi-api</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>com.google.inject</groupId>
+                        <artifactId>guice</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -240,7 +255,6 @@
                 <scope>import</scope>
                 <type>pom</type>
             </dependency>
-           
         </dependencies>
     </dependencyManagement>
     <build>

@@ -3,6 +3,7 @@ package io.quarkus.bootstrap.resolver.maven;
 import java.nio.file.Paths;
 import java.util.List;
 
+import org.apache.maven.model.resolution.WorkspaceModelResolver;
 import org.apache.maven.repository.internal.MavenRepositorySystemUtils;
 import org.eclipse.aether.DefaultRepositoryCache;
 import org.eclipse.aether.DefaultRepositorySystemSession;
@@ -11,11 +12,21 @@ import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.internal.impl.DefaultRemoteRepositoryManager;
 import org.eclipse.aether.repository.LocalRepository;
 import org.eclipse.aether.repository.RemoteRepository;
+import org.eclipse.aether.repository.WorkspaceReader;
 
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver.Builder;
+import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
 
 public class BuildMavenArtifactResolverImpl implements BuildMavenArtifactResolver {
+
+    private static WorkspaceModelResolver toWorkspaceModelResolver(LocalWorkspace ws) {
+        return ws == null ? null : new BootstrapWorkspaceModelResolver(ws);
+    }
+
+    private static WorkspaceReader toWorkspaceReader(LocalWorkspace ws) {
+        return ws == null ? null : new BootstrapWorkspaceReader(ws);
+    }
 
     @Override
     public MavenArtifactResolver apply(Builder builder) {
@@ -27,7 +38,7 @@ public class BuildMavenArtifactResolverImpl implements BuildMavenArtifactResolve
                             ? (builder.getRepoSession() == null ? MavenRepoInitializer.getSettings().isOffline()
                                     : builder.getRepoSession().isOffline())
                             : builder.getOffline()),
-                    builder.getWorkspace()) : builder.getRepoSystem();
+                    toWorkspaceModelResolver(builder.getWorkspace())) : builder.getRepoSystem();
         } catch (AppModelResolverException e) {
             throw new IllegalStateException("Failed to initialize Maven Repository system", e);
         }
@@ -65,7 +76,7 @@ public class BuildMavenArtifactResolverImpl implements BuildMavenArtifactResolve
         }
 
         if (builder.getWorkspace() != null) {
-            repoSession.setWorkspaceReader(builder.getWorkspace());
+            repoSession.setWorkspaceReader(toWorkspaceReader(builder.getWorkspace()));
         }
 
         final List<RemoteRepository> remoteRepos;
