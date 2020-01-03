@@ -73,7 +73,7 @@ public class AllConfigGenerator {
             extensionsByGav.put(extension.groupId + ":" + extension.artifactId, extension);
         }
 
-        // examine all the extension jars 
+        // examine all the extension jars
         List<ArtifactRequest> deploymentRequests = new ArrayList<>(extensionJson.extensions.size());
         for (ArtifactResult result : resolver.resolve(requests)) {
             Artifact artifact = result.getArtifact();

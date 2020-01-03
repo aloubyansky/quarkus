@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -28,7 +27,7 @@ public class MavenResolverImplClassLoader extends ClassLoader implements Closeab
     // In case this is called from a Maven plugins this classloader should be able to load the impl classes as well
     private final ClassLoader mvnResolverApi;
     // Class loader that is loading classes from the Maven home lib directory
-    private URLClassLoader mvnHomeLib;
+    private URLClassLoaderWithPackageAccess mvnHomeLib;
     // This class loader is loading MavenRepoInitializer classes and only those classes
     private final ClassLoader isolatedService;
 
@@ -83,7 +82,6 @@ public class MavenResolverImplClassLoader extends ClassLoader implements Closeab
         if(is != null) {
             return is;
         }
-        //System.out.println("getResourceAsStream " + name);
         final ClassLoader mvnHomeLib = getMvnHomeLib();
         return mvnHomeLib == null ? null : mvnHomeLib.getResourceAsStream(name);
     }
@@ -116,7 +114,9 @@ public class MavenResolverImplClassLoader extends ClassLoader implements Closeab
         if (mvnLib == null) {
             throw new ClassNotFoundException(name);
         }
-        return findClass(mvnLib, name);
+        final Class<?> cls = findClass(mvnLib, name);
+        mvnLib.loadClass(name); // load the class using the mvnLib classloader to be able to retrieve its package later
+        return cls;
     }
 
     @Override
@@ -126,6 +126,16 @@ public class MavenResolverImplClassLoader extends ClassLoader implements Closeab
             return existing;
         }
         return findClass(isolatedService, name);
+    }
+
+    @Override
+    protected Package getPackage(String name) {
+        final Package pkg = super.getPackage(name);
+        if(pkg != null) {
+            return pkg;
+        }
+        final URLClassLoaderWithPackageAccess mvnLib = getMvnHomeLib();
+        return mvnLib == null ? null : mvnLib.doGetPackage(name);
     }
 
     private Class<?> findClass(ClassLoader source, String name) throws ClassNotFoundException, ClassFormatError {
@@ -147,7 +157,7 @@ public class MavenResolverImplClassLoader extends ClassLoader implements Closeab
         }
     }
 
-    private ClassLoader getMvnHomeLib() {
+    private URLClassLoaderWithPackageAccess getMvnHomeLib() {
         if (mvnHomeLib != null) {
             return mvnHomeLib;
         }
@@ -171,8 +181,7 @@ public class MavenResolverImplClassLoader extends ClassLoader implements Closeab
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read directory " + mvnLib, e);
         }
-        mvnHomeLib = new URLClassLoader(urls.toArray(new URL[urls.size()]), null);
-        return mvnHomeLib;
+        return mvnHomeLib = new URLClassLoaderWithPackageAccess(urls.toArray(new URL[urls.size()]), null);
     }
 
     private static byte[] readAll(InputStream is) throws IOException {
