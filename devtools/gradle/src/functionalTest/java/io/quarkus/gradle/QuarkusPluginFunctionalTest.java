@@ -56,7 +56,7 @@ public class QuarkusPluginFunctionalTest {
         BuildResult build = GradleRunner.create()
                 .forwardOutput()
                 .withPluginClasspath()
-                .withArguments(arguments("build", "--stacktrace"))
+                .withArguments(arguments("build", "--stacktrace", "-i"))
                 .withProjectDir(projectRoot)
                 .build();
 
