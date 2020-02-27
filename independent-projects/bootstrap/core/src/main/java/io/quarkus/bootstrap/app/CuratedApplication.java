@@ -219,13 +219,13 @@ public class CuratedApplication implements Serializable, Closeable {
                 //there is no need to restart so there is no need for an additional CL
 
                 for (AdditionalDependency i : quarkusBootstrap.getAdditionalApplicationArchives()) {
-                    //src/test is the highest priority 
+                    //src/test is the highest priority
                     if (i.isTestClassRoot()) {
                         builder.addElement(ClassPathElement.fromPath(i.getArchivePath()));
                     }
                 }
 
-                builder.addElement(ClassPathElement.fromPath(getQuarkusBootstrap().getApplicationRoot()));
+                builder.addElement(ClassPathElement.fromPath(appModel.getAppArtifact().getPath()));
             }
             //additional user class path elements first
             Set<Path> hotReloadPaths = new HashSet<>();

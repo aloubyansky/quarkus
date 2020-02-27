@@ -52,7 +52,7 @@ public class AugmentActionImpl implements AugmentAction {
     /**
      * A map that is shared between all re-runs of the same augment instance. This is
      * only really relevant in dev mode, however it is present in all modes for consistency.
-     * 
+     *
      */
     private final Map<Class<?>, Object> reloadContext = new ConcurrentHashMap<>();
 
@@ -167,7 +167,7 @@ public class AugmentActionImpl implements AugmentAction {
             QuarkusClassLoader classLoader = curatedApplication.getAugmentClassLoader();
 
             QuarkusAugmentor.Builder builder = QuarkusAugmentor.builder()
-                    .setRoot(quarkusBootstrap.getApplicationRoot())
+                    .setRoot(curatedApplication.getAppModel().getAppArtifact().getPath())
                     .setClassLoader(classLoader)
                     .addFinal(ApplicationClassNameBuildItem.class)
                     .setTargetDir(quarkusBootstrap.getTargetDirectory())
