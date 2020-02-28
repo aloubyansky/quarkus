@@ -27,9 +27,11 @@ public class CurationResult {
     private final AppArtifact appArtifact;
     private final AppArtifact stateArtifact;
     private boolean persisted;
+    private boolean checkedForUpdates;
 
     public CurationResult(AppModel appModel) {
         this(appModel, Collections.emptyList(), false, null, null);
+        this.checkedForUpdates = false;
     }
 
     public CurationResult(AppModel appModel, List<AppDependency> updatedDependencies, boolean fromState,
@@ -39,6 +41,11 @@ public class CurationResult {
         this.fromState = fromState;
         this.appArtifact = appArtifact;
         this.stateArtifact = stateArtifact;
+        this.checkedForUpdates = true;
+    }
+
+    public boolean isCheckedForUpdates() {
+        return checkedForUpdates;
     }
 
     public AppModel getAppModel() {

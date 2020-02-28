@@ -42,7 +42,7 @@ public class UpdateToNextMicroAndPersistStateTest extends CreatorOutcomeTestBase
     @Override
     protected void testCreator(QuarkusBootstrap creator) throws Exception {
 
-        final CuratedApplication outcome = creator.bootstrap();
+        final CuratedApplication outcome = creator.bootstrap().checkForUpdates();
 
         final String expectedVersion;
 

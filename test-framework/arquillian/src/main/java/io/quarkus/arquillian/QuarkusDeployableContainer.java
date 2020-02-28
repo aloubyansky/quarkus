@@ -50,7 +50,6 @@ import io.quarkus.builder.BuildChainBuilder;
 import io.quarkus.builder.BuildContext;
 import io.quarkus.builder.BuildStep;
 import io.quarkus.runner.bootstrap.AugmentActionImpl;
-import io.quarkus.test.common.PathTestHelper;
 import io.quarkus.test.common.TestInstantiator;
 import io.quarkus.test.common.http.TestHTTPResourceManager;
 
@@ -175,7 +174,6 @@ public class QuarkusDeployableContainer implements DeployableContainer<QuarkusCo
                             .build();
                 }
             });
-            Path testLocation = PathTestHelper.getTestClassesLocation(testJavaClass);
             QuarkusBootstrap.Builder bootstrapBuilder = QuarkusBootstrap.builder(appLocation)
                     .setIsolateDeployment(false)
                     .setMode(QuarkusBootstrap.Mode.TEST);

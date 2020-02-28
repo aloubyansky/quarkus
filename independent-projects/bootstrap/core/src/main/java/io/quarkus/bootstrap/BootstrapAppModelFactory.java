@@ -95,7 +95,7 @@ public class BootstrapAppModelFactory {
         return this;
     }
 
-    public BootstrapAppModelFactory setAppClasses(Path appClasses) {
+    public BootstrapAppModelFactory setAppArtifactPath(Path appClasses) {
         this.appClasses = appClasses;
         return this;
     }
@@ -190,7 +190,7 @@ public class BootstrapAppModelFactory {
             if (mvn == null) {
                 final MavenArtifactResolver.Builder builder = MavenArtifactResolver.builder();
                 final LocalProject localProject = isWorkspaceDiscoveryEnabled()
-                        ? loadAppClassesWorkspace()
+                        ? loadAppClassesWorkspace(appClasses)
                         : null;
                 if (localProject != null) {
                     builder.setWorkspace(localProject.getWorkspace());
@@ -209,6 +209,12 @@ public class BootstrapAppModelFactory {
     }
 
     public CurationResult resolveAppModel() throws BootstrapException {
+
+        if (appArtifact != null && appArtifact.isResolved() && this.appClasses != null
+                && !appArtifact.getPath().equals(appClasses)) {
+            throw new IllegalStateException(appArtifact.getPath() + " vs " + appClasses);
+        }
+
         if (test || devMode) {
             //gradle tests and dev encode the result on the class path
             final String serializedModel = System.getProperty(BootstrapConstants.SERIALIZED_APP_MODEL);
@@ -227,32 +233,39 @@ public class BootstrapAppModelFactory {
                 }
             }
         }
+
+        Path appClasses = this.appClasses;
         if (appClasses == null) {
-            throw new IllegalArgumentException("Application classes path has not been set");
+            if (appArtifact == null) {
+                throw new BootstrapException("Neither appArtifact nor the project root dir has been provided");
+            }
+            appClasses = appArtifact.getPath();
         }
 
-        if (!Files.isDirectory(appClasses)) {
+        if (appClasses != null && !Files.isDirectory(appClasses)) {
             return createAppModelForJar(appClasses);
         }
 
-        final LocalProject localProject = isWorkspaceDiscoveryEnabled() || enableClasspathCache
-                ? loadAppClassesWorkspace()
-                : LocalProject.load(appClasses, false);
+        LocalProject localProject = null;
         LocalWorkspace workspace = null;
-        AppArtifact appArtifact = this.appArtifact;
-        if (localProject == null) {
-            log.warn("Unable to locate maven project, falling back to classpath discovery");
-            if (appArtifact == null) {
-                throw new BootstrapException("Failed to determine the Maven artifact associated with the application");
-            }
-        } else {
+        if (appClasses != null && (isWorkspaceDiscoveryEnabled() || enableClasspathCache)) {
+            localProject = loadAppClassesWorkspace(appClasses);
             workspace = localProject.getWorkspace();
-            if (appArtifact == null) {
-                appArtifact = localProject.getAppArtifact();
-            } else if (!appArtifact.equals(localProject.getAppArtifact())) {
+            if (appArtifact != null && !appArtifact.equals(localProject.getAppArtifact())) {
                 log.warn("Provided application artifact attributes " + appArtifact +
                         " do not match the actual project loaded from the disk " + localProject.getAppArtifact());
             }
+        }
+
+        AppArtifact appArtifact = this.appArtifact;
+        if (appArtifact == null) {
+            if (localProject != null) {
+                appArtifact = localProject.getAppArtifact();
+            } else if (appClasses != null) {
+                appArtifact = LocalProject.load(appClasses).getAppArtifact();
+            }
+        } else if (appClasses != null) {
+            appArtifact.setPath(appClasses);
         }
 
         try {
@@ -302,9 +315,9 @@ public class BootstrapAppModelFactory {
         return localProjectsDiscovery == null ? test || devMode : localProjectsDiscovery;
     }
 
-    private LocalProject loadAppClassesWorkspace() throws BootstrapException {
+    private LocalProject loadAppClassesWorkspace(Path appClasses) throws BootstrapException {
         return appClassesWorkspace == null
-                ? appClassesWorkspace = LocalProject.loadWorkspace(appClasses, false)
+                ? appClassesWorkspace = LocalProject.loadWorkspace(appClasses)
                 : appClassesWorkspace;
     }
 

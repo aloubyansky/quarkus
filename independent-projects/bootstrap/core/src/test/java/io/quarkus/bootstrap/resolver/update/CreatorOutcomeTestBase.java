@@ -37,8 +37,9 @@ public abstract class CreatorOutcomeTestBase extends ResolverSetupCleanup {
         IoUtils.recursiveDelete(ws);
         final Path outputDir = IoUtils.mkdirs(ws.resolve("target"));
 
-        final QuarkusBootstrap.Builder bootstrap = QuarkusBootstrap.builder(resolver.resolve(appJar.toAppArtifact()))
+        final QuarkusBootstrap.Builder bootstrap = QuarkusBootstrap.builder(null)
                 .setTargetDirectory(outputDir)
+                .setAppArtifact(appJar.toAppArtifact())
                 .setAppModelResolver(resolver);
 
         if (createWorkspace) {

@@ -161,16 +161,15 @@ public class BootstrapAppModelResolver implements AppModelResolver {
             excludedScopes.add("provided");
         }
 
-        final Set<AppArtifactKey> appDeps = new HashSet<>();
-        final List<AppDependency> userDeps = new ArrayList<>();
-        DependencyNode resolvedDeps;
-        if (appArtifact != null) {
-            resolvedDeps = mvn.resolveManagedDependencies(toAetherArtifact(appArtifact),
-                    directMvnDeps, managedDeps, managedRepos, excludedScopes.toArray(new String[0])).getRoot();
-        } else {
+        if (appArtifact == null) {
             throw new IllegalArgumentException("Application artifact is null");
         }
+        final Artifact aetherArtifact = toAetherArtifact(appArtifact);
+        DependencyNode resolvedDeps = mvn.resolveManagedDependencies(aetherArtifact,
+                directMvnDeps, managedDeps, managedRepos, excludedScopes.toArray(new String[0])).getRoot();
 
+        final Set<AppArtifactKey> appDeps = new HashSet<>();
+        final List<AppDependency> userDeps = new ArrayList<>();
         final TreeDependencyVisitor visitor = new TreeDependencyVisitor(new DependencyVisitor() {
             @Override
             public boolean visitEnter(DependencyNode node) {
@@ -193,7 +192,7 @@ public class BootstrapAppModelResolver implements AppModelResolver {
         }
 
         final List<RemoteRepository> repos = mvn.aggregateRepositories(managedRepos,
-                mvn.newResolutionRepositories(mvn.resolveDescriptor(toAetherArtifact(appArtifact)).getRepositories()));
+                mvn.newResolutionRepositories(mvn.resolveDescriptor(aetherArtifact).getRepositories()));
 
         final DeploymentInjectingDependencyVisitor deploymentInjector = new DeploymentInjectingDependencyVisitor(mvn,
                 managedDeps, repos, appBuilder);
@@ -236,6 +235,12 @@ public class BootstrapAppModelResolver implements AppModelResolver {
                             dep.getDependency().getScope(), dep.getDependency().isOptional()));
                 }
             }
+        }
+
+        if (!appArtifact.isResolved()) {
+            appArtifact.setPath(mvn.resolve(aetherArtifact).getArtifact().getFile().toPath());
+        } else {
+            System.out.println("ALREADY RESOLVED " + appArtifact + " " + appArtifact.getPath());
         }
         List<AppDependency> fullDeploymentDeps = new ArrayList<>(userDeps);
         fullDeploymentDeps.addAll(deploymentDeps);

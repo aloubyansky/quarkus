@@ -123,7 +123,7 @@ public class QuarkusBootstrap implements Serializable {
                 .setAppArtifact(appArtifact)
                 .setManagingProject(managingProject)
                 .setForcedDependencies(forcedDependencies)
-                .setAppClasses(getProjectRoot() != null ? getProjectRoot()
+                .setAppArtifactPath(getProjectRoot() != null ? getProjectRoot()
                         : getApplicationRoot());
         if (mode == Mode.TEST || test) {
             appModelFactory.setTest(true);
@@ -133,10 +133,20 @@ public class QuarkusBootstrap implements Serializable {
             appModelFactory.setDevMode(true);
             appModelFactory.setEnableClasspathCache(true);
         }
-        CurationResult model = appModelFactory
-                .resolveAppModel();
+        CurationResult model = appModelFactory.resolveAppModel();
         return new CuratedApplication(this, model);
+    }
 
+    public VersionUpdate getVersionUpdate() {
+        return versionUpdate;
+    }
+
+    public VersionUpdateNumber getVersionUpdateNumber() {
+        return versionUpdateNumber;
+    }
+
+    public DependenciesOrigin getDependenciesOrigin() {
+        return dependenciesOrigin;
     }
 
     public AppModelResolver getAppModelResolver() {

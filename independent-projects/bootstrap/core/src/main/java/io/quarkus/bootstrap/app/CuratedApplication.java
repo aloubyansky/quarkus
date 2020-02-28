@@ -1,6 +1,8 @@
 package io.quarkus.bootstrap.app;
 
+import io.quarkus.bootstrap.BootstrapAppModelFactory;
 import io.quarkus.bootstrap.BootstrapConstants;
+import io.quarkus.bootstrap.BootstrapException;
 import io.quarkus.bootstrap.classloading.ClassPathElement;
 import io.quarkus.bootstrap.classloading.DirectoryClassPathElement;
 import io.quarkus.bootstrap.classloading.JarClassPathElement;
@@ -70,6 +72,23 @@ public class CuratedApplication implements Serializable, Closeable {
 
     public QuarkusBootstrap getQuarkusBootstrap() {
         return quarkusBootstrap;
+    }
+
+    public boolean isCheckedForUpdates() {
+        return curationResult.isCheckedForUpdates();
+    }
+
+    public CuratedApplication checkForUpdates() throws BootstrapException {
+        if (Files.isDirectory(appModel.getAppArtifact().getPath())) {
+            throw new IllegalStateException("Checking for updates of a workspace is not currently supported");
+        }
+        final CurationResult curatedResult = BootstrapAppModelFactory.newInstance()
+                .setVersionUpdate(quarkusBootstrap.getVersionUpdate())
+                .setVersionUpdateNumber(quarkusBootstrap.getVersionUpdateNumber())
+                .setDependenciesOrigin(quarkusBootstrap.getDependenciesOrigin())
+                .setBootstrapAppModelResolver(quarkusBootstrap.getAppModelResolver()).setAppArtifact(appModel.getAppArtifact())
+                .resolveAppModel();
+        return new CuratedApplication(quarkusBootstrap, curatedResult);
     }
 
     public boolean hasUpdatedDeps() {
@@ -270,7 +289,12 @@ public class CuratedApplication implements Serializable, Closeable {
                 builder.addElement(ClassPathElement.fromPath(i.getArchivePath()));
             }
         }
-        builder.addElement(ClassPathElement.fromPath(quarkusBootstrap.getApplicationRoot()));
+        if (quarkusBootstrap.getApplicationRoot() != null
+                && !quarkusBootstrap.getApplicationRoot().equals(getAppModel().getAppArtifact().getPath())) {
+            throw new IllegalStateException(
+                    quarkusBootstrap.getApplicationRoot() + " vs " + getAppModel().getAppArtifact().getPath());
+        }
+        builder.addElement(ClassPathElement.fromPath(getAppModel().getAppArtifact().getPath()));
 
         //additional user class path elements first
         for (AdditionalDependency i : quarkusBootstrap.getAdditionalApplicationArchives()) {
@@ -288,7 +312,12 @@ public class CuratedApplication implements Serializable, Closeable {
                 loader, false)
                 .setAggregateParentResources(true);
         builder.setTransformerClassLoader(deploymentClassLoader);
-        builder.addElement(ClassPathElement.fromPath(getQuarkusBootstrap().getApplicationRoot()));
+        if (getQuarkusBootstrap().getApplicationRoot() != null
+                && !getQuarkusBootstrap().getApplicationRoot().equals(getAppModel().getAppArtifact().getPath())) {
+            throw new IllegalStateException(
+                    getQuarkusBootstrap().getApplicationRoot() + " vs " + getAppModel().getAppArtifact().getPath());
+        }
+        builder.addElement(ClassPathElement.fromPath(getAppModel().getAppArtifact().getPath()));
         builder.addElement(new MemoryClassPathElement(resources));
 
         for (AdditionalDependency i : getQuarkusBootstrap().getAdditionalApplicationArchives()) {

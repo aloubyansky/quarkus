@@ -34,7 +34,7 @@ public class CheckForLatestMicroUpdatesTest extends CreatorOutcomeTestBase {
 
     @Override
     protected void testCreator(QuarkusBootstrap creator) throws Exception {
-        final CuratedApplication outcome = creator.bootstrap();
+        final CuratedApplication outcome = creator.bootstrap().checkForUpdates();
 
         assertTrue(outcome.hasUpdatedDeps());
 
