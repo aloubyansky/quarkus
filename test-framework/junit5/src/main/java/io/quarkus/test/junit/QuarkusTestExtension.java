@@ -95,15 +95,16 @@ public class QuarkusTestExtension
             Class<?> requiredTestClass = context.getRequiredTestClass();
             Path appClassLocation = getAppClassLocation(requiredTestClass);
 
-            final QuarkusBootstrap.Builder runnerBuilder = QuarkusBootstrap.builder(appClassLocation)
-                    .setIsolateDeployment(true)
-                    .setMode(QuarkusBootstrap.Mode.TEST);
-
             originalCl = Thread.currentThread().getContextClassLoader();
             testClassLocation = getTestClassesLocation(requiredTestClass);
 
+            final QuarkusBootstrap.Builder runnerBuilder = QuarkusBootstrap.builder()
+                    .setApplicationRoot(appClassLocation)
+                    .setIsolateDeployment(true)
+                    .setMode(QuarkusBootstrap.Mode.TEST);
+
             if (!appClassLocation.equals(testClassLocation)) {
-                runnerBuilder.addAdditionalApplicationArchive(new AdditionalDependency(testClassLocation, false, true, true));
+                runnerBuilder.addAdditionalApplicationArchive(AdditionalDependency.test(testClassLocation));
             }
             CuratedApplication curatedApplication = runnerBuilder
                     .setTest(true)

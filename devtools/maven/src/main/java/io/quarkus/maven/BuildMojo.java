@@ -78,6 +78,7 @@ public class BuildMojo extends AbstractMojo {
      * The directory for compiled classes.
      */
     @Parameter(readonly = true, required = true, defaultValue = "${project.build.outputDirectory}")
+    @Deprecated
     private File outputDirectory;
 
     @Parameter(defaultValue = "${project}", readonly = true, required = true)
@@ -165,7 +166,7 @@ public class BuildMojo extends AbstractMojo {
                     projectArtifact.getClassifier(), projectArtifact.getArtifactHandler().getExtension(),
                     projectArtifact.getVersion());
 
-            CuratedApplication curatedApplication = QuarkusBootstrap.builder(outputDirectory.toPath())
+            CuratedApplication curatedApplication = QuarkusBootstrap.builder()
                     .setAppArtifact(appArtifact)
                     .setProjectRoot(project.getBasedir().toPath())
                     .setMavenArtifactResolver(resolver)

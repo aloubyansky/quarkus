@@ -176,7 +176,6 @@ public class QuarkusPlugin implements Plugin<Project> {
             if (quarkusBuild != null) {
                 quarkusBuild.dependsOn(jarTask);
             }
-            extension.addProjectDepJarTask(dep, jarTask);
         } catch (UnknownTaskException e) {
             project.getLogger().debug("Project {} does not include {} task", dep, JavaPlugin.JAR_TASK_NAME, e);
         }

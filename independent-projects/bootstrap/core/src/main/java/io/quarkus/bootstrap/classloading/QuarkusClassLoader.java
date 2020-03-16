@@ -54,6 +54,8 @@ public class QuarkusClassLoader extends ClassLoader implements Closeable {
     private final List<ClassPathElement> parentFirstElements;
     private final List<ClassPathElement> lesserPriorityElements;
 
+    private List<Runnable> runPostClose = new ArrayList<>(0);
+
     /**
      * The element that holds resettable in-memory classses.
      *
@@ -275,7 +277,7 @@ public class QuarkusClassLoader extends ClassLoader implements Closeable {
     /**
      * This method is needed to make packages work correctly on JDK9+, as it will be called
      * to load the package-info class.
-     * 
+     *
      * @param moduleName
      * @param name
      * @return
@@ -409,6 +411,10 @@ public class QuarkusClassLoader extends ClassLoader implements Closeable {
         return super.defineClass(name, b, off, len);
     }
 
+    public void runPostClose(Runnable r) {
+        runPostClose.add(r);
+    }
+
     @Override
     public void close() {
         for (ClassPathElement element : elements) {
@@ -421,6 +427,7 @@ public class QuarkusClassLoader extends ClassLoader implements Closeable {
                 log.error("Failed to close " + element, e);
             }
         }
+        runPostClose.forEach(Runnable::run);
     }
 
     @Override
@@ -511,7 +518,7 @@ public class QuarkusClassLoader extends ClassLoader implements Closeable {
          *
          * Banned elements have the highest priority, a banned element will never be loaded,
          * and resources will never appear to be present.
-         * 
+         *
          * @param element The element to add
          * @return This builder
          */
@@ -535,7 +542,7 @@ public class QuarkusClassLoader extends ClassLoader implements Closeable {
 
         /**
          * Sets any bytecode transformers that should be applied to this Class Loader
-         * 
+         *
          * @param bytecodeTransformers
          */
         public void setBytecodeTransformers(
@@ -566,7 +573,7 @@ public class QuarkusClassLoader extends ClassLoader implements Closeable {
 
         /**
          * Builds the class loader
-         * 
+         *
          * @return The class loader
          */
         public QuarkusClassLoader build() {
