@@ -77,15 +77,10 @@ public class ApplicationArchiveBuildStep {
         }
     }
 
-<<<<<<< HEAD
     @BuildStep
-    ApplicationArchivesBuildItem build(ArchiveRootBuildItem root, ApplicationIndexBuildItem appindex,
-=======
-    @BuildStep(loadsApplicationClasses = true)
     ApplicationArchivesBuildItem build(
             QuarkusBuildCloseablesBuildItem buildCloseables,
             ArchiveRootBuildItem root, ApplicationIndexBuildItem appindex,
->>>>>>> Refactoring of AppArtifact to allow more than one path as its content. This is necessary, for example, to represent not yet packaged Gradle projects.
             List<AdditionalApplicationArchiveMarkerBuildItem> appMarkers,
             List<AdditionalApplicationArchiveBuildItem> additionalApplicationArchiveBuildItem,
             List<IndexDependencyBuildItem> indexDependencyBuildItems,

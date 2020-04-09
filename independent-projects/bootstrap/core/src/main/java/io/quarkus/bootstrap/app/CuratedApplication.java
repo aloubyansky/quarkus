@@ -153,6 +153,18 @@ public class CuratedApplication implements Serializable, Closeable {
         });
     }
 
+    private void addCpElement(QuarkusClassLoader.Builder builder, AppDependency dep, ClassPathElement element) {
+        final AppArtifactKey key = dep.getArtifact().getKey();
+        if (appModel.getParentFirstArtifacts().contains(key)) {
+            //we always load this from the parent if it is available, as this acts as a bridge between the running
+            //app and the dev mode code
+            builder.addParentFirstElement(element);
+        } else if (appModel.getLesserPriorityArtifacts().contains(key)) {
+            builder.addLesserPriorityElement(element);
+        }
+        builder.addElement(element);
+    }
+
     public synchronized QuarkusClassLoader getAugmentClassLoader() {
         if (augmentClassLoader == null) {
             //first run, we need to build all the class loaders
@@ -162,16 +174,7 @@ public class CuratedApplication implements Serializable, Closeable {
             //any of the runtime artifacts, or user classes
             //this will load any deployment artifacts from the parent CL if they are present
             for (AppDependency i : appModel.getFullDeploymentDeps()) {
-                processCpElement(i.getArtifact(), element -> {
-                    builder.addElement(element);
-                    if (appModel.getParentFirstArtifacts().contains(getKey(i))) {
-                        //we always load this from the parent if it is available, as this acts as a bridge between the running
-                        //app and the dev mode code
-                        builder.addParentFirstElement(element);
-                    } else if (appModel.getLesserPriorityArtifacts().contains(getKey(i))) { // TODO: is this needed?
-                        builder.addLesserPriorityElement(element);
-                    }
-                });
+                processCpElement(i.getArtifact(), element -> addCpElement(builder, i, element));
             }
 
             appModel.getAppArtifact().getPaths().forEach(p -> {
@@ -187,10 +190,6 @@ public class CuratedApplication implements Serializable, Closeable {
 
         }
         return augmentClassLoader;
-    }
-
-    private AppArtifactKey getKey(AppDependency i) {
-        return i.getArtifact().getKey();
     }
 
     /**
@@ -238,14 +237,7 @@ public class CuratedApplication implements Serializable, Closeable {
                 if (isHotReloadable(dependency.getArtifact(), hotReloadPaths)) {
                     continue;
                 }
-                processCpElement(dependency.getArtifact(), element -> {
-                    if (appModel.getParentFirstArtifacts().contains(getKey(dependency))) {
-                        //we always load this from the parent if it is available, as this acts as a bridge between the running
-                        //app and the dev mode code
-                        builder.addParentFirstElement(element);
-                    }
-                    builder.addElement(element);
-                });
+                processCpElement(dependency.getArtifact(), element -> addCpElement(builder, dependency, element));
             }
             baseRuntimeClassLoader = builder.build();
         }

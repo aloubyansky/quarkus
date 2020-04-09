@@ -45,7 +45,6 @@ import java.util.zip.ZipOutputStream;
 import org.jboss.logging.Logger;
 
 import io.quarkus.bootstrap.BootstrapDependencyProcessingException;
-import io.quarkus.bootstrap.classloading.QuarkusClassLoader;
 import io.quarkus.bootstrap.model.AppArtifact;
 import io.quarkus.bootstrap.model.AppDependency;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
@@ -242,6 +241,7 @@ public class JarResultBuildStep {
             originalJar = outputTargetBuildItem.getOutputDirectory()
                     .resolve(outputTargetBuildItem.getBaseName() + ".jar.original");
             // this hack is necessary to wait for the original JAR to get closed
+            /* @formatter:off
             ((QuarkusClassLoader) Thread.currentThread().getContextClassLoader()).runPostClose(new Runnable() {
                 @Override
                 public void run() {
@@ -255,6 +255,7 @@ public class JarResultBuildStep {
                     }
                 }
             });
+            @formatter:on */
         } else {
             originalJar = null;
         }
