@@ -187,7 +187,6 @@ public class CuratedApplication implements Serializable, Closeable {
                 builder.addElement(ClassPathElement.fromPath(i));
             }
             augmentClassLoader = builder.build();
-
         }
         return augmentClassLoader;
     }

@@ -54,8 +54,6 @@ public class QuarkusClassLoader extends ClassLoader implements Closeable {
     private final List<ClassPathElement> parentFirstElements;
     private final List<ClassPathElement> lesserPriorityElements;
 
-    private List<Runnable> runPostClose = new ArrayList<>(0);
-
     /**
      * The element that holds resettable in-memory classses.
      *
@@ -411,10 +409,6 @@ public class QuarkusClassLoader extends ClassLoader implements Closeable {
         return super.defineClass(name, b, off, len);
     }
 
-    public void runPostClose(Runnable r) {
-        runPostClose.add(r);
-    }
-
     @Override
     public void close() {
         for (ClassPathElement element : elements) {
@@ -427,7 +421,6 @@ public class QuarkusClassLoader extends ClassLoader implements Closeable {
                 log.error("Failed to close " + element, e);
             }
         }
-        runPostClose.forEach(Runnable::run);
     }
 
     @Override
