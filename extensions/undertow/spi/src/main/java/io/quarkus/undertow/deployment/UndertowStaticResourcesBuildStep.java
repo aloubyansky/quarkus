@@ -12,7 +12,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import io.quarkus.bootstrap.util.ClassPathUtils;
 import io.quarkus.deployment.ApplicationArchive;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
@@ -21,6 +20,7 @@ import io.quarkus.deployment.builditem.GeneratedResourceBuildItem;
 import io.quarkus.deployment.builditem.LaunchModeBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.NativeImageResourceBuildItem;
 import io.quarkus.runtime.LaunchMode;
+import io.quarkus.runtime.util.ClassPathUtils;
 
 /**
  * NOTE: Shared with Resteasy standalone!
@@ -58,7 +58,7 @@ public class UndertowStaticResourcesBuildStep {
             }
         }
 
-        ClassPathUtils.consumeClasspathResources(META_INF_RESOURCES, resource -> {
+        ClassPathUtils.consumeAsPaths(META_INF_RESOURCES, resource -> {
             collectKnownPaths(resource, knownFiles, knownDirectories);
         });
 

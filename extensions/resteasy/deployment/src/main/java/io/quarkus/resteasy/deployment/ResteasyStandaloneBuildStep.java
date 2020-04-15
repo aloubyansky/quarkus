@@ -16,7 +16,6 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 import io.quarkus.arc.deployment.BeanContainerBuildItem;
-import io.quarkus.bootstrap.util.ClassPathUtils;
 import io.quarkus.builder.item.SimpleBuildItem;
 import io.quarkus.deployment.ApplicationArchive;
 import io.quarkus.deployment.Capabilities;
@@ -30,6 +29,7 @@ import io.quarkus.deployment.builditem.ShutdownContextBuildItem;
 import io.quarkus.resteasy.common.deployment.ResteasyInjectionReadyBuildItem;
 import io.quarkus.resteasy.runtime.standalone.ResteasyStandaloneRecorder;
 import io.quarkus.resteasy.server.common.deployment.ResteasyDeploymentBuildItem;
+import io.quarkus.runtime.util.ClassPathUtils;
 import io.quarkus.vertx.core.deployment.CoreVertxBuildItem;
 import io.quarkus.vertx.http.deployment.DefaultRouteBuildItem;
 import io.quarkus.vertx.http.deployment.RequireVirtualHttpBuildItem;
@@ -118,7 +118,7 @@ public class ResteasyStandaloneBuildStep {
             }
         }
 
-        ClassPathUtils.consumeClasspathResources(META_INF_RESOURCES, resource -> {
+        ClassPathUtils.consumeAsPaths(META_INF_RESOURCES, resource -> {
             collectKnownPaths(resource, knownPaths);
         });
 

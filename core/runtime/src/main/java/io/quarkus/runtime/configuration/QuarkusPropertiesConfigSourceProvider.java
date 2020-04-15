@@ -1,14 +1,10 @@
 package io.quarkus.runtime.configuration;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.net.URISyntaxException;
+import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
 import java.net.URL;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
@@ -18,6 +14,7 @@ import java.util.Properties;
 import org.eclipse.microprofile.config.spi.ConfigSource;
 import org.eclipse.microprofile.config.spi.ConfigSourceProvider;
 
+import io.quarkus.runtime.util.ClassPathUtils;
 import io.smallrye.config.common.MapBackedConfigSource;
 import io.smallrye.config.common.utils.ConfigSourceUtil;
 
@@ -73,42 +70,14 @@ public class QuarkusPropertiesConfigSourceProvider implements ConfigSourceProvid
     }
 
     private static Map<String, String> urlToMap(URL url) throws IOException {
-
-        final Properties props;
-        if ("jar".equals(url.getProtocol())) {
-            final String file = url.getFile();
-            final int em = file.lastIndexOf('!');
-            final Path jar;
-            try {
-                jar = toPath(new URL(file.substring(0, em)));
-            } catch (Exception e) {
-                throw new IllegalStateException("Failed to resolve the JAR path from " + file);
+        final Properties props = new Properties();
+        ClassPathUtils.consumeStream(url, is -> {
+            try (InputStreamReader reader = new InputStreamReader(is, StandardCharsets.UTF_8)) {
+                props.load(reader);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
             }
-            try (FileSystem jarFs = FileSystems.newFileSystem(jar, (ClassLoader) null)) {
-                props = loadProperties(jarFs.getPath(file.substring(em + 1)));
-            }
-        } else if ("file".equals(url.getProtocol())) {
-            try {
-                props = loadProperties(toPath(url));
-            } catch (URISyntaxException e) {
-                throw new IllegalStateException("Failed to resolve the path from " + url);
-            }
-        } else {
-            throw new IllegalStateException("Unsupported protocol " + url);
-        }
-
+        });
         return ConfigSourceUtil.propertiesToMap(props);
-    }
-
-    private static Properties loadProperties(Path p) throws IOException {
-        try (BufferedReader reader = Files.newBufferedReader(p)) {
-            final Properties props = new Properties();
-            props.load(reader);
-            return props;
-        }
-    }
-
-    private static Path toPath(final URL url) throws URISyntaxException {
-        return Paths.get(url.toURI());
     }
 }

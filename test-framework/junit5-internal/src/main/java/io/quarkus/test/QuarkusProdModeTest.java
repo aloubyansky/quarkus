@@ -7,7 +7,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.lang.reflect.Field;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -102,13 +101,14 @@ public class QuarkusProdModeTest
     private int exitCode;
 
     public QuarkusProdModeTest() {
-        URL appPropsUrl = Thread.currentThread().getContextClassLoader().getResource("application.properties");
-        if (appPropsUrl != null) {
+        InputStream appPropsIs = Thread.currentThread().getContextClassLoader().getResourceAsStream("application.properties");
+        if (appPropsIs != null) {
             customApplicationProperties = new Properties();
-            try (InputStream is = appPropsUrl.openStream()) {
+            try (InputStream is = appPropsIs) {
                 customApplicationProperties.load(is);
             } catch (IOException e) {
-                throw new UncheckedIOException("Failed to load application configuration from " + appPropsUrl, e);
+                throw new UncheckedIOException("Failed to load application configuration from "
+                        + Thread.currentThread().getContextClassLoader().getResource("application.properties"), e);
             }
         }
     }
