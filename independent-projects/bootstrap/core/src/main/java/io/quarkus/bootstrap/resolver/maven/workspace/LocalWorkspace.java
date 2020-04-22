@@ -3,6 +3,7 @@ package io.quarkus.bootstrap.resolver.maven.workspace;
 import io.quarkus.bootstrap.model.AppArtifactCoords;
 import io.quarkus.bootstrap.model.AppArtifactKey;
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -104,15 +105,47 @@ public class LocalWorkspace implements WorkspaceModelResolver, WorkspaceReader {
         }
         final String type = artifact.getExtension();
         if (type.equals(AppArtifactCoords.TYPE_JAR)) {
-            Path path = lp.getClassesDir();
-            if (Files.exists(path)) {
-                return path.toFile();
+            final Path classesDir = lp.getClassesDir();
+            if (Files.exists(classesDir)) {
+                return classesDir.toFile();
             }
-            // in some cases the project might not have the classes dir but only the test classes, for example
-            path = lp.getOutputDir().resolve(lp.getArtifactId() + "-" + lp.getVersion() + ".jar");
-            if (Files.exists(path)) {
-                return path.toFile();
+
+            /*
+             * If the classes dir does not exist, the project either
+             * has not been compiled yet or does not have any sources/resources at all.
+             */
+
+            if (Files.exists(lp.getSourcesSourcesDir()) || Files.exists(lp.getResourcesSourcesDir())) {
+                // The project has not been compiled yet.
+                // We delegate to the Maven resolver to handle this (it will try resolving the artifact
+                // from the configured repos).
+                return null;
             }
+
+            /*
+             * The project contains neither sources nor resources. In this case, if the project has previously been packaged
+             * there should be an empty JAR in the project's output dir.
+             */
+            final Path projectJar = lp.getOutputDir().resolve(lp.getArtifactId() + "-" + lp.getVersion() + ".jar");
+            if (Files.exists(projectJar)) {
+                return projectJar.toFile();
+            }
+
+            /*
+             * Since the test phase precedes the packaging one, the JAR might not yet exist (neither
+             * in the project's output dir nor in the local repo). If we return null here, some Quarkus project tests
+             * that have no sources may fail (if the JAR has also not been installed in the local repo yet
+             * from the previous runs).
+             * We can't return a non-existing path neither. Whatever the resolver returns must be usable, i.e. must exist.
+             * So, here is a "hackaround" - create an empty classes dir.
+             */
+            try {
+                Files.createDirectories(classesDir);
+            } catch (IOException e) {
+                // we give up on it
+                return null;
+            }
+            return classesDir.toFile();
         } else if (type.equals(AppArtifactCoords.TYPE_POM)) {
             final Path path = lp.getDir().resolve("pom.xml");
             if (Files.exists(path)) {
