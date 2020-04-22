@@ -107,6 +107,7 @@ public class LocalWorkspace implements WorkspaceModelResolver, WorkspaceReader {
         if (type.equals(AppArtifactCoords.TYPE_JAR)) {
             final Path classesDir = lp.getClassesDir();
             if (Files.exists(classesDir)) {
+                System.out.println("LocalWorkspace.findArtifact classes " + artifact);
                 return classesDir.toFile();
             }
 
@@ -116,6 +117,12 @@ public class LocalWorkspace implements WorkspaceModelResolver, WorkspaceReader {
              */
 
             if (Files.exists(lp.getSourcesSourcesDir()) || Files.exists(lp.getResourcesSourcesDir())) {
+                System.out.println("LocalWorkspace.findArtifact has sources " + artifact);
+                final Path projectJar = lp.getOutputDir().resolve(lp.getArtifactId() + "-" + lp.getVersion() + ".jar");
+                System.out.println("  " + Files.exists(projectJar) + " " + projectJar);
+                if (Files.exists(projectJar)) {
+                    return projectJar.toFile();
+                }
                 // The project has not been compiled yet.
                 // We delegate to the Maven resolver to handle this (it will try resolving the artifact
                 // from the configured repos).
@@ -128,6 +135,7 @@ public class LocalWorkspace implements WorkspaceModelResolver, WorkspaceReader {
              */
             final Path projectJar = lp.getOutputDir().resolve(lp.getArtifactId() + "-" + lp.getVersion() + ".jar");
             if (Files.exists(projectJar)) {
+                System.out.println("LocalWorkspace.findArtifact empty jar " + artifact);
                 return projectJar.toFile();
             }
 
@@ -145,6 +153,7 @@ public class LocalWorkspace implements WorkspaceModelResolver, WorkspaceReader {
                 // we give up on it
                 return null;
             }
+            System.out.println("LocalWorkspace.findArtifact created classes dir " + artifact);
             return classesDir.toFile();
         } else if (type.equals(AppArtifactCoords.TYPE_POM)) {
             final Path path = lp.getDir().resolve("pom.xml");
