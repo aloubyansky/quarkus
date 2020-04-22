@@ -111,6 +111,12 @@ public class LocalWorkspace implements WorkspaceModelResolver, WorkspaceReader {
                 return classesDir.toFile();
             }
 
+            final Path projectJar = lp.getOutputDir().resolve(lp.getArtifactId() + "-" + lp.getVersion() + ".jar");
+            if (Files.exists(projectJar)) {
+                System.out.println("LocalWorkspace.findArtifact project jar " + artifact);
+                return projectJar.toFile();
+            }
+
             /*
              * If the classes dir does not exist, the project either
              * has not been compiled yet or does not have any sources/resources at all.
@@ -118,11 +124,6 @@ public class LocalWorkspace implements WorkspaceModelResolver, WorkspaceReader {
 
             if (Files.exists(lp.getSourcesSourcesDir()) || Files.exists(lp.getResourcesSourcesDir())) {
                 System.out.println("LocalWorkspace.findArtifact has sources " + artifact);
-                final Path projectJar = lp.getOutputDir().resolve(lp.getArtifactId() + "-" + lp.getVersion() + ".jar");
-                System.out.println("  " + Files.exists(projectJar) + " " + projectJar);
-                if (Files.exists(projectJar)) {
-                    return projectJar.toFile();
-                }
                 // The project has not been compiled yet.
                 // We delegate to the Maven resolver to handle this (it will try resolving the artifact
                 // from the configured repos).
@@ -133,11 +134,6 @@ public class LocalWorkspace implements WorkspaceModelResolver, WorkspaceReader {
              * The project contains neither sources nor resources. In this case, if the project has previously been packaged
              * there should be an empty JAR in the project's output dir.
              */
-            final Path projectJar = lp.getOutputDir().resolve(lp.getArtifactId() + "-" + lp.getVersion() + ".jar");
-            if (Files.exists(projectJar)) {
-                System.out.println("LocalWorkspace.findArtifact empty jar " + artifact);
-                return projectJar.toFile();
-            }
 
             /*
              * Since the test phase precedes the packaging one, the JAR might not yet exist (neither
