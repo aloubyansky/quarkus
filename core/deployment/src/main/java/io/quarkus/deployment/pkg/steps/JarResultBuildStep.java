@@ -240,6 +240,8 @@ public class JarResultBuildStep {
         if (Files.exists(standardJar)) {
             originalJar = outputTargetBuildItem.getOutputDirectory()
                     .resolve(outputTargetBuildItem.getBaseName() + ".jar.original");
+            Files.deleteIfExists(originalJar);
+            Files.move(standardJar, originalJar);
         } else {
             originalJar = null;
         }
