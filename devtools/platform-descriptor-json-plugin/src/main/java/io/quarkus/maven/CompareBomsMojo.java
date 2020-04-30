@@ -97,14 +97,15 @@ public class CompareBomsMojo extends AbstractMojo {
         System.out.println("Generated deps: " + generatedDeps.size());
         System.out.println("Flattened deps: " + flattenedDeps.size());
 
-        orderDeps(new File(project.getBasedir(), "ordered-flattened-pom.xml"), flattenedDeps, flattenedOrdered);
-        orderDeps(new File(project.getBasedir(), "ordered-generated-pom.xml"), generatedDeps, generatedOrdered);
+        //orderDeps(new File(project.getBasedir(), "ordered-flattened-pom.xml"), flattenedDeps, flattenedOrdered);
+        //orderDeps(new File(project.getBasedir(), "ordered-generated-pom.xml"), generatedDeps, generatedOrdered);
     }
 
     private static boolean isAcceptableBomDependency(Dependency artifact) {
         return !"javadoc".equals(artifact.getClassifier())
                 && !"tests".equals(artifact.getClassifier())
-                && !"sources".equals(artifact.getClassifier());
+                && !"sources".equals(artifact.getClassifier())
+                && !"test-jar".equals(artifact.getType());
     }
 
     private void orderDeps(File f, Map<AppArtifactKey, Dependency> deps, List<String> ordered) {

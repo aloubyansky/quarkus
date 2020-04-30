@@ -2,6 +2,8 @@ package io.quarkus.maven;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -39,6 +41,7 @@ import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
+import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.maven.utilities.MojoUtils;
 
 @Mojo(name = "generate-platform-bom")
@@ -60,10 +63,12 @@ public class GeneratePlatformPomMojo extends AbstractMojo {
 
     private MavenArtifactResolver resolver;
 
-    private List<org.eclipse.aether.graph.Dependency> allManagedDeps = new ArrayList<>();
-    private Set<AppArtifactKey> allManagedDepKeys = new HashSet<>();
-    private Set<AppArtifactKey> addedExtensions = new HashSet<>();
+    private List<org.eclipse.aether.graph.Dependency> allGeneratedDeps = new ArrayList<>();
+    private Set<AppArtifactKey> allGeneratedDepKeys = new HashSet<>();
+    private Set<AppArtifactKey> includedExtensions = new HashSet<>();
     private Map<Artifact, Set<AppArtifactKey>> quarkusCoreExtensionKeys = new HashMap<>();
+
+    private Map<AppArtifactKey, org.eclipse.aether.graph.Dependency> allKnownDeps = new HashMap<>();
 
     private Artifact targetQuarkusBom;
 
@@ -119,14 +124,16 @@ public class GeneratePlatformPomMojo extends AbstractMojo {
                     quarkusCore.getVersion());
         }
         final ArtifactDescriptorResult quarkusBomDescr = resolveArtifactDescriptor(targetQuarkusBom);
-        addedExtensions = getExtensionKeys(quarkusBomDescr.getManagedDependencies());
+        includedExtensions = getExtensionKeys(quarkusBomDescr.getManagedDependencies());
         int i = 1;
         for (org.eclipse.aether.graph.Dependency managedDep : quarkusBomDescr.getManagedDependencies()) {
             if (!isAcceptableBomDependency(managedDep.getArtifact())) {
                 System.out.println(i++ + ") NOT ACCEPTABLE " + managedDep.getArtifact());
             }
-            if (allManagedDepKeys.add(getKey(managedDep.getArtifact()))) {
-                allManagedDeps.add(managedDep);
+            final AppArtifactKey key = getKey(managedDep.getArtifact());
+            if (allGeneratedDepKeys.add(key)) {
+                allGeneratedDeps.add(managedDep);
+                allKnownDeps.put(key, managedDep);
             }
         }
 
@@ -134,10 +141,13 @@ public class GeneratePlatformPomMojo extends AbstractMojo {
             processDirectDep(bomImport);
         }
 
+        // collect dependencies used in the tests
+        addItDeps();
+
         final Model resultingModel = initNewModel();
         final DependencyManagement newDm = new DependencyManagement();
         resultingModel.setDependencyManagement(newDm);
-        for (org.eclipse.aether.graph.Dependency dep : allManagedDeps) {
+        for (org.eclipse.aether.graph.Dependency dep : allGeneratedDeps) {
             newDm.addDependency(toModelDep(dep));
         }
 
@@ -153,6 +163,56 @@ public class GeneratePlatformPomMojo extends AbstractMojo {
         getLog().info("BOM generation took " + timeSec + "." + (timeMs - timeSec * 1000) + " sec");
 
         //project.setPomFile(targetFile);
+    }
+
+    private void addItDeps() throws MojoExecutionException {
+        System.out.println("PROJECT BASEDIR: " + project.getBasedir());
+        final File itModule = new File(project.getBasedir().getParentFile().getParentFile(), "integration-tests");
+        System.out.println(itModule + " " + itModule.exists());
+        final List<org.eclipse.aether.graph.Dependency> allKnownDepsList = new ArrayList<>(allKnownDeps.values());
+        try {
+            Files.walk(itModule.toPath()).filter(p -> {
+                if (Files.isDirectory(p)) {
+                    return false;
+                }
+                if (!p.getFileName().toString().equals("pom.xml")) {
+                    return false;
+                }
+                return true;
+            }).forEach(pomXml -> {
+                final Model model;
+                try (InputStream stream = Files.newInputStream(pomXml)) {
+                    model = MojoUtils.readPom(stream);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+                if (!model.getPackaging().equals("jar")) {
+                    return;
+                }
+
+                final Artifact pomArtifact = new DefaultArtifact(ModelUtils.getGroupId(model), model.getArtifactId(), "", "pom",
+                        ModelUtils.getVersion(model));
+                System.out.println(pomXml);
+                try {
+                    final ArtifactDescriptorResult pomDescr = resolver.resolveDescriptor(pomArtifact);
+                    for (org.eclipse.aether.graph.Dependency dep : pomDescr.getDependencies()) {
+                        final String ext = dep.getArtifact().getExtension();
+                        if (!(ext == null || ext.isEmpty() || ext.equals("jar"))) {
+                            continue;
+                        }
+                        System.out.println(" - " + dep.getArtifact());
+                        final DependencyNode root = resolver.collectManagedDependencies(dep.getArtifact(),
+                                Collections.emptyList(), allKnownDepsList, Collections.emptyList(), "provided", "test")
+                                .getRoot();
+                        addDependencies(root.getChildren(), allKnownDeps.keySet());
+                    }
+                } catch (AppModelResolverException e) {
+                    throw new IllegalStateException("Failed to resolve artifact descriptor for " + pomArtifact, e);
+                }
+            });
+        } catch (IOException e) {
+            throw new MojoExecutionException("Failed to process " + itModule, e);
+        }
     }
 
     private Dependency toModelDep(org.eclipse.aether.graph.Dependency managedDep) {
@@ -212,18 +272,20 @@ public class GeneratePlatformPomMojo extends AbstractMojo {
             }
             final Set<AppArtifactKey> bomManagedDepKeys = new HashSet<>();
             for (org.eclipse.aether.graph.Dependency managedDep : bomDescr.getManagedDependencies()) {
-                bomManagedDepKeys.add(getKey(managedDep.getArtifact()));
+                final AppArtifactKey key = getKey(managedDep.getArtifact());
+                bomManagedDepKeys.add(key);
+                allKnownDeps.putIfAbsent(key, managedDep);
             }
             for (org.eclipse.aether.graph.Dependency dep : bomDescr.getManagedDependencies()) {
                 final AppArtifactKey key = getKey(dep.getArtifact());
-                if (addedExtensions.contains(key)
+                if (includedExtensions.contains(key)
                         || quarkusImportedKeys.contains(key)
                         || !isQuarkusExtension(dep.getArtifact())) {
                     continue;
                 }
-                addedExtensions.add(key);
-                allManagedDeps.add(dep);
-                allManagedDepKeys.add(key);
+                includedExtensions.add(key);
+                allGeneratedDeps.add(dep);
+                allGeneratedDepKeys.add(key);
                 addDependencies(dep, bomManagedDepKeys);
             }
             return;
@@ -231,14 +293,15 @@ public class GeneratePlatformPomMojo extends AbstractMojo {
 
         final AppArtifactKey key = new AppArtifactKey(directDep.getGroupId(), directDep.getArtifactId(),
                 directDep.getClassifier(), directDep.getType());
-        if (!allManagedDepKeys.add(key)) {
+        if (!allGeneratedDepKeys.add(key)) {
             return;
         }
         if (isQuarkusExtension(artifact)) {
-            addedExtensions.add(key);
+            includedExtensions.add(key);
         }
         org.eclipse.aether.graph.Dependency dep = toAetherDep(directDep);
-        allManagedDeps.add(dep);
+        allGeneratedDeps.add(dep);
+        allKnownDeps.putIfAbsent(key, dep);
         addDependencies(dep, Collections.emptySet());
     }
 
@@ -246,7 +309,7 @@ public class GeneratePlatformPomMojo extends AbstractMojo {
             throws MojoExecutionException {
         final CollectResult collectResult;
         try {
-            collectResult = resolver.collectManagedDependencies(dep.getArtifact(), Collections.emptyList(), allManagedDeps,
+            collectResult = resolver.collectManagedDependencies(dep.getArtifact(), Collections.emptyList(), allGeneratedDeps,
                     Collections.emptyList(), "provided", "test");
         } catch (AppModelResolverException e) {
             throw new MojoExecutionException("Failed to collect dependencies for " + dep.getArtifact(), e);
@@ -269,13 +332,14 @@ public class GeneratePlatformPomMojo extends AbstractMojo {
             return;
         }
         final AppArtifactKey key = getKey(node.getArtifact());
-        if (!bomDeps.contains(key) || !allManagedDepKeys.add(key)) {
+        if (!bomDeps.contains(key) || !allGeneratedDepKeys.add(key)) {
             return;
         }
         if (node.getArtifact().getClassifier().equals("tests")) {
             throw new IllegalStateException(node.getArtifact().toString());
         }
-        allManagedDeps.add(node.getDependency());
+        allGeneratedDeps.add(node.getDependency());
+        allKnownDeps.putIfAbsent(key, node.getDependency());
         addDependencies(node.getChildren(), bomDeps);
     }
 
@@ -379,7 +443,7 @@ public class GeneratePlatformPomMojo extends AbstractMojo {
         if (!isPossiblyExtension(artifact)) {
             return false;
         }
-        if (addedExtensions.contains(getKey(artifact))) {
+        if (includedExtensions.contains(getKey(artifact))) {
             return true;
         }
         try {
