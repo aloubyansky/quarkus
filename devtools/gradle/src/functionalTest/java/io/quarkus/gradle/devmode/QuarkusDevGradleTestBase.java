@@ -7,7 +7,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -76,8 +75,11 @@ public abstract class QuarkusDevGradleTestBase extends QuarkusGradleTestBase {
             throw new IllegalStateException("Failed to locate " + PLUGIN_UNDER_TEST_METADATA_PROPERTIES + " on the classpath");
         }
 
+        final Map<String, String> env = new java.util.HashMap<>(System.getenv());
+        env.put("PLUGIN_UNDER_TEST_METADATA", path.toAbsolutePath().toString());
+
         final BuildResult buildResult = GradleRunner.create()
-                .withEnvironment(Collections.singletonMap("PLUGIN_UNDER_TEST_METADATA", path.toAbsolutePath().toString()))
+                .withEnvironment(env)
                 .forwardOutput()
                 .withPluginClasspath()
                 .withArguments(arguments(buildArguments()))
