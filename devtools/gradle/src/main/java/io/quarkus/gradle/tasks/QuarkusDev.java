@@ -442,7 +442,7 @@ public class QuarkusDev extends QuarkusTask {
             // that's weird, the project may include the plugin but not have it on its classpath
             // this may happen when running the plugin's tests
             // so here we check the variable set in the Quarkus functional tests
-            final String pluginUnderTestMetaData = System.getenv("PLUGIN_UNDER_TEST_METADATA");
+            final String pluginUnderTestMetaData = System.getProperty("PLUGIN_UNDER_TEST_METADATA");
             if (pluginUnderTestMetaData != null) {
                 final Path p = Paths.get(pluginUnderTestMetaData);
                 if (Files.exists(p)) {

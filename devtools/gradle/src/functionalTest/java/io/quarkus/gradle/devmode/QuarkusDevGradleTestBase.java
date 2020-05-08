@@ -75,11 +75,9 @@ public abstract class QuarkusDevGradleTestBase extends QuarkusGradleTestBase {
             throw new IllegalStateException("Failed to locate " + PLUGIN_UNDER_TEST_METADATA_PROPERTIES + " on the classpath");
         }
 
-        final Map<String, String> env = new java.util.HashMap<>(System.getenv());
-        env.put("PLUGIN_UNDER_TEST_METADATA", path.toAbsolutePath().toString());
+        System.setProperty("PLUGIN_UNDER_TEST_METADATA", path.toAbsolutePath().toString());
 
         final BuildResult buildResult = GradleRunner.create()
-                .withEnvironment(env)
                 .forwardOutput()
                 .withPluginClasspath()
                 .withArguments(arguments(buildArguments()))
