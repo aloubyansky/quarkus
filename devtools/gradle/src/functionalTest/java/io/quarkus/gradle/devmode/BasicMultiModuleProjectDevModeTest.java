@@ -13,7 +13,7 @@ public class BasicMultiModuleProjectDevModeTest extends QuarkusDevGradleTestBase
 
     @Override
     protected String[] buildArguments() {
-        return new String[] {"clean", ":application:quarkusDev", "-s", "-Ddebug=false"};
+        return new String[] {"clean", ":application:quarkusDev", "-s"/*, "-Ddebug=false"*/};
     }
 
     protected void testDevMode() throws Exception {
