@@ -457,6 +457,7 @@ jobs:
             test-modules: >
               smallrye-graphql
               picocli-native
+              gradle
           - category: Spring
             timeout: 40
             test-modules: >
