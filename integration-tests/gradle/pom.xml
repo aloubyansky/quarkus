@@ -20,39 +20,49 @@
         <maven.test.skip>true</maven.test.skip>
     </properties>
 
-    <build>
-       <plugins>
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>gradle</id>
-                        <phase>prepare-package</phase>
-                        <configuration>
-                            <executable>${gradle.executable}</executable>
-                            <arguments>
-                                <argument>clean</argument>
-                                <argument>test</argument>
-                                <argument>-Pdescription=${project.description}</argument>
-                                <argument>-S</argument>
-                                <argument>--stacktrace</argument>
-                            </arguments>
-                            <environmentVariables>
-                                <MAVEN_LOCAL_REPO>${settings.localRepository}</MAVEN_LOCAL_REPO>
-                                <GRADLE_OPTS>${env.MAVEN_OPTS}</GRADLE_OPTS>
-                            </environmentVariables>
-                            <skip>${skip.gradle.build}</skip>
-                        </configuration>
-                        <goals>
-                            <goal>exec</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
     <profiles>
+        <profile>
+            <id>Gradle-IT</id>
+            <activation>
+                <property>
+                    <name>skipITs</name>
+                    <value>!true</value>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>gradle</id>
+                                <phase>prepare-package</phase>
+                                <configuration>
+                                    <executable>${gradle.executable}</executable>
+                                    <arguments>
+                                        <argument>clean</argument>
+                                        <argument>test</argument>
+                                        <argument>-Pdescription=${project.description}</argument>
+                                        <argument>-S</argument>
+                                        <argument>--stacktrace</argument>
+                                        <argument>-i</argument> <!-- info logging -->
+                                    </arguments>
+                                    <environmentVariables>
+                                        <MAVEN_LOCAL_REPO>${settings.localRepository}</MAVEN_LOCAL_REPO>
+                                        <GRADLE_OPTS>${env.MAVEN_OPTS}</GRADLE_OPTS>
+                                    </environmentVariables>
+                                    <skip>${skip.gradle.build}</skip>
+                                </configuration>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <profile>
             <id>windows</id>
             <activation>
@@ -90,6 +100,7 @@
                                         <argument>-Pquarkus.native.builder-image=${quarkus.native.builder-image}</argument>
                                         <argument>-S</argument>
                                         <argument>--stacktrace</argument>
+                                        <argument>-i</argument> <!-- info logging -->
                                     </arguments>
                                     <environmentVariables>
                                         <MAVEN_LOCAL_REPO>${settings.localRepository}</MAVEN_LOCAL_REPO>

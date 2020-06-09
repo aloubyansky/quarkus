@@ -20,6 +20,10 @@ repositories {
     mavenCentral()
 }
 
+configurations.all {
+    exclude group: 'io.quarkus', module: 'quarkus-bootstrap-maven-resolver'
+}
+
 dependencies {
     testImplementation "io.quarkus:quarkus-bootstrap-core:${version}"
     testImplementation "io.quarkus:quarkus-core-deployment:${version}"
