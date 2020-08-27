@@ -1,6 +1,7 @@
 package io.quarkus.deployment.jbang;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -28,6 +29,7 @@ import io.quarkus.deployment.builditem.ApplicationClassNameBuildItem;
 import io.quarkus.deployment.builditem.GeneratedClassBuildItem;
 import io.quarkus.deployment.builditem.GeneratedResourceBuildItem;
 import io.quarkus.deployment.builditem.LiveReloadBuildItem;
+import io.quarkus.deployment.builditem.TransformedClassesBuildItem;
 import io.quarkus.deployment.dev.DevModeContext;
 import io.quarkus.deployment.dev.IDEDevModeMain;
 import io.quarkus.deployment.pkg.builditem.ArtifactResultBuildItem;
@@ -80,6 +82,7 @@ public class JBangAugmentorImpl implements BiConsumer<CuratedApplication, Map<St
         builder.excludeFromIndexing(quarkusBootstrap.getExcludeFromClassPath());
         builder.addFinal(GeneratedClassBuildItem.class);
         builder.addFinal(GeneratedResourceBuildItem.class);
+        builder.addFinal(TransformedClassesBuildItem.class);
         boolean nativeRequested = "native".equals(System.getProperty("quarkus.package.type"));
         boolean containerBuildRequested = Boolean.getBoolean("quarkus.container-image.build");
         if (nativeRequested) {
@@ -102,6 +105,12 @@ public class JBangAugmentorImpl implements BiConsumer<CuratedApplication, Map<St
             }
             for (GeneratedResourceBuildItem i : buildResult.consumeMulti(GeneratedResourceBuildItem.class)) {
                 result.put(i.getName(), i.getClassData());
+            }
+            for (Map.Entry<Path, Set<TransformedClassesBuildItem.TransformedClass>> entry : buildResult
+                    .consume(TransformedClassesBuildItem.class).getTransformedClassesByJar().entrySet()) {
+                for (TransformedClassesBuildItem.TransformedClass transformed : entry.getValue()) {
+                    result.put(transformed.getFileName(), transformed.getData());
+                }
             }
             resultMap.put("files", result);
             if (nativeRequested) {
