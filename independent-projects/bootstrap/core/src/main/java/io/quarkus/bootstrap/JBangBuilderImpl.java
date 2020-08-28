@@ -4,16 +4,36 @@ import io.quarkus.bootstrap.app.CuratedApplication;
 import io.quarkus.bootstrap.app.QuarkusBootstrap;
 import io.quarkus.bootstrap.model.AppArtifact;
 import io.quarkus.bootstrap.model.AppDependency;
+import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
+import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
+import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.eclipse.aether.repository.RemoteRepository;
 
 public class JBangBuilderImpl {
     public static Map<String, Object> postBuild(Path appClasses, Path pomFile, List<Map.Entry<String, Path>> dependencies,
             boolean nativeImage) {
+        final MavenArtifactResolver quarkusResolver;
+        try {
+            final BootstrapMavenContext mvnCtx = new BootstrapMavenContext(BootstrapMavenContext.config()
+                    .setCurrentProject(pomFile.getParent().toString()));
+            final List<RemoteRepository> remoteRepos = new ArrayList<>(mvnCtx.getRemoteRepositories());
+            remoteRepos.add(new RemoteRepository.Builder("xamdk", "default", "https://xam.dk/maven").build());
+            quarkusResolver = MavenArtifactResolver.builder()
+                    .setRepositorySystem(mvnCtx.getRepositorySystem())
+                    .setRepositorySystemSession(mvnCtx.getRepositorySystemSession())
+                    .setRemoteRepositoryManager(mvnCtx.getRemoteRepositoryManager())
+                    .setRemoteRepositories(remoteRepos)
+                    .build();
+        } catch (BootstrapMavenException e) {
+            throw new IllegalStateException("Failed to initialize Quarkus bootstrap Maven resolver", e);
+        }
 
         try {
             Path target = Files.createTempDirectory("quarkus-jbang");
@@ -21,6 +41,7 @@ public class JBangBuilderImpl {
             appArtifact.setPath(appClasses);
             final QuarkusBootstrap.Builder builder = QuarkusBootstrap.builder()
                     .setBaseClassLoader(JBangBuilderImpl.class.getClassLoader())
+                    .setMavenArtifactResolver(quarkusResolver)
                     .setProjectRoot(pomFile.getParent())
                     .setTargetDirectory(target)
                     .setForcedDependencies(dependencies.stream().map(s -> {
