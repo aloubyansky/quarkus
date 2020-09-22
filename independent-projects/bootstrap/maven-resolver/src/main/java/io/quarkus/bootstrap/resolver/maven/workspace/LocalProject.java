@@ -363,7 +363,27 @@ public class LocalProject {
     }
 
     public AppArtifact getAppArtifact() {
-        return getAppArtifact(rawModel.getPackaging());
+        String packaging = rawModel.getPackaging();
+        int exprStart = packaging.indexOf("${");
+        if (exprStart >= 0) {
+            int exprEnd = packaging.indexOf('}', exprStart + 2);
+            if (exprEnd > 0) {
+                String prop = packaging.substring(exprStart + 2, exprEnd);
+                System.out.println("PACKAGING '" + prop + "'");
+                LocalProject project = this;
+                while (project != null) {
+                    String resolved = project.getRawModel().getProperties().getProperty(prop);
+                    if (resolved != null) {
+                        System.out.println("  " + resolved);
+                        packaging = new StringBuilder().append(packaging.substring(0, exprStart)).append(resolved)
+                                .append(packaging.substring(exprEnd + 1)).toString();
+                        break;
+                    }
+                    project = getLocalParent();
+                }
+            }
+        }
+        return getAppArtifact(packaging);
     }
 
     public AppArtifact getAppArtifact(String extension) {
