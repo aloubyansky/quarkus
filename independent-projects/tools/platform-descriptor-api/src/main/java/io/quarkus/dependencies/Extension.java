@@ -1,5 +1,6 @@
 package io.quarkus.dependencies;
 
+import io.quarkus.platform.descriptor.loader.json.ResourceLoader;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -52,6 +53,8 @@ public class Extension implements Serializable {
     private static final transient Pattern QUARKUS_PREFIX = Pattern.compile("^quarkus-");
 
     private Map<String, Object> metadata = new HashMap<String, Object>(3);
+
+    private ResourceLoader codestart;
 
     public Extension() {
         // Use by mapper.
@@ -140,7 +143,7 @@ public class Extension implements Serializable {
     /**
      * Semi-Unstructured metadata used to provide metadata to tools and other
      * frontends.
-     * 
+     *
      */
     public Map<String, Object> getMetadata() {
         return metadata;
@@ -163,9 +166,9 @@ public class Extension implements Serializable {
 
     /**
      * List of strings to use for matching.
-     * 
+     *
      * Returns keywords + artifactid all in lowercase.
-     * 
+     *
      * @return list of labels to use for matching.
      */
     public List<String> labelsForMatching() {
@@ -180,7 +183,7 @@ public class Extension implements Serializable {
 
     /**
      * Convert this Extension into a dependency
-     * 
+     *
      * @param stripVersion if provided version will not be set on the Dependency
      * @return a Maven {@link Dependency} object
      */
@@ -245,7 +248,7 @@ public class Extension implements Serializable {
     }
 
     /**
-     * 
+     *
      * @return string representing the location of primary guide for this extension.
      */
     public String getGuide() {
@@ -301,5 +304,13 @@ public class Extension implements Serializable {
     public Extension removeMetadata(String key) {
         getMetadata().remove(key);
         return this;
+    }
+
+    public ResourceLoader getCodestartResourceLoader() {
+        return codestart;
+    }
+
+    public void setCodestartResourceLoader(ResourceLoader rl) {
+        this.codestart = rl;
     }
 }

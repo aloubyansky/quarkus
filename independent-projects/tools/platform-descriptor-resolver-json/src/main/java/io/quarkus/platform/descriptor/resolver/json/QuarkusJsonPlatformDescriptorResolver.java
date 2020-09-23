@@ -401,7 +401,8 @@ public class QuarkusJsonPlatformDescriptorResolver {
                 // The JSON is available, now there also should be quarkus.properties
                 final String quarkusVersion = getBundledPlatformQuarkusVersionOrNull();
                 if (quarkusVersion != null) {
-                    return loadPlatformDescriptor(getBundledResolver(theBundledBom), jsonStream, quarkusVersion);
+                    return loadPlatformDescriptor(getBundledResolver(theBundledBom, toLoaderResolver(artifactResolver)),
+                            jsonStream, quarkusVersion);
                 } else {
                     log.debug("Failed to locate quarkus.properties on the classpath");
                 }
@@ -654,7 +655,7 @@ public class QuarkusJsonPlatformDescriptorResolver {
         };
     }
 
-    private ArtifactResolver getBundledResolver(final Model model) {
+    private ArtifactResolver getBundledResolver(Model model, final ArtifactResolver delegate) {
 
         final Path platformResources;
         try {
@@ -668,7 +669,7 @@ public class QuarkusJsonPlatformDescriptorResolver {
 
             @Override
             public <T> T process(String groupId, String artifactId, String classifier, String type, String version,
-                    Function<Path, T> processor) {
+                    Function<Path, T> processor) throws AppModelResolverException {
                 if (QUARKUS_PLATFORM_DESCRIPTOR_JSON.equals(artifactId)
                         && ToolsConstants.IO_QUARKUS.equals(groupId)
                         && "jar".equals(type)
@@ -676,8 +677,11 @@ public class QuarkusJsonPlatformDescriptorResolver {
                         && version.equals(getBundledPlatformQuarkusVersionOrNull())) {
                     return processor.apply(platformResources);
                 }
-                throw new IllegalArgumentException("Unexpected artifact coordinates " + groupId + ":" + artifactId + ":"
-                        + classifier + ":" + type + ":" + version);
+                if (delegate == null) {
+                    throw new IllegalArgumentException("Unexpected artifact coordinates " + groupId + ":" + artifactId + ":"
+                            + classifier + ":" + type + ":" + version);
+                }
+                return delegate.process(groupId, artifactId, classifier, type, version, processor);
             }
 
             @Override
@@ -690,10 +694,12 @@ public class QuarkusJsonPlatformDescriptorResolver {
                         && getGroupId(model).equals(groupId)) {
                     return model.getDependencyManagement().getDependencies();
                 }
-                throw new IllegalArgumentException(
-                        "Expected " + getGroupId(model) + ":" + getArtifactId(model) + "::pom:" + getVersion(model)
-                                + " but received "
-                                + groupId + ":" + artifactId + ":" + classifier + ":" + type + ":" + version);
+                if (delegate == null) {
+                    throw new IllegalArgumentException("Expected " + getGroupId(model) + ":" + getArtifactId(model)
+                            + "::pom:" + getVersion(model) + " but received " + groupId + ":" + artifactId + ":"
+                            + classifier + ":" + type + ":" + version);
+                }
+                return delegate.getManagedDependencies(groupId, artifactId, classifier, type, version);
             }
         };
         return bundledResolver;
