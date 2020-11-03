@@ -18,7 +18,7 @@ import io.quarkus.registry.DefaultExtensionRegistry;
  * {@code add-extensions} and {@code add-extension}.
  * You can list all extension or just installable. Choose between 3 output formats: name, concise and full.
  */
-@Mojo(name = "list-extensions", requiresProject = false)
+@Mojo(name = "list-extensions", requiresProject = true)
 public class ListExtensionsMojo extends QuarkusProjectMojoBase {
 
     /**

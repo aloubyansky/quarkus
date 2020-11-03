@@ -22,6 +22,9 @@ import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.impl.RemoteRepositoryManager;
 import org.eclipse.aether.repository.RemoteRepository;
+import org.eclipse.aether.resolution.ArtifactDescriptorException;
+import org.eclipse.aether.resolution.ArtifactDescriptorRequest;
+import org.eclipse.aether.resolution.ArtifactDescriptorResult;
 import org.eclipse.aether.resolution.ArtifactResult;
 
 import io.quarkus.bootstrap.BootstrapConstants;
@@ -77,9 +80,26 @@ public abstract class QuarkusProjectMojoBase extends AbstractMojo {
             // it's not Gradle and the pom.xml not found, so we assume there is not project at all
             buildTool = BuildTool.MAVEN;
         }
-        final QuarkusPlatformDescriptor platformDescriptor = resolvePlatformDescriptor(log);
 
-        doExecute(QuarkusProject.of(baseDir(), platformDescriptor, buildTool), log);
+        final QuarkusPlatformDescriptor platformDescriptor = resolvePlatformDescriptor(log);
+        final QuarkusProject quarkusProject;
+        if (BuildTool.MAVEN.equals(buildTool) && project.getFile() != null) {
+            final ArtifactDescriptorResult projectDescriptor;
+            try {
+                projectDescriptor = repoSystem.readArtifactDescriptor(repoSession,
+                        new ArtifactDescriptorRequest().setArtifact(new DefaultArtifact(project.getGroupId(),
+                                project.getArtifactId(), null, "pom", project.getVersion())));
+            } catch (ArtifactDescriptorException e) {
+                throw new MojoExecutionException("Failed to read the artifact desriptor for the project", e);
+            }
+            quarkusProject = QuarkusProject.of(baseDir(), platformDescriptor,
+                    new MavenProjectBuildFile(baseDir(), platformDescriptor, project, projectDescriptor));
+            System.out.println("MAVEN PROJECT " + project.getArtifacts().size() + " " + project.getDependencies().size());
+        } else {
+            quarkusProject = QuarkusProject.of(baseDir(), platformDescriptor, buildTool);
+        }
+
+        doExecute(quarkusProject, log);
     }
 
     protected Path baseDir() {
