@@ -28,5 +28,6 @@
         <module>gradle</module>
         <module>cli</module>
         <module>reflection-agent</module>
+        <module>quarkus-core-bom</module>
     </modules>
 </project>

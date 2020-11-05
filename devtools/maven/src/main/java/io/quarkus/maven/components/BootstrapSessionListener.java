@@ -16,6 +16,13 @@ public class BootstrapSessionListener extends AbstractMavenLifecycleParticipant 
     @Requirement(optional = false)
     protected QuarkusBootstrapProvider bootstrapProvider;
 
+    public void afterProjectsRead(MavenSession session)
+            throws MavenExecutionException {
+        System.out.println("BootstrapSessionListener.afterProjectsRead " + session.getCurrentProject().getArtifact());
+
+        //session.getCurrentProject().getDependencies().add(dep);
+    }
+
     @Override
     public void afterSessionEnd(MavenSession session) throws MavenExecutionException {
         try {

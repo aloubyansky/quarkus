@@ -150,8 +150,15 @@ public class ExtensionDescriptorMojo extends AbstractMojo {
     @Parameter(required = false, defaultValue = "${skipExtensionValidation}")
     private boolean skipExtensionValidation;
 
+    @Parameter(required = false, property = "skipExtensionDescriptor")
+    boolean skipExtensionDescriptor;
+
     @Override
     public void execute() throws MojoExecutionException {
+
+        if (skipExtensionDescriptor) {
+            return;
+        }
 
         if (!skipExtensionValidation) {
             validateExtensionDeps();
