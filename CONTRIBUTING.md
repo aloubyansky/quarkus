@@ -332,6 +332,14 @@ Bad examples and the corresponding good example:
 - "PostgreSQL database connector" (use "Connect to the PostgreSQL database via JDBC")
 - "Asynchronous messaging for Reactive Streams" (use "Produce and consume messages and implement event driven and data streaming applications")
 
+### Update dependencies to extensions
+
+When adding a new extension you should run `update-extension-dependencies.sh` so that special modules like `devtools/bom-descriptor-json`
+that are consuming this extension are built *after* the respective extension. Simply add to your commit the files that were changed by the script.
+
+When removing an extension make sure to also remove all dependencies to it from all `pom.xml`.
+It's easy to miss this as long as the extension artifact is still present in your local Maven repository.
+
 ## The small print
 
 This project is an open source project, please act responsibly, be nice, polite and enjoy!
