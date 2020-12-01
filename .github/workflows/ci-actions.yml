@@ -122,7 +122,7 @@ jobs:
           # - untracked: to ignore files created by jobs (and uncommitted to be consistent)
           # - forces build of quarkus-core.* (see https://github.com/quarkusio/quarkus/pull/13543#issuecomment-735955489)
           # - forces build of resteasy-reactive (see https://github.com/quarkusio/quarkus/pull/13243#issuecomment-735433991)
-          GIB_ARGS="-Dincremental -Dgib.disableSelectedProjectsHandling -Dgib.untracked=false -Dgib.uncommitted=false -Dgib.forceBuildModules='quarkus-core.*|resteasy-reactive'"
+          GIB_ARGS="-Dincremental -Dgib.disableSelectedProjectsHandling -Dgib.untracked=false -Dgib.uncommitted=false"
           if [ -n "$PULL_REQUEST_BASE" ]
           then
               # The PR defines a clear merge target so just use that branch for reference, *unless*
