@@ -17,6 +17,8 @@
 
     <properties>
         <test.level>INFO</test.level>
+        <skipTests>true</skipTests>
+        <skipITs>true</skipITs>
     </properties>
 
     <modules>
