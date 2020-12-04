@@ -22,7 +22,7 @@
         <native.surefire.skip>${skipTests}</native.surefire.skip>
     </properties>
     <modules>
-        <module>bouncycastle</module>
+        <!--<module>bouncycastle</module>
         <module>bouncycastle-fips</module>
         <module>bouncycastle-jsse</module>
         <module>funqy-amazon-lambda</module>
@@ -31,10 +31,10 @@
         <module>shared-library</module>
         <module>hibernate-validator</module>
         <module>common-jpa-entities</module>
-        <module>infinispan-client</module>
+        <module>infinispan-client</module>-->
         <module>devtools</module>
         <module>gradle</module>
-        <module>main</module>
+        <!--<module>main</module>
         <module>kafka</module>
         <module>kafka-avro</module>
         <module>kafka-streams</module>
@@ -105,9 +105,9 @@
         <module>virtual-http</module>
         <module>virtual-http-resteasy</module>
         <module>artemis-core</module>
-        <module>artemis-jms</module>
+        <module>artemis-jms</module>-->
         <module>maven</module>
-        <module>scala</module>
+        <!--<module>scala</module>
         <module>kotlin</module>
         <module>mongodb-panache</module>
         <module>mongodb-panache-kotlin</module>
@@ -139,20 +139,20 @@
         <module>picocli</module>
         <module>picocli-native</module>
         <module>webjars-locator</module>
-        <module>devmode</module>
+        <module>devmode</module>-->
         <module>ide-launcher</module>
-        <module>elasticsearch-rest-client</module>
+        <!--<module>elasticsearch-rest-client</module>
         <module>elasticsearch-rest-high-level-client</module>
         <module>micrometer-jmx</module>
         <module>micrometer-mp-metrics</module>
-        <module>micrometer-native</module>
+        <module>micrometer-native</module>-->
         <module>micrometer-prometheus</module>
-        <module>logging-json</module>
+        <!--<module>logging-json</module>
         <module>jaxp</module>
-        <module>mailer</module>
+        <module>mailer</module>-->
 
         <!-- gRPC tests -->
-        <module>grpc-tls</module>
+        <!--<module>grpc-tls</module>
         <module>grpc-plain-text</module>
         <module>grpc-plain-text-mutiny</module>
         <module>grpc-mutual-auth</module>
@@ -161,7 +161,7 @@
         <module>grpc-proto-v2</module>
         <module>grpc-health</module>
         <module>google-cloud-functions-http</module>
-        <module>google-cloud-functions</module>
+        <module>google-cloud-functions</module>-->
     </modules>
 
     <build>
