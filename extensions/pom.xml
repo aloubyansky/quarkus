@@ -13,6 +13,10 @@
     <artifactId>quarkus-extensions-parent</artifactId>
     <name>Quarkus - Extensions - Parent pom</name>
     <packaging>pom</packaging>
+    <properties>
+        <skipTests>true</skipTests>
+        <skipITs>true</skipITs>
+    </properties>
     <modules>
         <!-- Plumbing -->
         <module>arc</module>
