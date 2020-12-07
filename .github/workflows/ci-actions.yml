@@ -203,6 +203,9 @@ jobs:
       - name: Extract Maven Repo
         shell: bash
         run: tar -xzf maven-repo.tgz -C ~
+      - name: Remove modules
+        shell: bash
+        run: sed -i -e '/<module>extensions<\/module>/d' pom.xml
       - name: Build with Maven
         shell: bash
         run: mvn $JVM_TEST_MAVEN_OPTS install -pl !integration-tests/gradle -pl !integration-tests/maven -pl !integration-tests/devtools ${{ matrix.java.maven_args }} ${{ needs.build-jdk11.outputs.gib_args }}
