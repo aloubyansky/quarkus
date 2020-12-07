@@ -20,6 +20,11 @@ import io.quarkus.test.junit.QuarkusTest;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class PrometheusMetricsRegistryTest {
 
+    static {
+        System.err.println("---- 1: " + org.jboss.resteasy.reactive.common.core.Serialisers.class.getClassLoader());
+        System.err.println("---- 2: " + org.jboss.resteasy.reactive.server.core.ServerSerialisers.class.getClassLoader());
+    }
+
     @Test
     @Order(1)
     void testRegistryInjection() {
