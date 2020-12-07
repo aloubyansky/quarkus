@@ -13,6 +13,10 @@
     <artifactId>quarkus-core-parent</artifactId>
     <name>Quarkus - Core</name>
     <packaging>pom</packaging>
+    <properties>
+        <skipTests>true</skipTests>
+        <skipITs>true</skipITs>
+    </properties>
     <modules>
         <module>deployment</module>
         <module>runtime</module>
