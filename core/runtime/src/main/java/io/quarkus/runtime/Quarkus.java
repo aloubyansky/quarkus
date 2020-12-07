@@ -92,6 +92,10 @@ public class Quarkus {
         QuarkusLauncher.launch(callingClass, quarkusApplication == null ? null : quarkusApplication.getName(), args);
     }
 
+    private static void terminateInIDE() {
+        QuarkusLauncher.terminate();
+    }
+
     /**
      * Starts a quarkus application, that will run until it either receives a signal (e.g. user presses ctrl+c)
      * or one of the exit methods is called.
@@ -120,6 +124,7 @@ public class Quarkus {
      * @param code The exit code. This may be overridden if an exception occurs on shutdown
      */
     public static void asyncExit(int code) {
+        terminateInIDE();
         ApplicationLifecycleManager.exit(code);
     }
 
@@ -136,6 +141,7 @@ public class Quarkus {
      *
      */
     public static void asyncExit() {
+        terminateInIDE();
         ApplicationLifecycleManager.exit(-1);
     }
 

@@ -1,5 +1,7 @@
 package io.quarkus.launcher;
 
+import java.io.Closeable;
+import java.io.IOException;
 import java.net.JarURLConnection;
 import java.net.URI;
 import java.net.URL;
@@ -21,6 +23,8 @@ import io.quarkus.bootstrap.BootstrapConstants;
  * hard coded exclusion.
  */
 public class QuarkusLauncher {
+
+    public static Closeable RUNNING_APP;
 
     public static void launch(String callingClass, String quarkusApplication, String... args) {
         final ClassLoader originalCl = Thread.currentThread().getContextClassLoader();
@@ -52,7 +56,8 @@ public class QuarkusLauncher {
             Thread.currentThread().setContextClassLoader(loader);
 
             Class<?> launcher = loader.loadClass("io.quarkus.bootstrap.IDELauncherImpl");
-            launcher.getDeclaredMethod("launch", Path.class, Map.class).invoke(null, appClasses, context);
+            RUNNING_APP = (Closeable) launcher.getDeclaredMethod("launch", Path.class, Map.class).invoke(null, appClasses,
+                    context);
 
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -62,4 +67,13 @@ public class QuarkusLauncher {
         }
     }
 
+    public static void terminate() {
+        if (RUNNING_APP != null) {
+            try {
+                RUNNING_APP.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
 }
