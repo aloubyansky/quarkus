@@ -6,6 +6,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -23,6 +24,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.apache.maven.model.Model;
 import org.gradle.api.GradleException;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
@@ -35,6 +37,10 @@ import org.gradle.api.artifacts.ResolvedArtifact;
 import org.gradle.api.artifacts.ResolvedConfiguration;
 import org.gradle.api.artifacts.ResolvedDependency;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
+import org.gradle.api.artifacts.dsl.DependencyHandler;
+import org.gradle.api.artifacts.repositories.MavenArtifactRepository;
+import org.gradle.api.artifacts.result.ComponentArtifactsResult;
+import org.gradle.api.artifacts.result.ResolvedArtifactResult;
 import org.gradle.api.attributes.Category;
 import org.gradle.api.initialization.IncludedBuild;
 import org.gradle.api.internal.artifacts.dependencies.DefaultDependencyArtifact;
@@ -43,10 +49,13 @@ import org.gradle.api.plugins.Convention;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.plugins.JavaPluginConvention;
 import org.gradle.api.tasks.SourceSet;
+import org.gradle.maven.MavenModule;
+import org.gradle.maven.MavenPomArtifact;
 import org.gradle.tooling.provider.model.ParameterizedToolingModelBuilder;
 
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.model.AppArtifactKey;
+import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.bootstrap.resolver.model.ArtifactCoords;
 import io.quarkus.bootstrap.resolver.model.Dependency;
 import io.quarkus.bootstrap.resolver.model.ModelParameter;
@@ -102,6 +111,118 @@ public class QuarkusModelBuilder implements ParameterizedToolingModelBuilder<Mod
         LaunchMode mode = LaunchMode.valueOf(parameter.getMode());
 
         final List<org.gradle.api.artifacts.Dependency> deploymentDeps = getEnforcedPlatforms(project);
+
+        if (project.getConfigurations().findByName("example") == null) {
+
+            System.out.println("Resolving EXAMPLE config");
+            Configuration example = project.getConfigurations().create("example")
+                    .extendsFrom(project.getConfigurations().getByName(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME));
+            example.getIncoming().beforeResolve(deps -> {
+                final DependencyHandler dependencyHandler = project.getDependencies();
+                /* @formatter:off
+                final org.gradle.api.artifacts.Dependency dependency = dependencyHandler
+                        .create("io.playground:playground-artifact:1.0@pom");
+                example.getDependencies().add(dependency);
+                @formatter:on */
+
+                final Path quarkusBuildRepoDir = project.getBuildDir().toPath().resolve("quarkus").resolve("repo");
+
+                Set<ComponentArtifactsResult> resolvedComponents = dependencyHandler.createArtifactResolutionQuery()
+                        .forModule("io.quarkus", "quarkus-resteasy", "999-SNAPSHOT")
+                        .withArtifacts(MavenModule.class, MavenPomArtifact.class).execute().getResolvedComponents();
+                resolvedComponents.forEach(r -> {
+
+                    r.getArtifacts(MavenPomArtifact.class).forEach(a -> {
+                        File resolvedPom = ((ResolvedArtifactResult) a).getFile();
+                        System.out.println("RESOLVED POM: " + resolvedPom);
+
+                        final Model model;
+                        try {
+                            model = ModelUtils.readModel(resolvedPom.toPath());
+                        } catch (IOException e) {
+                            throw new IllegalStateException("Failed to read " + resolvedPom, e);
+                        }
+
+                        org.apache.maven.model.Dependency d = new org.apache.maven.model.Dependency();
+                        d.setGroupId("io.quarkus");
+                        d.setArtifactId("quarkus-mailer");
+                        d.setVersion("999-SNAPSHOT");
+                        d.setType("jar");
+
+                        model.getDependencies().add(d);
+                        final Path copy = quarkusBuildRepoDir
+                                .resolve("io/quarkus/quarkus-resteasy/999-SNAPSHOT/quarkus-resteasy-999-SNAPSHOT.pom");
+                        try {
+                            Files.createDirectories(copy.getParent());
+                            ModelUtils.persistModel(copy, model);
+                        } catch (IOException e) {
+                            throw new IllegalStateException("Failed to persist model", e);
+                        }
+
+                    });
+                });
+
+                final MavenArtifactRepository quarkusBuildMaven = project.getRepositories().maven(repo -> {
+                    repo.setUrl(quarkusBuildRepoDir.toUri());
+
+                    final Model m = new Model();
+                    m.setModelVersion("4.0.0");
+                    m.setGroupId("io.playground");
+                    m.setArtifactId("playground-artifact");
+                    m.setVersion("1.0");
+                    m.setPackaging("pom");
+
+                    org.apache.maven.model.Dependency d = new org.apache.maven.model.Dependency();
+                    d.setGroupId("io.quarkus");
+                    d.setArtifactId("quarkus-mailer");
+                    d.setVersion("999-SNAPSHOT");
+                    d.setType("jar");
+                    m.addDependency(d);
+
+                    Path pom = quarkusBuildRepoDir.resolve("io/playground/playground-artifact/1.0/playground-artifact-1.0.pom");
+                    try {
+                        Files.createDirectories(pom.getParent());
+                        ModelUtils.persistModel(pom, m);
+                    } catch (IOException e) {
+                        throw new IllegalStateException("Failed to persist model", e);
+                    }
+
+                    final Set<URI> localRepoUrls = new HashSet<>(1);
+                    project.getRepositories().forEach(r -> {
+                        if (r instanceof MavenArtifactRepository) {
+                            final URI repoUrl = ((MavenArtifactRepository) r).getUrl();
+                            if ("file".equals(repoUrl.getScheme())) {
+                                localRepoUrls.add(repoUrl);
+                            }
+                        }
+                    });
+
+                    repo.setArtifactUrls(localRepoUrls);
+                    System.out.println("REPO URLS " + localRepoUrls);
+
+                    repo.content(content -> {
+                        content.includeVersion("io.quarkus", "quarkus-resteasy", "999-SNAPSHOT");
+                    });
+                });
+                project.getRepositories().remove(quarkusBuildMaven);
+                project.getRepositories().addFirst(quarkusBuildMaven);
+
+            });
+
+            /* @formatter:off
+            example.getResolutionStrategy().getDependencySubstitution().all(ds -> {
+                if (ds.getRequested() instanceof ModuleComponentSelector) {
+                    ModuleComponentSelector ms = (ModuleComponentSelector) ds.getRequested();
+                    if (ms.getModule().equals("quarkus-resteasy")) {
+                        System.out.println("FOUND " + ms.getGroup() + ":" + ms.getModule() + ":" + ms.getVersion());
+                        ds.useTarget("io.playground:playground-artifact:1.0");
+                    }
+                }
+            });
+            @formatter:on */
+
+            example.getResolvedConfiguration().getResolvedArtifacts().forEach(a -> System.out.println("RESOLVED " + a));
+        }
 
         final Map<String, String> platformProperties = resolvePlatformProperties(project, deploymentDeps);
 
