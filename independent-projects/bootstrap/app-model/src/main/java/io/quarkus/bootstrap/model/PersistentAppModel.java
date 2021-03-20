@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -29,6 +30,7 @@ public class PersistentAppModel implements Serializable {
     private Set<AppArtifactKey> lesserPriorityArtifacts;
     private Set<AppArtifactKey> localProjectArtifacts;
     private Map<String, String> platformProperties;
+    private Properties buildSystemProperties;
     private String userProvidersDirectory;
 
     public PersistentAppModel(String baseName, Map<AppArtifactKey, List<String>> paths, AppModel appModel,
@@ -50,6 +52,10 @@ public class PersistentAppModel implements Serializable {
             runtimeDeps.add(new SerializedDep(i, paths));
         }
         platformProperties = new HashMap<>(appModel.getPlatformProperties());
+        buildSystemProperties = new Properties();
+        if (!appModel.getBuildSystemProperties().isEmpty()) {
+            buildSystemProperties.putAll(appModel.getBuildSystemProperties());
+        }
         localProjectArtifacts = new HashSet<>(appModel.getLocalProjectArtifacts());
         parentFirstArtifacts = new HashSet<>(appModel.getParentFirstArtifacts());
         runnerParentFirstArtifacts = new HashSet<>(appModel.getRunnerParentFirstArtifacts());
@@ -86,6 +92,7 @@ public class PersistentAppModel implements Serializable {
             model.addLocalProjectArtifact(i);
         }
         model.addPlatformProperties(platformProperties);
+        model.setBuildProperties(buildSystemProperties);
         return model.build();
     }
 

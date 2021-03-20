@@ -62,20 +62,13 @@ public class AppModel implements Serializable {
 
     private final Map<String, String> platformProperties;
 
-    private AppModel(AppArtifact appArtifact, List<AppDependency> runtimeDeps, List<AppDependency> deploymentDeps,
-            List<AppDependency> fullDeploymentDeps, Set<AppArtifactKey> parentFirstArtifacts,
-            Set<AppArtifactKey> runnerParentFirstArtifacts, Set<AppArtifactKey> lesserPriorityArtifacts,
-            Set<AppArtifactKey> localProjectArtifacts) {
-        this(appArtifact, runtimeDeps, deploymentDeps, fullDeploymentDeps, parentFirstArtifacts, runnerParentFirstArtifacts,
-                lesserPriorityArtifacts,
-                localProjectArtifacts, Collections.emptyMap());
-    }
+    private final Properties buildSystemProperties;
 
     private AppModel(AppArtifact appArtifact, List<AppDependency> runtimeDeps, List<AppDependency> deploymentDeps,
             List<AppDependency> fullDeploymentDeps, Set<AppArtifactKey> parentFirstArtifacts,
             Set<AppArtifactKey> runnerParentFirstArtifacts, Set<AppArtifactKey> lesserPriorityArtifacts,
             Set<AppArtifactKey> localProjectArtifacts,
-            Map<String, String> platformProperties) {
+            Map<String, String> platformProperties, Properties buildSystemProperties) {
         this.appArtifact = appArtifact;
         this.runtimeDeps = runtimeDeps;
         this.deploymentDeps = deploymentDeps;
@@ -85,10 +78,15 @@ public class AppModel implements Serializable {
         this.lesserPriorityArtifacts = lesserPriorityArtifacts;
         this.localProjectArtifacts = localProjectArtifacts;
         this.platformProperties = platformProperties;
+        this.buildSystemProperties = buildSystemProperties;
     }
 
     public Map<String, String> getPlatformProperties() {
         return platformProperties;
+    }
+
+    public Properties getBuildSystemProperties() {
+        return buildSystemProperties;
     }
 
     public AppArtifact getAppArtifact() {
@@ -156,6 +154,7 @@ public class AppModel implements Serializable {
         private final Set<AppArtifactKey> lesserPriorityArtifacts = new HashSet<>();
         private final Set<AppArtifactKey> localProjectArtifacts = new HashSet<>();
         private Map<String, String> platformProperties = Collections.emptyMap();
+        private Properties buildSystemProperties;
 
         public Builder setAppArtifact(AppArtifact appArtifact) {
             this.appArtifact = appArtifact;
@@ -251,6 +250,11 @@ public class AppModel implements Serializable {
             return this;
         }
 
+        public Builder setBuildProperties(Properties buildSystemProperties) {
+            this.buildSystemProperties = buildSystemProperties;
+            return this;
+        }
+
         /**
          * Sets the parent first and excluded artifacts from a descriptor properties file
          *
@@ -305,7 +309,7 @@ public class AppModel implements Serializable {
                     .collect(Collectors.toList());
             AppModel appModel = new AppModel(appArtifact, runtimeDeps, deploymentDeps, fullDeploymentDeps,
                     parentFirstArtifacts, runnerParentFirstArtifacts, lesserPriorityArtifacts, localProjectArtifacts,
-                    platformProperties);
+                    platformProperties, buildSystemProperties == null ? new Properties() : buildSystemProperties);
             log.debugf("Created AppModel %s", appModel);
             return appModel;
 

@@ -303,7 +303,7 @@ public class AugmentActionImpl implements AugmentAction {
             final BuildChainBuilder chainBuilder = BuildChain.builder();
             chainBuilder.setClassLoader(classLoader);
 
-            ExtensionLoader.loadStepsFrom(classLoader, new Properties(),
+            ExtensionLoader.loadStepsFrom(classLoader, curatedApplication.getAppModel().getBuildSystemProperties(),
                     curatedApplication.getAppModel().getPlatformProperties(), launchMode, devModeType, null)
                     .accept(chainBuilder);
             chainBuilder.loadProviders(classLoader);
