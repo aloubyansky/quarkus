@@ -26,7 +26,6 @@ import java.util.stream.Collectors;
 import org.gradle.api.GradleException;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
-import org.gradle.api.UnknownDomainObjectException;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ExternalModuleDependency;
 import org.gradle.api.artifacts.ModuleDependency;
@@ -61,6 +60,8 @@ import io.quarkus.bootstrap.resolver.model.impl.WorkspaceImpl;
 import io.quarkus.bootstrap.resolver.model.impl.WorkspaceModuleImpl;
 import io.quarkus.bootstrap.util.QuarkusModelHelper;
 import io.quarkus.gradle.QuarkusPlugin;
+import io.quarkus.gradle.dependency.ConditionalDependenciesEnabler;
+import io.quarkus.gradle.dependency.DependencyUtils;
 import io.quarkus.gradle.tasks.QuarkusGradleUtils;
 import io.quarkus.runtime.LaunchMode;
 import io.quarkus.runtime.util.HashUtil;
@@ -69,6 +70,7 @@ public class QuarkusModelBuilder implements ParameterizedToolingModelBuilder<Mod
 
     private static final String MAIN_RESOURCES_OUTPUT = "build/resources/main";
     private static final String CLASSES_OUTPUT = "build/classes";
+    private static final String QUARKUS_MODEL_CONFIGURATION = "quarkusModelBuilderConfiguration";
 
     private static Configuration classpathConfig(Project project, LaunchMode mode) {
         if (LaunchMode.TEST.equals(mode)) {
@@ -78,6 +80,17 @@ public class QuarkusModelBuilder implements ParameterizedToolingModelBuilder<Mod
             return project.getConfigurations().getByName(QuarkusPlugin.DEV_MODE_CONFIGURATION_NAME);
         }
         return project.getConfigurations().getByName(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME);
+    }
+
+    private static Configuration extensionClasspathConfiguration(Project project, Configuration classpathConfiguration) {
+        Configuration quarkusModelBuilderConfiguration = project.getConfigurations().findByName(QUARKUS_MODEL_CONFIGURATION);
+        if (quarkusModelBuilderConfiguration != null) {
+            project.getConfigurations().remove(quarkusModelBuilderConfiguration);
+        }
+        return project.getConfigurations().create(QUARKUS_MODEL_CONFIGURATION)
+                .extendsFrom(project.getConfigurations()
+                        .getByName(ConditionalDependenciesEnabler.QUARKUS_EXTENSION_CONFIGURATION_NAME))
+                .extendsFrom(classpathConfiguration);
     }
 
     @Override
@@ -107,10 +120,15 @@ public class QuarkusModelBuilder implements ParameterizedToolingModelBuilder<Mod
 
         final Map<ArtifactCoords, Dependency> appDependencies = new LinkedHashMap<>();
         final Set<ArtifactCoords> visitedDeps = new HashSet<>();
+        Configuration classpathConfig = classpathConfig(project, mode);
+        final ResolvedConfiguration resolvedConfiguration = classpathConfig.getResolvedConfiguration();
 
-        final ResolvedConfiguration resolvedConfiguration = classpathConfig(project, mode).getResolvedConfiguration();
         collectDependencies(resolvedConfiguration, mode, project, appDependencies);
-        collectFirstMetDeploymentDeps(resolvedConfiguration.getFirstLevelModuleDependencies(), appDependencies,
+
+        Configuration extensionClasspathConfiguration = extensionClasspathConfiguration(project, classpathConfig);
+        collectFirstMetDeploymentDeps(
+                extensionClasspathConfiguration.getResolvedConfiguration().getFirstLevelModuleDependencies(),
+                appDependencies,
                 deploymentDeps, visitedDeps);
 
         final List<Dependency> extensionDependencies = collectExtensionDependencies(project, deploymentDeps);
@@ -239,9 +257,7 @@ public class QuarkusModelBuilder implements ParameterizedToolingModelBuilder<Mod
                 continue;
             }
             final ModuleDependency module = (ModuleDependency) d;
-            final Category category = module.getAttributes().getAttribute(Category.CATEGORY_ATTRIBUTE);
-            if (category != null && (Category.ENFORCED_PLATFORM.equals(category.getName())
-                    || Category.REGULAR_PLATFORM.equals(category.getName()))) {
+            if (DependencyUtils.isEnforcedPlatform(module)) {
                 directExtension.add(d);
             }
         }
@@ -255,6 +271,7 @@ public class QuarkusModelBuilder implements ParameterizedToolingModelBuilder<Mod
             boolean addChildExtension = true;
             boolean wasDependencyVisited = false;
             for (ResolvedArtifact artifact : d.getModuleArtifacts()) {
+
                 ModuleVersionIdentifier moduleIdentifier = artifact.getModuleVersion().getId();
                 ArtifactCoords key = toAppDependenciesKey(moduleIdentifier.getGroup(), moduleIdentifier.getName(),
                         artifact.getClassifier());
@@ -268,6 +285,7 @@ public class QuarkusModelBuilder implements ParameterizedToolingModelBuilder<Mod
                 }
 
                 wasDependencyVisited = true;
+
                 final org.gradle.api.artifacts.Dependency deploymentArtifact = getDeploymentArtifact(appDep);
                 if (deploymentArtifact != null) {
                     extensionDeps.add(deploymentArtifact);
@@ -351,11 +369,11 @@ public class QuarkusModelBuilder implements ParameterizedToolingModelBuilder<Mod
             final DependencyImpl dep = initDependency(a);
             if ((LaunchMode.DEVELOPMENT.equals(mode) || LaunchMode.TEST.equals(mode)) &&
                     a.getId().getComponentIdentifier() instanceof ProjectComponentIdentifier) {
-                IncludedBuild includedBuild = includedBuild(project, a.getName());
                 if ("test-fixtures".equals(a.getClassifier()) || "test".equals(a.getClassifier())) {
                     //TODO: test-fixtures are broken under the new ClassLoading model
                     dep.addPath(a.getFile());
                 } else {
+                    IncludedBuild includedBuild = DependencyUtils.includedBuild(project, a.getName());
                     if (includedBuild != null) {
                         addSubstitutedProject(dep, includedBuild.getProjectDir());
                     } else {
@@ -458,14 +476,6 @@ public class QuarkusModelBuilder implements ParameterizedToolingModelBuilder<Mod
                     }
                 }
             }
-        }
-    }
-
-    private IncludedBuild includedBuild(final Project project, final String projectName) {
-        try {
-            return project.getGradle().includedBuild(projectName);
-        } catch (UnknownDomainObjectException ignore) {
-            return null;
         }
     }
 

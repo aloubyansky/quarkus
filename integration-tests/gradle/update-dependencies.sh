@@ -37,8 +37,8 @@ echo ''
 set +o pipefail
 # note on sed: -deployment deps are added explicitly later and bom is upstream anyway
 ARTIFACT_IDS=$(grep -hR --include 'build*.gradle' --exclude-dir=build '[iI]mplementation' "${PRG_PATH}" | \
-              grep -Eo 'quarkus-[a-z0-9-]+' | \
-              sed -e '/-deployment/d' -e '/quarkus-bom/d' | sort | uniq)
+              grep -Eo ':quarkus-[a-z0-9-]+' | \
+              sed -e '/-deployment/d' -e '/quarkus-bom/d' -e 's/://' | sort | uniq)
 set -o pipefail
 if [ -z "${ARTIFACT_IDS}" ]
 then

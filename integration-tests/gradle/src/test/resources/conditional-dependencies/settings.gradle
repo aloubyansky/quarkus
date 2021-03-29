@@ -1,0 +1,35 @@
+pluginManagement {
+    repositories {
+        // in case a custom local repo is configured we are going to use that instead of the default mavenLocal()
+        if (System.properties.containsKey('maven.repo.local')) {
+            maven {
+                url System.properties.get('maven.repo.local')
+            }
+        } else {
+            mavenLocal()
+        }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+    plugins {
+        id 'io.quarkus' version "${quarkusPluginVersion}"
+    }
+}
+
+include 'ext-quarkus-a:runtime', 'ext-quarkus-a:deployment'
+include 'ext-quarkus-b:runtime', 'ext-quarkus-b:deployment'
+include 'ext-quarkus-c:runtime', 'ext-quarkus-c:deployment'
+include 'ext-quarkus-d:runtime', 'ext-quarkus-d:deployment'
+include 'ext-quarkus-e:runtime', 'ext-quarkus-e:deployment'
+include 'ext-quarkus-f:runtime', 'ext-quarkus-f:deployment'
+include 'ext-quarkus-g:runtime', 'ext-quarkus-g:deployment'
+include 'ext-quarkus-h:runtime', 'ext-quarkus-h:deployment'
+include 'ext-quarkus-i:runtime', 'ext-quarkus-i:deployment'
+include 'ext-quarkus-j:runtime', 'ext-quarkus-j:deployment'
+include 'ext-quarkus-k:runtime', 'ext-quarkus-k:deployment'
+include 'ext-quarkus-l:runtime', 'ext-quarkus-l:deployment'
+include 'ext-quarkus-m:runtime', 'ext-quarkus-m:deployment'
+include 'ext-quarkus-n:runtime', 'ext-quarkus-n:deployment'
+include 'ext-quarkus-o:runtime', 'ext-quarkus-o:deployment'
+include 'ext-quarkus-p:runtime', 'ext-quarkus-p:deployment'
+include 'ext-quarkus-r:runtime', 'ext-quarkus-r:deployment'

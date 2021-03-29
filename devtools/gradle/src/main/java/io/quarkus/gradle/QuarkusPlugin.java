@@ -31,6 +31,7 @@ import org.gradle.tooling.provider.model.ToolingModelBuilderRegistry;
 import org.gradle.util.GradleVersion;
 
 import io.quarkus.gradle.builder.QuarkusModelBuilder;
+import io.quarkus.gradle.dependency.ConditionalDependenciesEnabler;
 import io.quarkus.gradle.extension.QuarkusPluginExtension;
 import io.quarkus.gradle.extension.SourceSetExtension;
 import io.quarkus.gradle.tasks.QuarkusAddExtension;
@@ -258,6 +259,10 @@ public class QuarkusPlugin implements Plugin<Project> {
     }
 
     private void afterEvaluate(Project project) {
+
+        ConditionalDependenciesEnabler c = new ConditionalDependenciesEnabler(project);
+        c.addConditionalDependencies();
+
         final HashSet<String> visited = new HashSet<>();
         ConfigurationContainer configurations = project.getConfigurations();
         configurations.getByName(JavaPlugin.COMPILE_CLASSPATH_CONFIGURATION_NAME)

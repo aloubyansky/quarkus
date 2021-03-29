@@ -1,0 +1,28 @@
+plugins {
+    id 'java'
+    id 'io.quarkus'
+}
+
+repositories {
+    if (System.properties.containsKey('maven.repo.local')) {
+        maven {
+            url System.properties.get('maven.repo.local')
+        }
+    } else {
+        mavenLocal()
+    }
+    mavenCentral()
+}
+
+dependencies {
+    implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
+
+    implementation 'io.quarkus:quarkus-resteasy'
+
+    implementation 'org.acme:ext-quarkus-f:1.0-SNAPSHOT'
+    implementation 'org.acme:ext-quarkus-l:1.0-SNAPSHOT'
+    implementation 'org.acme:ext-quarkus-m:1.0-SNAPSHOT'
+
+    testImplementation 'io.quarkus:quarkus-junit5'
+    testImplementation 'io.rest-assured:rest-assured'
+}
