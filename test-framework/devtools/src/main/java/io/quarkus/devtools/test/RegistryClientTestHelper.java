@@ -34,9 +34,9 @@ public class RegistryClientTestHelper {
     }
 
     public static void enableRegistryClientTestConfig(Path outputDir, Properties properties) {
-        final Path toolsConfigPath = outputDir.resolve(RegistriesConfigLocator.CONFIG_RELATIVE_PATH);
+        final Path toolsConfigPath = outputDir.resolve(".quarkus").resolve("config.yaml"); //RegistriesConfigLocator.CONFIG_RELATIVE_PATH);
         final Path registryRepoPath = outputDir.resolve("test-registry-repo");
-        final Path groupIdDir = registryRepoPath.resolve("io/quarkus/registry/test");
+        final Path groupIdDir = registryRepoPath.resolve("io").resolve("quarkus").resolve("registry").resolve("test");
 
         generateToolsConfig(toolsConfigPath, registryRepoPath);
         generateRegistryDescriptor(groupIdDir);
