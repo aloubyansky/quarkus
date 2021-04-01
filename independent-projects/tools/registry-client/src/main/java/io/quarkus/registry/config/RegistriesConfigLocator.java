@@ -48,6 +48,7 @@ public class RegistriesConfigLocator {
     public static RegistriesConfig resolveConfig() {
         final Path configYaml = locateConfigYaml();
         if (configYaml == null) {
+            System.out.println("RegistryConfigLocator.resolveConfig NONE FOUND");
             return completeRequiredConfig(new JsonRegistriesConfig());
         }
         return load(configYaml);
@@ -60,6 +61,7 @@ public class RegistriesConfigLocator {
      * @return deserialized registry client configuration
      */
     public static RegistriesConfig load(Path configYaml) {
+        System.out.println("RegistryConfigLocator.load " + configYaml);
         try {
             return completeRequiredConfig(RegistriesConfigMapperHelper.deserialize(configYaml, JsonRegistriesConfig.class));
         } catch (IOException e) {
