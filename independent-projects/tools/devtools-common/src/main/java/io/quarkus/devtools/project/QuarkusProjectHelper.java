@@ -52,9 +52,13 @@ public class QuarkusProjectHelper {
         // TODO remove this method once the default registry becomes available
         final ExtensionCatalogResolver catalogResolver = getCatalogResolver();
         try {
-            return catalogResolver.hasRegistries() ? catalogResolver.resolveExtensionCatalog(quarkusVersion)
-                    : ToolsUtils.resolvePlatformDescriptorDirectly(null, null, quarkusVersion, artifactResolver(),
-                            messageWriter());
+            if (catalogResolver.hasRegistries()) {
+                return quarkusVersion == null ? catalogResolver.resolveExtensionCatalog()
+                        : catalogResolver.resolveExtensionCatalog(quarkusVersion);
+            } else {
+                return ToolsUtils.resolvePlatformDescriptorDirectly(null, null, quarkusVersion, artifactResolver(),
+                        messageWriter());
+            }
         } catch (Exception e) {
             throw new RuntimeException("Failed to resolve the Quarkus extension catalog", e);
         }

@@ -46,7 +46,9 @@ import org.gradle.api.tasks.SourceSet;
 import org.gradle.tooling.provider.model.ParameterizedToolingModelBuilder;
 
 import io.quarkus.bootstrap.BootstrapConstants;
-import io.quarkus.bootstrap.model.AppArtifactKey;
+import io.quarkus.bootstrap.model.AppArtifactCoords;
+import io.quarkus.bootstrap.model.PlatformReleases;
+import io.quarkus.bootstrap.resolver.AppModelResolverException;
 import io.quarkus.bootstrap.resolver.model.ArtifactCoords;
 import io.quarkus.bootstrap.resolver.model.Dependency;
 import io.quarkus.bootstrap.resolver.model.ModelParameter;
@@ -132,15 +134,13 @@ public class QuarkusModelBuilder implements ParameterizedToolingModelBuilder<Mod
         final Configuration boms = project.getConfigurations()
                 .detachedConfiguration(deploymentDeps.toArray(new org.gradle.api.artifacts.Dependency[0]));
         final Map<String, String> platformProps = new HashMap<>();
-        final Set<AppArtifactKey> descriptorKeys = new HashSet<>(4);
-        final Set<AppArtifactKey> propertyKeys = new HashSet<>(2);
+        final PlatformReleases platformReleases = new PlatformReleases();
         boms.getResolutionStrategy().eachDependency(d -> {
             final String group = d.getTarget().getGroup();
             final String name = d.getTarget().getName();
             if (name.endsWith(BootstrapConstants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX)) {
-                descriptorKeys.add(new AppArtifactKey(group,
-                        name.substring(0, name.length() - BootstrapConstants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX.length()),
-                        d.getTarget().getVersion()));
+                platformReleases.addPlatformDescriptor(group, name, d.getTarget().getVersion(), "json",
+                        d.getTarget().getVersion());
             } else if (name.endsWith(BootstrapConstants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX)) {
                 final DefaultDependencyArtifact dep = new DefaultDependencyArtifact();
                 dep.setExtension("properties");
@@ -150,6 +150,9 @@ public class QuarkusModelBuilder implements ParameterizedToolingModelBuilder<Mod
                 final DefaultExternalModuleDependency gradleDep = new DefaultExternalModuleDependency(
                         group, name, d.getTarget().getVersion(), null);
                 gradleDep.addArtifact(dep);
+
+                final String bomArtifactId = name.substring(0,
+                        name.length() - BootstrapConstants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX.length());
 
                 for (ResolvedArtifact a : project.getConfigurations().detachedConfiguration(gradleDep)
                         .getResolvedConfiguration().getResolvedArtifacts()) {
@@ -163,33 +166,27 @@ public class QuarkusModelBuilder implements ParameterizedToolingModelBuilder<Mod
                         for (Map.Entry<?, ?> prop : props.entrySet()) {
                             final String propName = String.valueOf(prop.getKey());
                             if (propName.startsWith(BootstrapConstants.PLATFORM_PROPERTY_PREFIX)) {
-                                platformProps.put(propName, String.valueOf(prop.getValue()));
+                                if (PlatformReleases.isPlatformReleaseInfo(propName)) {
+                                    platformReleases.addPlatformRelease(propName, String.valueOf(prop.getValue()));
+                                } else {
+                                    platformProps.put(propName, String.valueOf(prop.getValue()));
+                                }
                             }
                         }
                         break;
                     }
                 }
-                propertyKeys.add(new AppArtifactKey(group,
-                        name.substring(0, name.length() - BootstrapConstants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX.length()),
-                        d.getTarget().getVersion()));
+                final AppArtifactCoords bomCoords = new AppArtifactCoords(group, bomArtifactId, null, "pom",
+                        d.getTarget().getVersion());
+                platformReleases.addPlatformProperties(group, name, null, "properties", d.getTarget().getVersion());
             }
 
         });
         boms.getResolvedConfiguration();
-        if (!descriptorKeys.containsAll(propertyKeys)) {
-            final StringBuilder buf = new StringBuilder();
-            buf.append(
-                    "The Quarkus platform properties applied to the project are missing the corresponding Quarkus platform BOM imports:");
-            final int l = buf.length();
-            for (AppArtifactKey key : propertyKeys) {
-                if (!descriptorKeys.contains(key)) {
-                    if (l - buf.length() < 0) {
-                        buf.append(',');
-                    }
-                    buf.append(' ').append(key);
-                }
-            }
-            throw new GradleException(buf.toString());
+        try {
+            platformReleases.assertAligned();
+        } catch (AppModelResolverException e) {
+            throw new GradleException("Failed to create the Quarkus Application Model: " + e.getMessage(), e);
         }
         return platformProps;
     }

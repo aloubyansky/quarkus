@@ -7,6 +7,7 @@ import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.model.AppDependency;
 import io.quarkus.bootstrap.model.AppModel;
 import io.quarkus.bootstrap.model.PathsCollection;
+import io.quarkus.bootstrap.model.PlatformReleases;
 import io.quarkus.bootstrap.resolver.maven.BuildDependencyGraphVisitor;
 import io.quarkus.bootstrap.resolver.maven.DeploymentInjectingDependencyVisitor;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
@@ -268,19 +269,16 @@ public class BootstrapAppModelResolver implements AppModelResolver {
 
     private void collectPlatformProperties(AppModel.Builder appBuilder, List<Dependency> managedDeps)
             throws AppModelResolverException {
-        final Set<AppArtifactKey> descriptorKeys = new HashSet<>(4);
-        final Set<AppArtifactKey> propertyKeys = new HashSet<>(2);
         final Map<String, String> collectedProps = new HashMap<String, String>();
+        final PlatformReleases platformReleases = new PlatformReleases();
         for (Dependency d : managedDeps) {
             final Artifact artifact = d.getArtifact();
             final String extension = artifact.getExtension();
             final String artifactId = artifact.getArtifactId();
             if ("json".equals(extension)
                     && artifactId.endsWith(BootstrapConstants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX)) {
-                descriptorKeys.add(new AppArtifactKey(artifact.getGroupId(),
-                        artifactId.substring(0,
-                                artifactId.length() - BootstrapConstants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX.length()),
-                        artifact.getVersion()));
+                platformReleases.addPlatformDescriptor(artifact.getGroupId(), artifactId, artifact.getClassifier(), extension,
+                        artifact.getVersion());
             } else if ("properties".equals(artifact.getExtension())
                     && artifactId.endsWith(BootstrapConstants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX)) {
                 final Path propsPath = mvn.resolve(artifact).getArtifact().getFile().toPath();
@@ -290,33 +288,24 @@ public class BootstrapAppModelResolver implements AppModelResolver {
                 } catch (IOException e) {
                     throw new AppModelResolverException("Failed to read properties from " + propsPath, e);
                 }
+                final String bomArtifactId = artifactId.substring(0,
+                        artifactId.length() - BootstrapConstants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX.length());
                 for (Map.Entry<?, ?> prop : props.entrySet()) {
                     final String name = String.valueOf(prop.getKey());
                     if (name.startsWith(BootstrapConstants.PLATFORM_PROPERTY_PREFIX)) {
-                        collectedProps.putIfAbsent(prop.getKey().toString(), prop.getValue().toString());
+                        if (PlatformReleases.isPlatformReleaseInfo(name)) {
+                            platformReleases.addPlatformRelease(name, String.valueOf(prop.getValue()));
+                        } else {
+                            collectedProps.putIfAbsent(name, String.valueOf(prop.getValue().toString()));
+                        }
                     }
                 }
-                propertyKeys.add(new AppArtifactKey(artifact.getGroupId(),
-                        artifactId.substring(0,
-                                artifactId.length() - BootstrapConstants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX.length()),
-                        artifact.getVersion()));
+                platformReleases.addPlatformProperties(artifact.getGroupId(), artifactId, artifact.getClassifier(), extension,
+                        artifact.getVersion());
             }
         }
-        if (!descriptorKeys.containsAll(propertyKeys)) {
-            final StringBuilder buf = new StringBuilder();
-            buf.append(
-                    "The Quarkus platform properties applied to the project are missing the corresponding Quarkus platform BOM imports:");
-            final int l = buf.length();
-            for (AppArtifactKey key : propertyKeys) {
-                if (!descriptorKeys.contains(key)) {
-                    if (l - buf.length() < 0) {
-                        buf.append(',');
-                    }
-                    buf.append(' ').append(key);
-                }
-            }
-            throw new AppModelResolverException(buf.toString());
-        }
+
+        platformReleases.assertAligned();
         appBuilder.addPlatformProperties(collectedProps);
     }
 

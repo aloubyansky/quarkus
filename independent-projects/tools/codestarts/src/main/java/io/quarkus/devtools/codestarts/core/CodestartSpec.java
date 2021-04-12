@@ -85,20 +85,23 @@ public final class CodestartSpec {
         private final Map<String, Object> data;
         private final Map<String, Object> sharedData;
         private final List<CodestartDep> dependencies;
+        private final List<CodestartDep> boms;
         private final List<CodestartDep> testDependencies;
 
         public LanguageSpec() {
-            this(null, null, null, null);
+            this(null, null, null, null, null);
         }
 
         @JsonCreator
         public LanguageSpec(@JsonProperty("data") Map<String, Object> data,
                 @JsonProperty("shared-data") Map<String, Object> sharedData,
                 @JsonProperty("dependencies") List<CodestartDep> dependencies,
+                @JsonProperty("boms") List<CodestartDep> boms,
                 @JsonProperty("test-dependencies") List<CodestartDep> testDependencies) {
             this.data = data != null ? data : Collections.emptyMap();
             this.sharedData = sharedData != null ? sharedData : Collections.emptyMap();
             this.dependencies = dependencies != null ? dependencies : Collections.emptyList();
+            this.boms = boms != null ? boms : Collections.emptyList();
             this.testDependencies = testDependencies != null ? testDependencies : Collections.emptyList();
         }
 
@@ -112,6 +115,10 @@ public final class CodestartSpec {
 
         public List<CodestartDep> getDependencies() {
             return dependencies;
+        }
+
+        public List<CodestartDep> getBoms() {
+            return boms;
         }
 
         public List<CodestartDep> getTestDependencies() {
