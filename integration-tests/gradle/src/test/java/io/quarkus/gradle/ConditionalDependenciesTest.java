@@ -56,6 +56,12 @@ public class ConditionalDependenciesTest extends QuarkusGradleWrapperTestBase {
                 ":ext-quarkus-p:deployment:publishToMavenLocal");
         runGradleWrapper(dependencyProject, ":ext-quarkus-r:runtime:publishToMavenLocal",
                 ":ext-quarkus-r:deployment:publishToMavenLocal");
+        runGradleWrapper(dependencyProject, ":ext-quarkus-s:runtime:publishToMavenLocal",
+                ":ext-quarkus-s:deployment:publishToMavenLocal");
+        runGradleWrapper(dependencyProject, ":ext-quarkus-t:runtime:publishToMavenLocal",
+                ":ext-quarkus-t:deployment:publishToMavenLocal");
+        runGradleWrapper(dependencyProject, ":ext-quarkus-u:runtime:publishToMavenLocal",
+                ":ext-quarkus-u:deployment:publishToMavenLocal");
     }
 
     @Test
@@ -114,10 +120,10 @@ public class ConditionalDependenciesTest extends QuarkusGradleWrapperTestBase {
     @Order(5)
     public void scenarioTwo() throws Exception {
 
-        // F -> G -> H?(I,J) -> K
+        // F -> G -> H?(I,J) -> K -> T
         // L -> J -> P?(O)
-        // M -> N?(G) -> I -> O?(H)
-        // M -> R?(I)
+        // M -> N?(K) -> I -> O?(H)
+        // M -> R?(I) -> S?(T) -> U
 
         final File projectDir = getProjectDir("conditional-test-project");
 
@@ -138,6 +144,9 @@ public class ConditionalDependenciesTest extends QuarkusGradleWrapperTestBase {
         assertThat(mainLib.resolve("org.acme.ext-quarkus-o-1.0-SNAPSHOT.jar")).exists();
         assertThat(mainLib.resolve("org.acme.ext-quarkus-p-1.0-SNAPSHOT.jar")).exists();
         assertThat(mainLib.resolve("org.acme.ext-quarkus-r-1.0-SNAPSHOT.jar")).exists();
+        assertThat(mainLib.resolve("org.acme.ext-quarkus-s-1.0-SNAPSHOT.jar")).exists();
+        assertThat(mainLib.resolve("org.acme.ext-quarkus-t-1.0-SNAPSHOT.jar")).exists();
+        assertThat(mainLib.resolve("org.acme.ext-quarkus-u-1.0-SNAPSHOT.jar")).exists();
 
         final Path deploymentLib = buildDir.toPath().resolve("quarkus-app").resolve("lib").resolve("deployment");
         assertThat(deploymentLib.resolve("org.acme.ext-quarkus-f-deployment-1.0-SNAPSHOT.jar")).exists();
@@ -152,5 +161,8 @@ public class ConditionalDependenciesTest extends QuarkusGradleWrapperTestBase {
         assertThat(deploymentLib.resolve("org.acme.ext-quarkus-o-deployment-1.0-SNAPSHOT.jar")).exists();
         assertThat(deploymentLib.resolve("org.acme.ext-quarkus-p-deployment-1.0-SNAPSHOT.jar")).exists();
         assertThat(deploymentLib.resolve("org.acme.ext-quarkus-r-deployment-1.0-SNAPSHOT.jar")).exists();
+        assertThat(deploymentLib.resolve("org.acme.ext-quarkus-s-deployment-1.0-SNAPSHOT.jar")).exists();
+        assertThat(deploymentLib.resolve("org.acme.ext-quarkus-t-deployment-1.0-SNAPSHOT.jar")).exists();
+        assertThat(deploymentLib.resolve("org.acme.ext-quarkus-u-deployment-1.0-SNAPSHOT.jar")).exists();
     }
 }

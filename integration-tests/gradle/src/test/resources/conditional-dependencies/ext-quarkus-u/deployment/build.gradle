@@ -6,15 +6,14 @@ plugins {
 dependencies {
     implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
     implementation 'io.quarkus:quarkus-core-deployment'
-    implementation project(':ext-quarkus-k:runtime')
-    implementation project(':ext-quarkus-t:deployment')
+    implementation project(':ext-quarkus-u:runtime')
 }
 
 publishing {
     publications {
         mavenJave(MavenPublication) {
             groupId = 'org.acme'
-            artifactId = 'ext-quarkus-k-deployment'
+            artifactId = 'ext-quarkus-u-deployment'
             version = '1.0-SNAPSHOT'
 
             from components.java
