@@ -1,11 +1,12 @@
 package io.quarkus.bootstrap.model;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 
-public class PlatformInfo {
+public class PlatformInfo implements Serializable {
 
     private final String key;
     private final List<PlatformStreamInfo> streams = new ArrayList<>(1); // most of the time there will be only one

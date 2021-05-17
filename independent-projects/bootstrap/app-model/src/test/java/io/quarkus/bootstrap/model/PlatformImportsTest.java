@@ -38,7 +38,7 @@ public class PlatformImportsTest {
         props.setRelease(new PlatformReleaseInfo("io.playground", "1.1", "1",
                 "io.playground:playground-bom::pom:1.1.1,io.playground:acme-bom::pom:2.2.2,io.playground:foo-bom::pom:3.3.3"));
 
-        final PlatformReleases pi = new PlatformReleases();
+        final PlatformImports pi = new PlatformImports();
         props.importRelease(pi);
 
         final PlatformInfo platform = pi.getPlatform("io.playground");
@@ -78,7 +78,7 @@ public class PlatformImportsTest {
         member2.setRelease(new PlatformReleaseInfo("io.playground", "1.1", "2",
                 "io.playground:playground-bom::pom:1.1.2,io.playground:acme-bom::pom:2.2.3,io.playground:foo-bom::pom:3.3.3"));
 
-        final PlatformReleases pi = new PlatformReleases();
+        final PlatformImports pi = new PlatformImports();
         member1.importRelease(pi);
         member2.importRelease(pi);
 
@@ -133,7 +133,7 @@ public class PlatformImportsTest {
             props.setProperty(name, value);
         }
 
-        private void importRelease(PlatformReleases pi) throws IOException {
+        private void importRelease(PlatformImports pi) throws IOException {
             try (BufferedWriter w = Files.newBufferedWriter(path)) {
                 props.store(w, "test playground platform props");
             }
@@ -142,7 +142,7 @@ public class PlatformImportsTest {
                 props.load(reader);
             }
             for (Map.Entry<?, ?> prop : props.entrySet()) {
-                if (PlatformReleases.isPlatformReleaseInfo(prop.getKey().toString())) {
+                if (PlatformImports.isPlatformReleaseInfo(prop.getKey().toString())) {
                     pi.addPlatformRelease(prop.getKey().toString(), prop.getValue().toString());
                 }
             }

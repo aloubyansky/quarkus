@@ -1,5 +1,6 @@
 package io.quarkus.bootstrap.model;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -7,7 +8,7 @@ import java.util.List;
  * Platform release info that is encoded into a property in a platform properties artifact
  * following the format {@code platform.release-info@<platform-key>$<stream>#<version>=<bom-coords>(,<bom-coords>)}
  */
-public class PlatformReleaseInfo {
+public class PlatformReleaseInfo implements Serializable {
 
     private final String platformKey;
     private final String stream;
@@ -63,9 +64,9 @@ public class PlatformReleaseInfo {
 
     String getPropertyName() {
         final StringBuilder buf = new StringBuilder();
-        buf.append(PlatformReleases.PROPERTY_PREFIX).append(platformKey).append(PlatformReleases.PLATFORM_KEY_STREAM_SEPARATOR)
+        buf.append(PlatformImports.PROPERTY_PREFIX).append(platformKey).append(PlatformImports.PLATFORM_KEY_STREAM_SEPARATOR)
                 .append(stream)
-                .append(PlatformReleases.STREAM_VERSION_SEPARATOR).append(version);
+                .append(PlatformImports.STREAM_VERSION_SEPARATOR).append(version);
         return buf.toString();
     }
 

@@ -1,5 +1,6 @@
 package io.quarkus.bootstrap.model;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -7,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
-public class PlatformStreamInfo {
+public class PlatformStreamInfo implements Serializable {
 
     private final String id;
     private final Map<String, PlatformReleaseInfo> releases = new HashMap<>();

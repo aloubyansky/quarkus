@@ -4,14 +4,19 @@ import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.Serializable;
 import java.io.StringWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
-public class PlatformReleases {
+public class PlatformImports implements Serializable {
 
     static final String PROPERTY_PREFIX = "platform.release-info@";
 
@@ -37,7 +42,9 @@ public class PlatformReleases {
 
     private final Map<AppArtifactCoords, PlatformImport> platformImports = new HashMap<>();
 
-    public PlatformReleases() {
+    final Map<String, String> collectedProps = new HashMap<String, String>();
+
+    public PlatformImports() {
     }
 
     public void addPlatformRelease(String propertyName, String propertyValue) {
@@ -61,7 +68,8 @@ public class PlatformReleases {
         platformImports.computeIfAbsent(bomCoords, c -> new PlatformImport()).descriptorFound = true;
     }
 
-    public void addPlatformProperties(String groupId, String artifactId, String classifier, String type, String version) {
+    public void addPlatformProperties(String groupId, String artifactId, String classifier, String type, String version,
+            Path propsPath) throws AppModelResolverException {
         final AppArtifactCoords bomCoords = new AppArtifactCoords(groupId,
                 artifactId.substring(0,
                         artifactId.length() - BootstrapConstants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX.length()),
@@ -69,6 +77,31 @@ public class PlatformReleases {
                 version);
         platformImports.computeIfAbsent(bomCoords, c -> new PlatformImport());
         importedPlatformBoms.computeIfAbsent(groupId, g -> new ArrayList<>()).add(bomCoords);
+
+        final Properties props = new Properties();
+        try (InputStream is = Files.newInputStream(propsPath)) {
+            props.load(is);
+        } catch (IOException e) {
+            throw new AppModelResolverException("Failed to read properties from " + propsPath, e);
+        }
+        for (Map.Entry<?, ?> prop : props.entrySet()) {
+            final String name = String.valueOf(prop.getKey());
+            if (name.startsWith(BootstrapConstants.PLATFORM_PROPERTY_PREFIX)) {
+                if (PlatformImports.isPlatformReleaseInfo(name)) {
+                    addPlatformRelease(name, String.valueOf(prop.getValue()));
+                } else {
+                    collectedProps.putIfAbsent(name, String.valueOf(prop.getValue().toString()));
+                }
+            }
+        }
+    }
+
+    protected void setPlatformProperties(Map<String, String> platformProps) {
+        this.collectedProps.putAll(platformProps);
+    }
+
+    public Map<String, String> getPlatformProperties() {
+        return collectedProps;
     }
 
     public void assertAligned() throws AppModelResolverException {

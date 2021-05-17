@@ -158,14 +158,11 @@ public class QuarkusModelHelper {
                     new AppArtifactKey(coords.getGroupId(), coords.getArtifactId(), null, coords.getType()));
         }
 
-        if (!model.getPlatformProperties().isEmpty()) {
-            appBuilder.addPlatformProperties(model.getPlatformProperties());
-        }
-
         appBuilder.addRuntimeDeps(userDeps)
                 .addFullDeploymentDeps(fullDeploymentDeps)
                 .addDeploymentDeps(deploymentDeps)
-                .setAppArtifact(appArtifact);
+                .setAppArtifact(appArtifact)
+                .setPlatformImports(model.getPlatformImports());
         return appBuilder.build();
     }
 

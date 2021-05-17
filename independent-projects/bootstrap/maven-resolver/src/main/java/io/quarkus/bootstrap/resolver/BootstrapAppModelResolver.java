@@ -7,23 +7,17 @@ import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.model.AppDependency;
 import io.quarkus.bootstrap.model.AppModel;
 import io.quarkus.bootstrap.model.PathsCollection;
-import io.quarkus.bootstrap.model.PlatformReleases;
+import io.quarkus.bootstrap.model.PlatformImports;
 import io.quarkus.bootstrap.resolver.maven.BuildDependencyGraphVisitor;
 import io.quarkus.bootstrap.resolver.maven.DeploymentInjectingDependencyVisitor;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.SimpleDependencyGraphTransformationContext;
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Properties;
 import java.util.Set;
 import java.util.function.Consumer;
 import org.eclipse.aether.RepositoryException;
@@ -269,8 +263,7 @@ public class BootstrapAppModelResolver implements AppModelResolver {
 
     private void collectPlatformProperties(AppModel.Builder appBuilder, List<Dependency> managedDeps)
             throws AppModelResolverException {
-        final Map<String, String> collectedProps = new HashMap<String, String>();
-        final PlatformReleases platformReleases = new PlatformReleases();
+        final PlatformImports platformReleases = new PlatformImports();
         for (Dependency d : managedDeps) {
             final Artifact artifact = d.getArtifact();
             final String extension = artifact.getExtension();
@@ -281,32 +274,12 @@ public class BootstrapAppModelResolver implements AppModelResolver {
                         artifact.getVersion());
             } else if ("properties".equals(artifact.getExtension())
                     && artifactId.endsWith(BootstrapConstants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX)) {
-                final Path propsPath = mvn.resolve(artifact).getArtifact().getFile().toPath();
-                final Properties props = new Properties();
-                try (InputStream is = Files.newInputStream(propsPath)) {
-                    props.load(is);
-                } catch (IOException e) {
-                    throw new AppModelResolverException("Failed to read properties from " + propsPath, e);
-                }
-                final String bomArtifactId = artifactId.substring(0,
-                        artifactId.length() - BootstrapConstants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX.length());
-                for (Map.Entry<?, ?> prop : props.entrySet()) {
-                    final String name = String.valueOf(prop.getKey());
-                    if (name.startsWith(BootstrapConstants.PLATFORM_PROPERTY_PREFIX)) {
-                        if (PlatformReleases.isPlatformReleaseInfo(name)) {
-                            platformReleases.addPlatformRelease(name, String.valueOf(prop.getValue()));
-                        } else {
-                            collectedProps.putIfAbsent(name, String.valueOf(prop.getValue().toString()));
-                        }
-                    }
-                }
                 platformReleases.addPlatformProperties(artifact.getGroupId(), artifactId, artifact.getClassifier(), extension,
-                        artifact.getVersion());
+                        artifact.getVersion(), mvn.resolve(artifact).getArtifact().getFile().toPath());
             }
         }
-
         platformReleases.assertAligned();
-        appBuilder.addPlatformProperties(collectedProps);
+        appBuilder.setPlatformImports(platformReleases);
     }
 
     @Override
