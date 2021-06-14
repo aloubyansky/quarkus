@@ -390,13 +390,71 @@ public class ExtensionCatalogResolver {
         return appendNonPlatformExtensions(registriesByQuarkusCore, extensionCatalogs);
     }
 
+    public ExtensionCatalog resolveExtensionCatalog(String platformKey, String streamId) throws RegistryResolutionException {
+
+        final int registriesTotal = registries.size();
+        if (registriesTotal == 0) {
+            throw new RegistryResolutionException("No registries configured");
+        }
+
+        final List<ExtensionCatalog> catalogs = new ArrayList<>();
+        final ElementCatalogBuilder<ExtensionCatalog> catalogBuilder = ElementCatalogBuilder.newInstance();
+
+        PlatformStream stream = null;
+        RegistryExtensionResolver registry = null;
+        for (RegistryExtensionResolver qer : registries) {
+            final PlatformCatalog platforms = qer.resolvePlatformCatalog();
+            if (platforms == null) {
+                continue;
+            }
+            final Platform platform = platforms.getPlatform(platformKey);
+            if (platform == null) {
+                continue;
+            }
+            stream = platform.getStream(streamId);
+            registry = qer;
+            break;
+        }
+        if (stream == null) {
+            throw new RegistryResolutionException("Platform " + platformKey + " does not support stream " + streamId);
+        }
+
+        final PlatformRelease release = stream.getRecommendedRelease();
+        final UnionBuilder<ExtensionCatalog> union = catalogBuilder.getOrCreateUnion(PlatformStackIndex.initial());
+        for (ArtifactCoords bom : release.getMemberBoms()) {
+            final ExtensionCatalog ec = registry.resolvePlatformExtensions(bom);
+            catalogs.add(ec);
+            final MemberBuilder<ExtensionCatalog> builder = union.getOrCreateMember(
+                    ec.getBom().getGroupId() + ":" + ec.getBom().getArtifactId(), ec.getBom().getVersion(), ec);
+            ec.getExtensions()
+                    .forEach(e -> builder
+                            .addElement(e.getArtifact().getGroupId() + ":" + e.getArtifact().getArtifactId()));
+        }
+
+        final Map<String, List<RegistryExtensionResolver>> registriesByQuarkusCore = new HashMap<>(2);
+        registriesByQuarkusCore.put(release.getQuarkusCoreVersion(),
+                getRegistriesForQuarkusVersion(release.getQuarkusCoreVersion()));
+        final String upstreamQuarkusVersion = release.getUpstreamQuarkusCoreVersion();
+        if (upstreamQuarkusVersion != null && !registriesByQuarkusCore.containsKey(upstreamQuarkusVersion)) {
+            registriesByQuarkusCore.put(upstreamQuarkusVersion,
+                    getRegistriesForQuarkusVersion(upstreamQuarkusVersion));
+        }
+
+        final ExtensionCatalog catalog = appendNonPlatformExtensions(registriesByQuarkusCore, catalogs);
+        final ElementCatalog<ExtensionCatalog> elements = catalogBuilder.build();
+        if (!elements.isEmpty()) {
+            catalog.getMetadata().put("element-catalog", elements);
+        }
+        return catalog;
+    }
+
     public ExtensionCatalog resolveExtensionCatalog(List<ArtifactCoords> platforms)
             throws RegistryResolutionException {
         if (platforms.isEmpty()) {
             return resolveExtensionCatalog();
         }
         final List<ExtensionCatalog> catalogs = new ArrayList<>(platforms.size() + registries.size());
-        Map<String, List<RegistryExtensionResolver>> registriesByQuarkusCore = new HashMap<>(2);
+        final Map<String, List<RegistryExtensionResolver>> registriesByQuarkusCore = new HashMap<>(2);
         String quarkusVersion = null;
         for (ArtifactCoords bom : platforms) {
             final List<RegistryExtensionResolver> registries;
