@@ -36,6 +36,7 @@ public final class CapabilityBuildItem extends MultiBuildItem {
     @Deprecated
     public CapabilityBuildItem(String name) {
         this(name, "<unknown>");
+        new Exception("DEPRECATED CTOR " + name).printStackTrace();
     }
 
     /**
