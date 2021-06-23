@@ -313,6 +313,11 @@ public class AppModel implements Serializable {
         }
 
         public AppModel build() {
+            System.out.println("AppModelbuild " + appArtifact);
+            System.out.println("RUNTIME");
+            this.runtimeDeps.forEach(d -> System.out.println(" - " + d.getArtifact() + " " + d.getArtifact().getPaths()));
+            System.out.println("DEPLOYMENT");
+            this.deploymentDeps.forEach(d -> System.out.println(" - " + d.getArtifact() + " " + d.getArtifact().getPaths()));
             return new AppModel(this);
         }
     }
