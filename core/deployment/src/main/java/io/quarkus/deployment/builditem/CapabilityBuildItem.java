@@ -1,7 +1,11 @@
 package io.quarkus.deployment.builditem;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Enumeration;
 import java.util.Objects;
 
@@ -53,6 +57,24 @@ public final class CapabilityBuildItem extends MultiBuildItem {
         } catch (IOException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
+        }
+
+        if ("kogito-processes".equals(name)) {
+            final Path p = Paths.get(
+                    "/home/runner/work/kogito-runtimes/kogito-runtimes/kiegroup_kogito_runtimes/kogito-quarkus-parent/kogito-quarkus-processes-extension/kogito-quarkus-processes-deployment/src/main/java/org/kie/kogito/quarkus/processes/deployment/ProcessesAssetsProcessor.java");
+            if (Files.exists(p)) {
+                try (BufferedReader reader = Files.newBufferedReader(p)) {
+                    String line = reader.readLine();
+                    while (line != null) {
+                        System.out.println(line);
+                        line = reader.readLine();
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            } else {
+                System.out.println("DOES NOT EXIST " + p);
+            }
         }
     }
 
