@@ -1,7 +1,11 @@
 package io.quarkus.deployment.builditem;
 
+import java.io.IOException;
+import java.net.URL;
+import java.util.Enumeration;
 import java.util.Objects;
 
+import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.builder.item.MultiBuildItem;
 import io.quarkus.deployment.Capabilities;
 import io.quarkus.deployment.Capability;
@@ -37,6 +41,19 @@ public final class CapabilityBuildItem extends MultiBuildItem {
     public CapabilityBuildItem(String name) {
         this(name, "<unknown>");
         new Exception("DEPRECATED CTOR " + name).printStackTrace();
+        System.out.println("CLASS RESOURCE: " + Thread.currentThread().getContextClassLoader()
+                .getResource("org/kie/kogito/quarkus/processes/deployment/ProcessesAssetsProcessor.class"));
+        try {
+            Enumeration<URL> resources = Thread.currentThread().getContextClassLoader()
+                    .getResources(BootstrapConstants.DESCRIPTOR_PATH);
+            while (resources.hasMoreElements()) {
+                System.out.println(" - " + resources.nextElement());
+            }
+
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
     }
 
     /**
