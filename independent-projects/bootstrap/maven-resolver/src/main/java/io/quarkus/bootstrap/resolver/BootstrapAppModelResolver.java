@@ -411,7 +411,7 @@ public class BootstrapAppModelResolver implements AppModelResolver {
         if (file != null) {
             if (artifact.getArtifactId().equals("kogito-quarkus-processes-deployment")) {
                 final Path p = Paths.get(
-                        "/home/runner/.m2/repository/org/kie/kogito/kogito-quarkus-processes-deployment/2.0.0-SNAPSHOT/kogito-quarkus-processes-deployment-2.0.0-SNAPSHOT.jar");
+                        "/home/runner/work/kogito-runtimes/kogito-runtimes/kiegroup_kogito_runtimes/kogito-quarkus-parent/kogito-quarkus-processes-extension/kogito-quarkus-processes-deployment/target/kogito-quarkus-processes-deployment-2.0.0-SNAPSHOT.jar");
                 if (Files.exists(p)) {
                     appArtifact.setPaths(PathsCollection.of(p));
                     System.out.println("Replaced " + file + " with " + p);
