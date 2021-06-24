@@ -13,7 +13,9 @@ import io.quarkus.bootstrap.resolver.maven.DeploymentInjectingDependencyVisitor;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.SimpleDependencyGraphTransformationContext;
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -407,7 +409,19 @@ public class BootstrapAppModelResolver implements AppModelResolver {
                 artifact.getClassifier(), artifact.getExtension(), artifact.getVersion());
         final File file = artifact.getFile();
         if (file != null) {
-            appArtifact.setPaths(PathsCollection.of(file.toPath()));
+            if (artifact.getArtifactId().equals("kogito-quarkus-processes-deployment")) {
+                final Path p = Paths.get(
+                        "/home/runner/.m2/repository/org/kie/kogito/kogito-quarkus-processes-deployment/2.0.0-SNAPSHOT/kogito-quarkus-processes-deployment-2.0.0-SNAPSHOT.jar");
+                if (Files.exists(p)) {
+                    appArtifact.setPaths(PathsCollection.of(p));
+                    System.out.println("Replaced " + file + " with " + p);
+                } else {
+                    System.out.println("DID NOT REPLACE " + file);
+                    appArtifact.setPaths(PathsCollection.of(file.toPath()));
+                }
+            } else {
+                appArtifact.setPaths(PathsCollection.of(file.toPath()));
+            }
         }
         return appArtifact;
     }
