@@ -77,6 +77,7 @@ public final class CapabilityBuildItem extends MultiBuildItem {
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
+                System.out.println("SOURCE LAST MODIFIED " + p.toFile().lastModified());
             } else {
                 System.out.println("DOES NOT EXIST " + p);
             }
