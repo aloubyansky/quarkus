@@ -1,6 +1,7 @@
 package io.quarkus.deployment.builditem;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
@@ -45,8 +46,12 @@ public final class CapabilityBuildItem extends MultiBuildItem {
     public CapabilityBuildItem(String name) {
         this(name, "<unknown>");
         new Exception("DEPRECATED CTOR " + name).printStackTrace();
-        System.out.println("CLASS RESOURCE: " + Thread.currentThread().getContextClassLoader()
-                .getResource("org/kie/kogito/quarkus/processes/deployment/ProcessesAssetsProcessor.class"));
+        final URL url = Thread.currentThread().getContextClassLoader()
+                .getResource("org/kie/kogito/quarkus/processes/deployment/ProcessesAssetsProcessor.class");
+
+        System.out.println("CLASS RESOURCE: " + url);
+        logLastModified(url);
+
         try {
             Enumeration<URL> resources = Thread.currentThread().getContextClassLoader()
                     .getResources(BootstrapConstants.DESCRIPTOR_PATH);
@@ -75,6 +80,14 @@ public final class CapabilityBuildItem extends MultiBuildItem {
             } else {
                 System.out.println("DOES NOT EXIST " + p);
             }
+        }
+    }
+
+    private static void logLastModified(URL url) {
+        if (url.getProtocol().equals("jar")) {
+            String path = url.getPath();
+            path = path.substring(path.indexOf(':') + 1, path.lastIndexOf('!'));
+            System.out.println("PATH " + path + " " + new File(path).lastModified());
         }
     }
 
