@@ -236,6 +236,8 @@ public class BootstrapAppModelResolver implements AppModelResolver {
                     final Artifact artifact = result.getArtifact();
                     if (artifact != null) {
                         result.getRequest().getDependencyNode().setArtifact(artifact);
+                        System.out.println("APP MODEL DEP " + artifact + " "
+                                + (result.getRepository() == null ? "unknown" : result.getRepository().getId()));
                     }
                 }
                 final List<DependencyNode> deploymentDepNodes = buildDepsVisitor.getDeploymentNodes();

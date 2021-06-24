@@ -1,16 +1,8 @@
 package io.quarkus.deployment.builditem;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.IOException;
 import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.Enumeration;
 import java.util.Objects;
 
-import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.builder.item.MultiBuildItem;
 import io.quarkus.deployment.Capabilities;
 import io.quarkus.deployment.Capability;
@@ -48,48 +40,7 @@ public final class CapabilityBuildItem extends MultiBuildItem {
         new Exception("DEPRECATED CTOR " + name).printStackTrace();
         final URL url = Thread.currentThread().getContextClassLoader()
                 .getResource("org/kie/kogito/quarkus/processes/deployment/ProcessesAssetsProcessor.class");
-
         System.out.println("CLASS RESOURCE: " + url);
-        logLastModified(url);
-
-        try {
-            Enumeration<URL> resources = Thread.currentThread().getContextClassLoader()
-                    .getResources(BootstrapConstants.DESCRIPTOR_PATH);
-            while (resources.hasMoreElements()) {
-                System.out.println(" - " + resources.nextElement());
-            }
-
-        } catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        }
-
-        if ("kogito-processes".equals(name)) {
-            final Path p = Paths.get(
-                    "/home/runner/work/kogito-runtimes/kogito-runtimes/kiegroup_kogito_runtimes/kogito-quarkus-parent/kogito-quarkus-processes-extension/kogito-quarkus-processes-deployment/src/main/java/org/kie/kogito/quarkus/processes/deployment/ProcessesAssetsProcessor.java");
-            if (Files.exists(p)) {
-                try (BufferedReader reader = Files.newBufferedReader(p)) {
-                    String line = reader.readLine();
-                    while (line != null) {
-                        System.out.println(line);
-                        line = reader.readLine();
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                System.out.println("SOURCE LAST MODIFIED " + p.toFile().lastModified());
-            } else {
-                System.out.println("DOES NOT EXIST " + p);
-            }
-        }
-    }
-
-    private static void logLastModified(URL url) {
-        if (url.getProtocol().equals("jar")) {
-            String path = url.getPath();
-            path = path.substring(path.indexOf(':') + 1, path.lastIndexOf('!'));
-            System.out.println("PATH " + path + " " + new File(path).lastModified());
-        }
     }
 
     /**
