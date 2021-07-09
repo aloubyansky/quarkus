@@ -16,7 +16,7 @@ public class RegistryClientMixin {
     final static boolean VALIDATE = !Boolean.parseBoolean(System.getenv("REGISTRY_CLIENT_TEST"));
 
     @CommandLine.Option(names = { "--registry-client" }, description = "Use the Quarkus extension catalog", negatable = true)
-    boolean useRegistryClient = false;
+    boolean useRegistryClient = true;
 
     public boolean enabled() {
         return useRegistryClient;
