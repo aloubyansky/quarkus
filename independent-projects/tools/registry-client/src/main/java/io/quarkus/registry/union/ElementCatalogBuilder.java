@@ -344,17 +344,19 @@ public class ElementCatalogBuilder<M> {
         }
     }
 
-    public static <T> List<T> getMembersForElements(ElementCatalog<T> elementCatalog, Collection<String> elementKeys) {
+    public static <T> List<T> getMembersForElements(List<ElementCatalog<T>> elementCatalogs, Collection<String> elementKeys) {
         final Map<UnionVersion, Map<Object, Member<T>>> unionVersions = new TreeMap<>(UnionVersion::compareTo);
         for (Object elementKey : elementKeys) {
-            final Element<T> e = elementCatalog.get(elementKey);
-            if (e == null) {
-                throw new RuntimeException(
-                        "Element " + elementKey + " not found in the catalog " + elementCatalog.elementKeys());
-            }
-            for (Member<T> m : e.members()) {
-                for (Union<T> u : m.unions()) {
-                    unionVersions.computeIfAbsent(u.version(), v -> new IdentityHashMap<>()).put(m, m);
+            for (ElementCatalog<T> elementCatalog : elementCatalogs) {
+                final Element<T> e = elementCatalog.get(elementKey);
+                if (e == null) {
+                    throw new RuntimeException(
+                            "Element " + elementKey + " not found in the catalog " + elementCatalog.elementKeys());
+                }
+                for (Member<T> m : e.members()) {
+                    for (Union<T> u : m.unions()) {
+                        unionVersions.computeIfAbsent(u.version(), v -> new IdentityHashMap<>()).put(m, m);
+                    }
                 }
             }
         }
@@ -380,24 +382,22 @@ public class ElementCatalogBuilder<M> {
                         .addElement(e.getArtifact().getGroupId() + ":" + e.getArtifact().getArtifactId()));
     }
 
-    public static void setElementCatalog(ExtensionCatalog extCatalog, ElementCatalog<?> elemCatalog) {
-        if (!elemCatalog.isEmpty()) {
-            // TODO it's a hack to attach the "element" catalog to the extension catalog
-            Map<String, Object> metadata = extCatalog.getMetadata();
-            if (metadata.isEmpty()) {
-                metadata = new HashMap<>(1);
-                ((JsonExtensionCatalog) extCatalog).setMetadata(metadata);
-            }
-            metadata.put("element-catalog", elemCatalog);
+    public static void setElementCatalogs(ExtensionCatalog extCatalog, List<ElementCatalog<ExtensionCatalog>> elemCatalogs) {
+        // TODO it's a hack to attach the "element" catalog to the extension catalog
+        Map<String, Object> metadata = extCatalog.getMetadata();
+        if (metadata.isEmpty()) {
+            metadata = new HashMap<>(1);
+            ((JsonExtensionCatalog) extCatalog).setMetadata(metadata);
         }
+        metadata.put("element-catalogs", elemCatalogs);
     }
 
-    public static boolean hasElementCatalog(ExtensionCatalog extCatalog) {
-        return extCatalog.getMetadata().containsKey("element-catalog");
+    public static boolean hasElementCatalogs(ExtensionCatalog extCatalog) {
+        return extCatalog.getMetadata().containsKey("element-catalogs");
     }
 
     @SuppressWarnings({ "unchecked" })
-    public static <T> ElementCatalog<T> getElementCatalog(ExtensionCatalog extCatalog, Class<T> t) {
-        return (ElementCatalog<T>) extCatalog.getMetadata().get("element-catalog");
+    public static <T> List<ElementCatalog<T>> getElementCatalogs(ExtensionCatalog extCatalog) {
+        return (List<ElementCatalog<T>>) extCatalog.getMetadata().get("element-catalogs");
     }
 }

@@ -162,7 +162,7 @@ public class ToolsUtils {
                         ElementCatalogBuilder.addUnionMember(union, memberCatalog);
                     }
                     catalog = JsonCatalogMerger.merge(catalogs);
-                    ElementCatalogBuilder.setElementCatalog(catalog, elementsBuilder.build());
+                    ElementCatalogBuilder.setElementCatalogs(catalog, Collections.singletonList(elementsBuilder.build()));
                 }
             }
         }

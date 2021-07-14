@@ -11,6 +11,7 @@ import io.quarkus.registry.catalog.PlatformCatalog;
 import io.quarkus.registry.catalog.PlatformRelease;
 import io.quarkus.registry.catalog.PlatformStream;
 import io.quarkus.registry.catalog.json.JsonCatalogMerger;
+import io.quarkus.registry.catalog.json.JsonExtensionCatalog;
 import io.quarkus.registry.catalog.json.JsonPlatformCatalog;
 import io.quarkus.registry.client.RegistryClientFactory;
 import io.quarkus.registry.client.maven.MavenRegistryClientFactory;
@@ -19,22 +20,20 @@ import io.quarkus.registry.client.spi.RegistryClientFactoryProvider;
 import io.quarkus.registry.config.RegistriesConfig;
 import io.quarkus.registry.config.RegistriesConfigLocator;
 import io.quarkus.registry.config.RegistryConfig;
+import io.quarkus.registry.union.ElementCatalog;
 import io.quarkus.registry.union.ElementCatalogBuilder;
 import io.quarkus.registry.union.ElementCatalogBuilder.UnionBuilder;
 import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
@@ -283,19 +282,69 @@ public class ExtensionCatalogResolver {
         }
     }
 
+    private class ExtensionCatalogBuilder {
+        final List<ExtensionCatalog> catalogs = new ArrayList<>();
+        final Map<String, List<RegistryExtensionResolver>> registriesByQuarkusCore = new HashMap<>();
+        private final Map<String, ElementCatalogBuilder<ExtensionCatalog>> catalogBuilders = new HashMap<>();
+        private final Map<String, Integer> compatibilityCodes = new HashMap<>();
+
+        ElementCatalogBuilder<ExtensionCatalog> getRegistryCatalog(String registryId) {
+            return catalogBuilders.computeIfAbsent(registryId, id -> ElementCatalogBuilder.newInstance());
+        }
+
+        List<RegistryExtensionResolver> getRegistriesForQuarkusCore(String quarkusVersion) {
+            return registriesByQuarkusCore.computeIfAbsent(quarkusVersion, v -> getRegistriesForQuarkusVersion(v));
+        }
+
+        public int getCompatiblityCode(String quarkusVersion, String upstreamQuarkusVersion) {
+            Integer i = compatibilityCodes.get(quarkusVersion);
+            if (i == null) {
+                if (upstreamQuarkusVersion != null) {
+                    i = compatibilityCodes.get(upstreamQuarkusVersion);
+                    if (i == null) {
+                        i = compatibilityCodes.size();
+                        compatibilityCodes.put(upstreamQuarkusVersion, i);
+                    }
+                }
+                compatibilityCodes.put(quarkusVersion, i);
+            }
+            return i;
+        }
+
+        ExtensionCatalog build() {
+            final ExtensionCatalog catalog = JsonCatalogMerger.merge(catalogs);
+            final List<ElementCatalog<ExtensionCatalog>> catalogs = new ArrayList<>(catalogBuilders.size());
+            for (RegistryExtensionResolver r : registries) {
+                final ElementCatalogBuilder<ExtensionCatalog> cb = catalogBuilders.get(r.getId());
+                if (cb == null) {
+                    continue;
+                }
+                final ElementCatalog<ExtensionCatalog> ec = cb.build();
+                if (!ec.isEmpty()) {
+                    catalogs.add(ec);
+                }
+            }
+            if (!catalogs.isEmpty()) {
+                ElementCatalogBuilder.setElementCatalogs(catalog, catalogs);
+            }
+            return catalog;
+        }
+    }
+
     public ExtensionCatalog resolveExtensionCatalog() throws RegistryResolutionException {
 
         ensureRegistriesConfigured();
 
-        final List<ExtensionCatalog> catalogs = new ArrayList<>();
-        final ElementCatalogBuilder<ExtensionCatalog> catalogBuilder = ElementCatalogBuilder.newInstance();
+        final ExtensionCatalogBuilder catalogBuilder = new ExtensionCatalogBuilder();
 
         int platformIndex = 0;
-        for (RegistryExtensionResolver registry : registries) {
+        for (int registryIndex = 0; registryIndex < registries.size(); ++registryIndex) {
+            RegistryExtensionResolver registry = registries.get(registryIndex);
             final PlatformCatalog pc = registry.resolvePlatformCatalog();
             if (pc == null) {
                 continue;
             }
+            final ElementCatalogBuilder<ExtensionCatalog> elemCatalog = catalogBuilder.getRegistryCatalog(registry.getId());
             for (Platform platform : pc.getPlatforms()) {
                 platformIndex++;
                 int streamIndex = 0;
@@ -304,39 +353,47 @@ public class ExtensionCatalogResolver {
                     int releaseIndex = 0;
                     for (PlatformRelease release : stream.getReleases()) {
                         releaseIndex++;
-                        final UnionBuilder<ExtensionCatalog> union = catalogBuilder
+                        final int compatiblityCode = catalogBuilder
+                                .getCompatiblityCode(release.getQuarkusCoreVersion(),
+                                        release.getUpstreamQuarkusCoreVersion());
+
+                        final UnionBuilder<ExtensionCatalog> union = elemCatalog
                                 .getOrCreateUnion(new PlatformStackIndex(platformIndex, streamIndex, releaseIndex));
+                        int memberIndex = 0;
                         for (ArtifactCoords bom : release.getMemberBoms()) {
+                            memberIndex++;
                             final ExtensionCatalog ec = registry.resolvePlatformExtensions(bom);
                             if (ec != null) {
-                                catalogs.add(ec);
+                                Map<String, Object> metadata = ec.getMetadata();
+                                if (metadata.isEmpty()) {
+                                    metadata = new HashMap<>();
+                                    ((JsonExtensionCatalog) ec).setMetadata(metadata);
+                                }
+
+                                final OriginPreference originPref = new OriginPreference(registryIndex, platformIndex,
+                                        releaseIndex, memberIndex, compatiblityCode);
+
+                                metadata.put("origin-preference", originPref);
+                                catalogBuilder.catalogs.add(ec);
                                 ElementCatalogBuilder.addUnionMember(union, ec);
                             } else {
                                 log.warn("Failed to resolve extension catalog for %s from registry %s", bom, registry.getId());
                             }
                         }
 
-                        final Map<String, List<RegistryExtensionResolver>> registriesByQuarkusCore = new HashMap<>(2);
-                        registriesByQuarkusCore.put(release.getQuarkusCoreVersion(),
-                                getRegistriesForQuarkusVersion(release.getQuarkusCoreVersion()));
-                        final String upstreamQuarkusVersion = release.getUpstreamQuarkusCoreVersion();
-                        if (upstreamQuarkusVersion != null && !registriesByQuarkusCore.containsKey(upstreamQuarkusVersion)) {
-                            registriesByQuarkusCore.put(upstreamQuarkusVersion,
-                                    getRegistriesForQuarkusVersion(upstreamQuarkusVersion));
+                        appendNonPlatformExtensions(catalogBuilder, release.getQuarkusCoreVersion(), union);
+                        if (release.getUpstreamQuarkusCoreVersion() != null) {
+                            appendNonPlatformExtensions(catalogBuilder, release.getUpstreamQuarkusCoreVersion(), union);
                         }
-                        appendNonPlatformExtensions(registriesByQuarkusCore, union, catalogs);
                     }
                 }
             }
         }
 
-        final ExtensionCatalog catalog = JsonCatalogMerger.merge(catalogs);
-        ElementCatalogBuilder.setElementCatalog(catalog, catalogBuilder.build());
-        return catalog;
+        return catalogBuilder.build();
     }
 
     public ExtensionCatalog resolveExtensionCatalog(String quarkusCoreVersion) throws RegistryResolutionException {
-
         if (quarkusCoreVersion == null) {
             return resolveExtensionCatalog();
         }
@@ -345,33 +402,25 @@ public class ExtensionCatalogResolver {
         if (registriesTotal == 0) {
             throw new RegistryResolutionException("No registries configured");
         }
-        final Map<String, List<RegistryExtensionResolver>> registriesByQuarkusCore = new LinkedHashMap<>(registriesTotal);
-        final ElementCatalogBuilder<ExtensionCatalog> catalogBuilder = ElementCatalogBuilder.newInstance();
 
-        // collect all the platform extensions from all the registries compatible with the given quarkus core version
-        final List<ExtensionCatalog> extensionCatalogs = new ArrayList<>();
-        final Deque<String> upstreamQuarkusVersions = new ArrayDeque<>(1);
+        final ExtensionCatalogBuilder catalogBuilder = new ExtensionCatalogBuilder();
+        final List<String> upstreamQuarkusVersions = new ArrayList<>(1);
 
         final AtomicInteger platformIndex = new AtomicInteger();
-        collectPlatforms(quarkusCoreVersion, registriesByQuarkusCore, upstreamQuarkusVersions, extensionCatalogs,
-                platformIndex, catalogBuilder);
+        collectPlatforms(quarkusCoreVersion, catalogBuilder, upstreamQuarkusVersions, platformIndex);
 
-        while (!upstreamQuarkusVersions.isEmpty()) {
-            collectPlatforms(upstreamQuarkusVersions.removeFirst(),
-                    registriesByQuarkusCore, upstreamQuarkusVersions, extensionCatalogs, platformIndex, catalogBuilder);
+        int i = 0;
+        while (i < upstreamQuarkusVersions.size()) {
+            collectPlatforms(upstreamQuarkusVersions.get(i++), catalogBuilder, upstreamQuarkusVersions, platformIndex);
         }
-
-        final ExtensionCatalog catalog = JsonCatalogMerger.merge(extensionCatalogs);
-        ElementCatalogBuilder.setElementCatalog(catalog, catalogBuilder.build());
-        return catalog;
+        return catalogBuilder.build();
     }
 
     public ExtensionCatalog resolveExtensionCatalog(StreamCoords streamCoords) throws RegistryResolutionException {
 
         ensureRegistriesConfigured();
 
-        final List<ExtensionCatalog> catalogs = new ArrayList<>();
-        final ElementCatalogBuilder<ExtensionCatalog> catalogBuilder = ElementCatalogBuilder.newInstance();
+        final ExtensionCatalogBuilder catalogBuilder = new ExtensionCatalogBuilder();
 
         final String platformKey = streamCoords.getPlatformKey();
         final String streamId = streamCoords.getStreamId();
@@ -441,32 +490,24 @@ public class ExtensionCatalogResolver {
             throw new RegistryResolutionException(buf.toString());
         }
 
-        final Map<String, List<RegistryExtensionResolver>> registriesByQuarkusCore = new HashMap<>(2);
-
+        final ElementCatalogBuilder<ExtensionCatalog> elemBuilder = catalogBuilder.getRegistryCatalog(registry.getId());
         int releaseIndex = 0;
         for (PlatformRelease release : stream.getReleases()) {
-            final UnionBuilder<ExtensionCatalog> union = catalogBuilder
+            final UnionBuilder<ExtensionCatalog> union = elemBuilder
                     .getOrCreateUnion(new PlatformStackIndex(0, 0, releaseIndex++));
             for (ArtifactCoords bom : release.getMemberBoms()) {
                 final ExtensionCatalog ec = registry.resolvePlatformExtensions(bom);
-                catalogs.add(ec);
+                catalogBuilder.catalogs.add(ec);
                 ElementCatalogBuilder.addUnionMember(union, ec);
             }
 
-            registriesByQuarkusCore.put(release.getQuarkusCoreVersion(),
-                    getRegistriesForQuarkusVersion(release.getQuarkusCoreVersion()));
-            final String upstreamQuarkusVersion = release.getUpstreamQuarkusCoreVersion();
-            if (upstreamQuarkusVersion != null && !registriesByQuarkusCore.containsKey(upstreamQuarkusVersion)) {
-                registriesByQuarkusCore.put(upstreamQuarkusVersion,
-                        getRegistriesForQuarkusVersion(upstreamQuarkusVersion));
+            appendNonPlatformExtensions(catalogBuilder, release.getQuarkusCoreVersion(), union);
+            if (release.getUpstreamQuarkusCoreVersion() != null) {
+                appendNonPlatformExtensions(catalogBuilder, release.getUpstreamQuarkusCoreVersion(), union);
             }
-
-            appendNonPlatformExtensions(registriesByQuarkusCore, union, catalogs);
         }
 
-        final ExtensionCatalog catalog = JsonCatalogMerger.merge(catalogs);
-        ElementCatalogBuilder.setElementCatalog(catalog, catalogBuilder.build());
-        return catalog;
+        return catalogBuilder.build();
     }
 
     public ExtensionCatalog resolveExtensionCatalog(Collection<ArtifactCoords> platforms)
@@ -474,8 +515,9 @@ public class ExtensionCatalogResolver {
         if (platforms.isEmpty()) {
             return resolveExtensionCatalog();
         }
-        final List<ExtensionCatalog> catalogs = new ArrayList<>(platforms.size() + registries.size());
-        Map<String, List<RegistryExtensionResolver>> registriesByQuarkusCore = new HashMap<>(2);
+
+        final ExtensionCatalogBuilder catalogBuilder = new ExtensionCatalogBuilder();
+
         String quarkusVersion = null;
         for (ArtifactCoords bom : platforms) {
             final List<RegistryExtensionResolver> registries;
@@ -495,20 +537,18 @@ public class ExtensionCatalogResolver {
 
             final ExtensionCatalog catalog = resolvePlatformExtensions(bom, registries);
             if (catalog != null) {
-                catalogs.add(catalog);
+                catalogBuilder.catalogs.add(catalog);
                 if (quarkusVersion == null) {
                     quarkusVersion = catalog.getQuarkusCoreVersion();
-                    registriesByQuarkusCore.put(quarkusVersion, getRegistriesForQuarkusVersion(quarkusVersion));
                 }
-                final String upstreamQuarkusVersion = catalog.getUpstreamQuarkusCoreVersion();
-                if (upstreamQuarkusVersion != null && !registriesByQuarkusCore.containsKey(upstreamQuarkusVersion)) {
-                    registriesByQuarkusCore.put(upstreamQuarkusVersion,
-                            getRegistriesForQuarkusVersion(upstreamQuarkusVersion));
+                appendNonPlatformExtensions(catalogBuilder, quarkusVersion, null);
+
+                if (catalog.getUpstreamQuarkusCoreVersion() != null) {
+                    appendNonPlatformExtensions(catalogBuilder, catalog.getUpstreamQuarkusCoreVersion(), null);
                 }
             }
         }
-        appendNonPlatformExtensions(registriesByQuarkusCore, null, catalogs);
-        return JsonCatalogMerger.merge(catalogs);
+        return catalogBuilder.build();
     }
 
     public void clearRegistryCache() throws RegistryResolutionException {
@@ -546,35 +586,27 @@ public class ExtensionCatalogResolver {
     }
 
     private void appendNonPlatformExtensions(
-            Map<String, List<RegistryExtensionResolver>> registriesByQuarkusCore,
-            UnionBuilder<ExtensionCatalog> union,
-            List<ExtensionCatalog> extensionCatalogs) throws RegistryResolutionException {
-        for (Map.Entry<String, List<RegistryExtensionResolver>> quarkusVersionRegistries : registriesByQuarkusCore.entrySet()) {
-            for (RegistryExtensionResolver registry : quarkusVersionRegistries.getValue()) {
-                final ExtensionCatalog nonPlatformCatalog = registry
-                        .resolveNonPlatformExtensions(quarkusVersionRegistries.getKey());
-                if (nonPlatformCatalog != null) {
-                    extensionCatalogs.add(nonPlatformCatalog);
-                    if (union != null) {
-                        ElementCatalogBuilder.addUnionMember(union, nonPlatformCatalog);
-                    }
+            ExtensionCatalogBuilder catalogBuilder,
+            String quarkusVersion,
+            UnionBuilder<ExtensionCatalog> union) throws RegistryResolutionException {
+        for (RegistryExtensionResolver registry : catalogBuilder.getRegistriesForQuarkusCore(quarkusVersion)) {
+            final ExtensionCatalog nonPlatformCatalog = registry.resolveNonPlatformExtensions(quarkusVersion);
+            if (nonPlatformCatalog != null) {
+                catalogBuilder.catalogs.add(nonPlatformCatalog);
+                if (union != null) {
+                    ElementCatalogBuilder.addUnionMember(union, nonPlatformCatalog);
                 }
             }
         }
     }
 
     private void collectPlatforms(String quarkusCoreVersion,
-            Map<String, List<RegistryExtensionResolver>> registriesByQuarkusCore,
-            Deque<String> upstreamQuarkusVersions, List<ExtensionCatalog> extensionCatalogs,
-            AtomicInteger platformIndex, ElementCatalogBuilder<ExtensionCatalog> catalogBuilder)
+            ExtensionCatalogBuilder catalogBuilder,
+            Collection<String> upstreamQuarkusVersions,
+            AtomicInteger platformIndex)
             throws RegistryResolutionException {
-        List<RegistryExtensionResolver> quarkusVersionRegistries = registriesByQuarkusCore.get(quarkusCoreVersion);
-        if (quarkusVersionRegistries != null) {
-            return;
-        }
-
-        quarkusVersionRegistries = getRegistriesForQuarkusVersion(quarkusCoreVersion);
-        registriesByQuarkusCore.put(quarkusCoreVersion, quarkusVersionRegistries);
+        final List<RegistryExtensionResolver> quarkusVersionRegistries = catalogBuilder
+                .getRegistriesForQuarkusCore(quarkusCoreVersion);
 
         for (RegistryExtensionResolver registry : quarkusVersionRegistries) {
             final PlatformCatalog platformCatalog = registry.resolvePlatformCatalog(quarkusCoreVersion);
@@ -585,6 +617,7 @@ public class ExtensionCatalogResolver {
             if (platforms.isEmpty()) {
                 continue;
             }
+            final ElementCatalogBuilder<ExtensionCatalog> elemBuilder = catalogBuilder.getRegistryCatalog(registry.getId());
             for (Platform p : platforms) {
                 int streamIndex = 0;
                 for (PlatformStream s : p.getStreams()) {
@@ -592,23 +625,24 @@ public class ExtensionCatalogResolver {
                     int releaseIndex = 0;
                     for (PlatformRelease r : s.getReleases()) {
                         ++releaseIndex;
-                        final String upstreamQuarkusCoreVersion = r.getUpstreamQuarkusCoreVersion();
-                        if (upstreamQuarkusCoreVersion != null
-                                && !registriesByQuarkusCore.containsKey(upstreamQuarkusCoreVersion)) {
-                            upstreamQuarkusVersions.addLast(upstreamQuarkusCoreVersion);
-                        }
-                        final UnionBuilder<ExtensionCatalog> union = catalogBuilder
-                                .getOrCreateUnion(
-                                        new PlatformStackIndex(platformIndex.incrementAndGet(), streamIndex, releaseIndex));
+                        final UnionBuilder<ExtensionCatalog> union = elemBuilder.getOrCreateUnion(
+                                new PlatformStackIndex(platformIndex.incrementAndGet(), streamIndex, releaseIndex));
                         for (ArtifactCoords bom : r.getMemberBoms()) {
                             final ExtensionCatalog catalog = registry.resolvePlatformExtensions(bom);
                             if (catalog != null) {
-                                extensionCatalogs.add(catalog);
+                                catalogBuilder.catalogs.add(catalog);
                                 ElementCatalogBuilder.addUnionMember(union, catalog);
                             }
                         }
 
-                        appendNonPlatformExtensions(registriesByQuarkusCore, union, extensionCatalogs);
+                        appendNonPlatformExtensions(catalogBuilder, quarkusCoreVersion, union);
+                        final String upstreamQuarkusVersion = r.getUpstreamQuarkusCoreVersion();
+                        if (upstreamQuarkusVersion != null) {
+                            if (!upstreamQuarkusVersions.contains(upstreamQuarkusVersion)) {
+                                upstreamQuarkusVersions.add(upstreamQuarkusVersion);
+                            }
+                            appendNonPlatformExtensions(catalogBuilder, upstreamQuarkusVersion, union);
+                        }
                     }
                 }
             }

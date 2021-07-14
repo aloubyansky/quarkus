@@ -30,11 +30,14 @@ import io.quarkus.devtools.project.codegen.ProjectGenerator;
 import io.quarkus.devtools.project.extensions.Extensions;
 import io.quarkus.maven.ArtifactCoords;
 import io.quarkus.platform.tools.ToolsUtils;
+import io.quarkus.registry.ExtensionOrigins;
+import io.quarkus.registry.OriginCombination;
+import io.quarkus.registry.OriginPreference;
+import io.quarkus.registry.OriginSelector;
 import io.quarkus.registry.catalog.Extension;
 import io.quarkus.registry.catalog.ExtensionCatalog;
 import io.quarkus.registry.catalog.ExtensionOrigin;
 import io.quarkus.registry.catalog.json.JsonCatalogMerger;
-import io.quarkus.registry.union.ElementCatalog;
 import io.quarkus.registry.union.ElementCatalogBuilder;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -93,7 +96,7 @@ public class CreateProjectCommandHandler implements QuarkusCommandHandler {
                 }
                 platformBoms.add(c.getBom());
             }
-        } else if (ElementCatalogBuilder.hasElementCatalog(mainCatalog)) {
+        } else if (ElementCatalogBuilder.hasElementCatalogs(mainCatalog)) {
             final StringBuilder buf = new StringBuilder();
             buf.append(ERROR_ICON);
             buf.append(" Failed to determine a compatible Quarkus version for the requested extensions: ");
@@ -190,11 +193,17 @@ public class CreateProjectCommandHandler implements QuarkusCommandHandler {
 
     private List<ExtensionCatalog> getExtensionOrigins(ExtensionCatalog extensionCatalog, List<Extension> extensionsToAdd)
             throws QuarkusCommandException {
-        final ElementCatalog<ExtensionCatalog> ec = ElementCatalogBuilder.getElementCatalog(extensionCatalog,
-                ExtensionCatalog.class);
-        if (ec == null) {
+
+        final List<ExtensionOrigins> extOrigins = new ArrayList<>(extensionsToAdd.size());
+        for (Extension e : extensionsToAdd) {
+            addOrigins(extOrigins, e);
+        }
+
+        if (extOrigins.isEmpty()) {
+            // legacy 1.x or universe platform
             return Collections.emptyList();
         }
+
         // we add quarkus-core as a selected extension here only to include the quarkus-bom
         // in the list of platforms. quarkus-core won't be added to the generated POM though.
         final Optional<Extension> quarkusCore = extensionCatalog.getExtensions().stream()
@@ -202,16 +211,34 @@ public class CreateProjectCommandHandler implements QuarkusCommandHandler {
         if (!quarkusCore.isPresent()) {
             throw new QuarkusCommandException("Failed to locate quarkus-core in the extension catalog");
         }
-        final ArtifactCoords quarkusCoreCoords = quarkusCore.get().getArtifact();
-        final List<String> eKeys;
-        if (extensionsToAdd.isEmpty()) {
-            eKeys = Collections.singletonList(
-                    quarkusCoreCoords.getGroupId() + ":" + quarkusCoreCoords.getArtifactId());
-        } else {
-            eKeys = new ArrayList<>(extensionsToAdd.size() + 1);
-            eKeys.add(quarkusCoreCoords.getGroupId() + ":" + quarkusCoreCoords.getArtifactId());
-            extensionsToAdd.forEach(e -> eKeys.add(e.getArtifact().getGroupId() + ":" + e.getArtifact().getArtifactId()));
+        addOrigins(extOrigins, quarkusCore.get());
+
+        final OriginSelector os = new OriginSelector(extOrigins);
+        os.calculateCompatibleCombinations();
+
+        final OriginCombination recommendedCombination = os.getRecommendedCombination();
+        if (recommendedCombination == null) {
+            final StringBuilder buf = new StringBuilder();
+            buf.append("Failed to calculate a compatible combination of versions for the requested extensions: ");
+            buf.append(extensionsToAdd.get(0).getArtifact().getKey());
+            for (int i = 1; i < extensionsToAdd.size(); ++i) {
+                buf.append(", ").append(extensionsToAdd.get(i).getArtifact().getKey());
+            }
+            throw new QuarkusCommandException(buf.toString());
         }
-        return ElementCatalogBuilder.getMembersForElements(ec, eKeys);
+        return recommendedCombination.getSelectedOrigins().stream().map(o -> o.getCatalog()).collect(Collectors.toList());
+    }
+
+    public void addOrigins(final List<ExtensionOrigins> extOrigins, Extension e) {
+        final ExtensionOrigins.Builder eoBuilder = ExtensionOrigins.builder(e.getArtifact().getKey());
+        for (ExtensionOrigin o : e.getOrigins()) {
+            if (!(o instanceof ExtensionCatalog)) {
+                continue;
+            }
+            final ExtensionCatalog c = (ExtensionCatalog) o;
+            final OriginPreference op = (OriginPreference) c.getMetadata().get("origin-preference");
+            eoBuilder.addOrigin(c, op);
+        }
+        extOrigins.add(eoBuilder.build());
     }
 }

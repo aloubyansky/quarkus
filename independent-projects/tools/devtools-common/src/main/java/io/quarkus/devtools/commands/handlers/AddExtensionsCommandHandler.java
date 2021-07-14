@@ -102,27 +102,28 @@ public class AddExtensionsCommandHandler implements QuarkusCommandHandler {
         final String quarkusCore = catalog.getQuarkusCoreVersion();
         final Collection<ArtifactCoords> importedPlatforms = invocation.getQuarkusProject().getExtensionManager()
                 .getInstalledPlatforms();
-        ElementCatalog<ExtensionCatalog> elementCatalog = ElementCatalogBuilder.getElementCatalog(catalog,
-                ExtensionCatalog.class);
+        final List<ElementCatalog<ExtensionCatalog>> elementCatalogs = ElementCatalogBuilder.getElementCatalogs(catalog);
         Set<ArtifactCoords> preferredBoms = Collections.emptySet();
-        if (elementCatalog != null) {
-            final Collection<Union<ExtensionCatalog>> unions = elementCatalog.unions();
-            if (unions.size() > 1) {
-                for (Union<ExtensionCatalog> release : unions) {
-                    boolean preferredRelease = false;
-                    for (Member<ExtensionCatalog> m : release.members()) {
-                        if (m.getInstance().isPlatform() && importedPlatforms.contains(m.getInstance().getBom())) {
-                            if (preferredBoms.isEmpty()) {
-                                preferredBoms = new HashSet<>();
-                            }
-                            preferredRelease = true;
-                            break;
-                        }
-                    }
-                    if (preferredRelease) {
+        if (elementCatalogs != null) {
+            for (ElementCatalog<ExtensionCatalog> elementCatalog : elementCatalogs) {
+                final Collection<Union<ExtensionCatalog>> unions = elementCatalog.unions();
+                if (unions.size() > 1) {
+                    for (Union<ExtensionCatalog> release : unions) {
+                        boolean preferredRelease = false;
                         for (Member<ExtensionCatalog> m : release.members()) {
-                            if (m.getInstance().isPlatform()) {
-                                preferredBoms.add(m.getInstance().getBom());
+                            if (m.getInstance().isPlatform() && importedPlatforms.contains(m.getInstance().getBom())) {
+                                if (preferredBoms.isEmpty()) {
+                                    preferredBoms = new HashSet<>();
+                                }
+                                preferredRelease = true;
+                                break;
+                            }
+                        }
+                        if (preferredRelease) {
+                            for (Member<ExtensionCatalog> m : release.members()) {
+                                if (m.getInstance().isPlatform()) {
+                                    preferredBoms.add(m.getInstance().getBom());
+                                }
                             }
                         }
                     }
