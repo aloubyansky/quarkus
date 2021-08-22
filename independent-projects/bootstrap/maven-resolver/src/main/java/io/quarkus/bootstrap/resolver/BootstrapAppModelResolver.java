@@ -12,12 +12,16 @@ import io.quarkus.bootstrap.resolver.maven.BuildDependencyGraphVisitor;
 import io.quarkus.bootstrap.resolver.maven.DeploymentInjectingDependencyVisitor;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.SimpleDependencyGraphTransformationContext;
+import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.function.Consumer;
 import org.eclipse.aether.RepositoryException;
@@ -248,6 +252,17 @@ public class BootstrapAppModelResolver implements AppModelResolver {
         }
 
         collectPlatformProperties(appBuilder, managedDeps);
+
+        final LocalProject currentProject = mvn.getMavenContext().getCurrentProject();
+        if (currentProject != null) {
+            final Properties properties = currentProject.getProperties();
+            final Map<String, String> map = new HashMap<>(properties.size());
+            for (Map.Entry<?, ?> prop : properties.entrySet()) {
+                map.put(prop.getKey() == null ? null : prop.getKey().toString(),
+                        prop.getValue() == null ? null : prop.getValue().toString());
+            }
+            appBuilder.setBuildSystemProperties(map);
+        }
 
         //we need these to have a type of 'jar'
         //type is blank when loaded

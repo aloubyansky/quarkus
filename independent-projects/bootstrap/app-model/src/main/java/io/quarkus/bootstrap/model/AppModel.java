@@ -66,6 +66,8 @@ public class AppModel implements Serializable {
 
     private final Map<String, CapabilityContract> capabilitiesContracts;
 
+    private final Map<String, String> buildSystemProperties;
+
     private AppModel(Builder builder) {
         this.appArtifact = builder.appArtifact;
         this.runtimeDeps = builder.filter(builder.runtimeDeps);
@@ -77,6 +79,7 @@ public class AppModel implements Serializable {
         this.localProjectArtifacts = builder.localProjectArtifacts;
         this.platformImports = builder.platformImports;
         this.capabilitiesContracts = builder.capabilitiesContracts;
+        this.buildSystemProperties = builder.buildSystemProperties;
         log.debugf("Created AppModel %s", this);
     }
 
@@ -132,6 +135,10 @@ public class AppModel implements Serializable {
         return capabilitiesContracts;
     }
 
+    public Map<String, String> getBuildSystemProperties() {
+        return buildSystemProperties;
+    }
+
     @Override
     public String toString() {
         return "AppModel{" +
@@ -158,6 +165,7 @@ public class AppModel implements Serializable {
         private final Set<AppArtifactKey> localProjectArtifacts = new HashSet<>();
         private PlatformImports platformImports;
         private Map<String, CapabilityContract> capabilitiesContracts = Collections.emptyMap();
+        private Map<String, String> buildSystemProperties = Collections.emptyMap();
 
         private Predicate<AppDependency> depPredicate;
 
@@ -292,6 +300,11 @@ public class AppModel implements Serializable {
                     log.debugf("Extension %s is making %s a lesser priority artifact", extension, artifact);
                 }
             }
+        }
+
+        public Builder setBuildSystemProperties(Map<String, String> buildSystemProperties) {
+            this.buildSystemProperties = buildSystemProperties;
+            return this;
         }
 
         private Predicate<AppDependency> dependencyPredicate() {

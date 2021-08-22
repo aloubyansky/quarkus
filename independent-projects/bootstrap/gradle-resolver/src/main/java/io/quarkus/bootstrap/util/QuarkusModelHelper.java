@@ -166,7 +166,8 @@ public class QuarkusModelHelper {
                 .addFullDeploymentDeps(fullDeploymentDeps)
                 .addDeploymentDeps(deploymentDeps)
                 .setAppArtifact(appArtifact)
-                .setPlatformImports(model.getPlatformImports());
+                .setPlatformImports(model.getPlatformImports())
+                .setBuildSystemProperties(model.getProjectProperties());
         return appBuilder.build();
     }
 

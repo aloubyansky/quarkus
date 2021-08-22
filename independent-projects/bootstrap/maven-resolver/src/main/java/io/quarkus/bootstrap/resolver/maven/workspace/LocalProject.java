@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Properties;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.apache.maven.model.Build;
@@ -261,6 +262,10 @@ public class LocalProject {
 
     public Model getRawModel() {
         return rawModel;
+    }
+
+    public Properties getProperties() {
+        return modelBuildingResult == null ? rawModel.getProperties() : modelBuildingResult.getEffectiveModel().getProperties();
     }
 
     public LocalWorkspace getWorkspace() {

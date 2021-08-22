@@ -18,6 +18,7 @@ import org.apache.maven.model.Profile;
 import org.apache.maven.model.building.DefaultModelBuildingRequest;
 import org.apache.maven.model.building.ModelBuilder;
 import org.apache.maven.model.building.ModelBuildingRequest;
+import org.apache.maven.model.building.ModelBuildingResult;
 import org.apache.maven.model.building.ModelCache;
 import org.apache.maven.model.resolution.ModelResolver;
 import org.apache.maven.model.resolution.UnresolvableModelException;
@@ -56,6 +57,7 @@ public class WorkspaceLoader implements WorkspaceModelResolver {
     private final Map<Path, Model> rawModelCache = new HashMap<>();
     private final Map<Path, LocalProject> projectCache = new HashMap<>();
     private final Path currentProjectPom;
+    private final BootstrapMavenContext ctx;
     private Path workspaceRootPom;
 
     private ModelBuilder modelBuilder;
@@ -66,23 +68,28 @@ public class WorkspaceLoader implements WorkspaceModelResolver {
     private List<Profile> profiles;
 
     WorkspaceLoader(BootstrapMavenContext ctx, Path currentProjectPom) throws BootstrapMavenException {
-        if (ctx != null && ctx.isEffectiveModelBuilder()) {
-            modelBuilder = BootstrapModelBuilderFactory.getDefaultModelBuilder();
-            modelResolver = BootstrapModelResolver.newInstance(ctx, workspace);
-            modelCache = new BootstrapModelCache(ctx.getRepositorySystemSession());
-
-            profiles = ctx.getActiveSettingsProfiles();
-            final BootstrapMavenOptions cliOptions = ctx.getCliOptions();
-            activeProfileIds = new ArrayList<>(profiles.size() + cliOptions.getActiveProfileIds().size());
-            for (Profile p : profiles) {
-                activeProfileIds.add(p.getId());
-            }
-            activeProfileIds.addAll(cliOptions.getActiveProfileIds());
-            inactiveProfileIds = cliOptions.getInactiveProfileIds();
-        }
         workspace.setBootstrapMavenContext(ctx);
+        this.ctx = ctx;
+        if (ctx != null && ctx.isEffectiveModelBuilder()) {
+            initModelBuilder();
+        }
         this.currentProjectPom = isPom(currentProjectPom) ? currentProjectPom
                 : locateCurrentProjectPom(currentProjectPom, true);
+    }
+
+    private void initModelBuilder() throws BootstrapMavenException {
+        modelBuilder = BootstrapModelBuilderFactory.getDefaultModelBuilder();
+        modelResolver = BootstrapModelResolver.newInstance(ctx, workspace);
+        modelCache = new BootstrapModelCache(ctx.getRepositorySystemSession());
+
+        profiles = ctx.getActiveSettingsProfiles();
+        final BootstrapMavenOptions cliOptions = ctx.getCliOptions();
+        activeProfileIds = new ArrayList<>(profiles.size() + cliOptions.getActiveProfileIds().size());
+        for (Profile p : profiles) {
+            activeProfileIds.add(p.getId());
+        }
+        activeProfileIds.addAll(cliOptions.getActiveProfileIds());
+        inactiveProfileIds = cliOptions.getInactiveProfileIds();
     }
 
     private boolean isPom(Path p) {
@@ -106,27 +113,38 @@ public class WorkspaceLoader implements WorkspaceModelResolver {
         final Model cachedRawModel = rawModelCache.get(pomFile.getParent());
         final LocalProject project;
         if (modelBuilder != null) {
-            ModelBuildingRequest req = new DefaultModelBuildingRequest();
-            req.setPomFile(pomFile.toFile());
-            req.setModelResolver(modelResolver);
-            req.setSystemProperties(System.getProperties());
-            req.setUserProperties(System.getProperties());
-            req.setModelCache(modelCache);
-            req.setActiveProfileIds(activeProfileIds);
-            req.setInactiveProfileIds(inactiveProfileIds);
-            req.setProfiles(profiles);
-            req.setRawModel(cachedRawModel);
-            req.setWorkspaceModelResolver(this);
-            try {
-                project = new LocalProject(modelBuilder.build(req), workspace);
-            } catch (Exception e) {
-                throw new BootstrapMavenException("Failed to resolve the effective model for " + pomFile, e);
-            }
+            project = new LocalProject(buildModel(pomFile, cachedRawModel), workspace);
+        } else if (ctx != null && pomFile.equals(currentProjectPom)) {
+            // we want the current project to be fully interpolated
+            initModelBuilder();
+            project = new LocalProject(buildModel(pomFile, cachedRawModel), workspace);
+            modelBuilder = null;
         } else {
             project = new LocalProject(cachedRawModel == null ? readModel(pomFile) : cachedRawModel, workspace);
         }
         projectCache.put(pomFile.getParent(), project);
         return project;
+    }
+
+    private ModelBuildingResult buildModel(Path pomFile, final Model rawModel) throws BootstrapMavenException {
+        ModelBuildingRequest req = new DefaultModelBuildingRequest();
+        req.setPomFile(pomFile.toFile());
+        req.setModelResolver(modelResolver);
+        req.setSystemProperties(System.getProperties());
+        req.setUserProperties(System.getProperties());
+        req.setModelCache(modelCache);
+        req.setActiveProfileIds(activeProfileIds);
+        req.setInactiveProfileIds(inactiveProfileIds);
+        req.setProfiles(profiles);
+        req.setRawModel(rawModel);
+        req.setWorkspaceModelResolver(this);
+        final ModelBuildingResult modelBuildingResult;
+        try {
+            modelBuildingResult = modelBuilder.build(req);
+        } catch (Exception e) {
+            throw new BootstrapMavenException("Failed to resolve the effective model for " + pomFile, e);
+        }
+        return modelBuildingResult;
     }
 
     private Model rawModel(Path pomFile) throws BootstrapMavenException {
@@ -220,7 +238,7 @@ public class WorkspaceLoader implements WorkspaceModelResolver {
     public Model resolveEffectiveModel(String groupId, String artifactId, String versionConstraint)
             throws UnresolvableModelException {
         final LocalProject project = workspace.getProject(groupId, artifactId);
-        return project != null && project.getVersion().equals(versionConstraint)
+        return project != null && project.getModelBuildingResult() != null && project.getVersion().equals(versionConstraint)
                 ? project.getModelBuildingResult().getEffectiveModel()
                 : null;
     }

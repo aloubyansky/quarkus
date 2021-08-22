@@ -4,6 +4,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -127,13 +128,17 @@ public class QuarkusModelBuilder implements ParameterizedToolingModelBuilder<Mod
         ArtifactCoords appArtifactCoords = new ArtifactCoordsImpl(project.getGroup().toString(), project.getName(),
                 project.getVersion().toString());
 
+        final Map<String, String> projectProps = new HashMap<>(project.getProperties().size());
+        for (Map.Entry<String, ?> prop : project.getProperties().entrySet()) {
+            projectProps.put(prop.getKey(), prop.getValue() == null ? null : prop.getValue().toString());
+        }
         return new QuarkusModelImpl(
                 new WorkspaceImpl(appArtifactCoords, getWorkspace(project.getRootProject(), mode, appArtifactCoords)),
                 new ArrayList<>(appDependencies.values()),
                 extensionDependencies,
                 deploymentDeps.stream().map(QuarkusModelBuilder::toEnforcedPlatformDependency)
                         .filter(Objects::nonNull).collect(Collectors.toList()),
-                platformImports);
+                platformImports, projectProps);
     }
 
     private PlatformImports resolvePlatformImports(Project project,
