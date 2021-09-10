@@ -21,7 +21,6 @@ import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
 import org.gradle.api.initialization.IncludedBuild;
 import org.gradle.api.internal.artifacts.dependencies.DefaultDependencyArtifact;
 import org.gradle.api.internal.artifacts.dependencies.DefaultExternalModuleDependency;
-import org.gradle.api.plugins.AppliedPlugin;
 import org.gradle.api.plugins.Convention;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.plugins.JavaPluginConvention;
@@ -110,17 +109,6 @@ public class QuarkusModelBuilder implements ParameterizedToolingModelBuilder<Mod
 
     @Override
     public Object buildAll(String modelName, ModelParameter parameter, Project project) {
-
-        final AppliedPlugin appliedPlugin = project.getPluginManager().findPlugin("io.quarkus");
-        System.out.println("APPLIED PLUGIN: " + appliedPlugin.getId());
-
-        System.out.println("Quarkus plugin: " + QuarkusPlugin.class.getProtectionDomain().getCodeSource().getLocation());
-
-        //for (ResolvedArtifact plugin : project.getBuildscript().getConfigurations().getByName("classpath")
-        //        .getResolvedConfiguration().getResolvedArtifacts()) {
-        //    System.out.println("BUILDSCRIPT CP: " + plugin.getModuleVersion().getId().getGroup() + ":"
-        //            + plugin.getModuleVersion().getId().getName() + ":" + plugin.getModuleVersion().getId().getVersion());
-        //}
 
         LaunchMode mode = LaunchMode.valueOf(parameter.getMode());
 
