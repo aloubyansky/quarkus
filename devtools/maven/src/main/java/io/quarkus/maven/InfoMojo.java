@@ -3,19 +3,12 @@ package io.quarkus.maven;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.StringWriter;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import org.apache.maven.execution.MavenSession;
-import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Plugin;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -26,18 +19,22 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
-import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.impl.RemoteRepositoryManager;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.ArtifactDescriptorException;
 import org.eclipse.aether.resolution.ArtifactDescriptorRequest;
-import org.eclipse.aether.resolution.ArtifactRequest;
-import org.eclipse.aether.resolution.ArtifactResolutionException;
-import org.eclipse.aether.resolution.ArtifactResult;
 
-import io.quarkus.bootstrap.BootstrapConstants;
-import io.quarkus.registry.util.PlatformArtifacts;
+import io.quarkus.bootstrap.model.AppArtifact;
+import io.quarkus.bootstrap.model.AppArtifactCoords;
+import io.quarkus.bootstrap.model.AppArtifactKey;
+import io.quarkus.bootstrap.model.AppDependency;
+import io.quarkus.bootstrap.model.AppModel;
+import io.quarkus.bootstrap.model.PlatformImports;
+import io.quarkus.bootstrap.resolver.AppModelResolverException;
+import io.quarkus.bootstrap.resolver.BootstrapAppModelResolver;
+import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
+import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 
 /**
  * NOTE: this mojo is experimental
@@ -72,74 +69,21 @@ public class InfoMojo extends AbstractMojo {
             throw new MojoExecutionException("This goal requires a project");
         }
 
-        ArtifactCoords rhUniverseBom = null;
-        ArtifactCoords rhProdBom = null;
-        final List<ArtifactCoords> previousBomImports = new ArrayList<>();
-        for (Dependency d : project.getDependencyManagement().getDependencies()) {
-            if (!PlatformArtifacts.isCatalogArtifactId(d.getArtifactId())) {
-                continue;
-            }
-            final ArtifactCoords platformBomCoords = new ArtifactCoords(d.getGroupId(),
-                    PlatformArtifacts.ensureBomArtifactId(d.getArtifactId()), "pom", d.getVersion());
-            if (d.getArtifactId().startsWith("quarkus-universe-bom-")) {
-                // in pre-2.x quarkus versions, the quarkus-bom descriptor would show up as a
-                // parent of the quarkus-universe-bom one
-                // even if it was not actually imported, so here we simply remove it, if it was
-                // found
-                previousBomImports.remove(new ArtifactCoords(platformBomCoords.getGroupId(), "quarkus-bom", "pom",
-                        platformBomCoords.getVersion()));
+        final AppModel appModel = resolveAppModel();
 
-                if (platformBomCoords.getVersion().contains("-redhat-")) {
-                    rhUniverseBom = platformBomCoords;
-                } else if (rhUniverseBom != null && platformBomCoords.getVersion().regionMatches(0,
-                        rhUniverseBom.getVersion(), 0,
-                        rhUniverseBom.getVersion().length() - 1 - rhUniverseBom.getVersion().indexOf("-redhat-"))) {
-                    continue;
-                }
-            } else if (d.getArtifactId().startsWith("quarkus-product-bom-")) {
-                // rhbq 1.x filtering
-                rhProdBom = platformBomCoords;
-                if (previousBomImports.contains(new ArtifactCoords(platformBomCoords.getGroupId(),
-                        "quarkus-universe-bom", "pom", platformBomCoords.getVersion()))) {
-                    continue;
-                }
-            } else if (rhProdBom != null && platformBomCoords.getVersion().equals(rhProdBom.getVersion()) // rhbq 1.x
-                                                                                                          // filtering
-                    && platformBomCoords.getArtifactId().equals("quarkus-bom")) {
-                continue;
-            }
-            previousBomImports.add(platformBomCoords);
-        }
+        final List<AppArtifactCoords> bomImports = getBomImports(appModel);
 
-        final Set<ArtifactKey> allPlatformExtensions = new HashSet<>();
-        if (!previousBomImports.isEmpty()) {
-            for (ArtifactCoords bom : previousBomImports) {
-                final List<org.eclipse.aether.graph.Dependency> deps;
-                try {
-                    deps = repoSystem.readArtifactDescriptor(repoSession,
-                            new ArtifactDescriptorRequest()
-                                    .setArtifact(new DefaultArtifact(bom.getGroupId(), bom.getArtifactId(),
-                                            bom.getClassifier(), bom.getType(), bom.getVersion()))
-                                    .setRepositories(repos))
-                            .getManagedDependencies();
-                } catch (ArtifactDescriptorException e) {
-                    throw new MojoExecutionException("Failed to resolve artifact descriptor for " + bom, e);
-                }
-                deps.forEach(d -> allPlatformExtensions.add(new ArtifactKey(d.getArtifact().getGroupId(),
-                        d.getArtifact().getArtifactId(), d.getArtifact().getClassifier(), d.getArtifact().getExtension())));
-            }
-        }
+        final Set<AppArtifactKey> allPlatformExtensions = getPlatformExtensionKeys(bomImports);
 
-        final Map<ArtifactKey, String> allProjectExtensions = getDirectExtensionDependencies();
-        final List<ArtifactCoords> platformExtensions = new ArrayList<>();
-        final List<ArtifactCoords> nonPlatformExtensions = new ArrayList<>();
-        for (Map.Entry<ArtifactKey, String> e : allProjectExtensions.entrySet()) {
-            if (allPlatformExtensions.contains(e.getKey())) {
-                platformExtensions.add(new ArtifactCoords(e.getKey().getGroupId(), e.getKey().getArtifactId(),
-                        e.getKey().getClassifier(), e.getKey().getType(), e.getValue()));
-            } else {
-                nonPlatformExtensions.add(new ArtifactCoords(e.getKey().getGroupId(), e.getKey().getArtifactId(),
-                        e.getKey().getClassifier(), e.getKey().getType(), e.getValue()));
+        final List<AppArtifactCoords> platformExtensions = new ArrayList<>();
+        final List<AppArtifactCoords> nonPlatformExtensions = new ArrayList<>();
+        for (AppDependency d : appModel.getFullDeploymentDeps()) {
+            if (d.isDirect() && d.isRuntimeExtensionArtifact()) {
+                if (allPlatformExtensions.contains(d.getArtifact().getKey())) {
+                    platformExtensions.add(d.getArtifact());
+                } else {
+                    nonPlatformExtensions.add(d.getArtifact());
+                }
             }
         }
 
@@ -157,10 +101,10 @@ public class InfoMojo extends AbstractMojo {
             writer.newLine();
             writer.newLine();
 
-            if (!previousBomImports.isEmpty()) {
+            if (!bomImports.isEmpty()) {
                 writer.append("Platform BOM imports:");
                 writer.newLine();
-                for (ArtifactCoords coords : previousBomImports) {
+                for (AppArtifactCoords coords : bomImports) {
                     writer.append(" - ").append(coords.getGroupId()).append(":").append(coords.getArtifactId())
                             .append(":").append(coords.getVersion());
                     writer.newLine();
@@ -171,7 +115,7 @@ public class InfoMojo extends AbstractMojo {
             if (!platformExtensions.isEmpty()) {
                 writer.append("Platform extensions:");
                 writer.newLine();
-                for (ArtifactCoords coords : platformExtensions) {
+                for (AppArtifactCoords coords : platformExtensions) {
                     writer.append(" - ").append(coords.getGroupId()).append(":")
                             .append(coords.getArtifactId()).append(":").append(coords.getVersion());
                     writer.newLine();
@@ -182,7 +126,7 @@ public class InfoMojo extends AbstractMojo {
             if (!nonPlatformExtensions.isEmpty()) {
                 writer.append("Non-platform extensions:");
                 writer.newLine();
-                for (ArtifactCoords coords : nonPlatformExtensions) {
+                for (AppArtifactCoords coords : nonPlatformExtensions) {
                     writer.append(" - ").append(coords.getGroupId()).append(":")
                             .append(coords.getArtifactId()).append(":").append(coords.getVersion());
                     writer.newLine();
@@ -211,44 +155,86 @@ public class InfoMojo extends AbstractMojo {
         getLog().info(buf.toString());
     }
 
-    private Map<ArtifactKey, String> getDirectExtensionDependencies() throws MojoExecutionException {
-        final List<Dependency> modelDeps = project.getModel().getDependencies();
-        final List<ArtifactRequest> requests = new ArrayList<>(modelDeps.size());
-        for (Dependency d : modelDeps) {
-            if ("jar".equals(d.getType())) {
-                requests.add(new ArtifactRequest().setArtifact(new DefaultArtifact(d.getGroupId(), d.getArtifactId(),
-                        d.getClassifier(), d.getType(), d.getVersion())).setRepositories(repos));
+    private Set<AppArtifactKey> getPlatformExtensionKeys(final List<AppArtifactCoords> bomImports)
+            throws MojoExecutionException {
+        final Set<AppArtifactKey> allPlatformExtensions = new HashSet<>();
+        if (!bomImports.isEmpty()) {
+            for (AppArtifactCoords bom : bomImports) {
+                final List<org.eclipse.aether.graph.Dependency> deps;
+                try {
+                    deps = repoSystem.readArtifactDescriptor(repoSession,
+                            new ArtifactDescriptorRequest()
+                                    .setArtifact(new DefaultArtifact(bom.getGroupId(), bom.getArtifactId(),
+                                            bom.getClassifier(), bom.getType(), bom.getVersion()))
+                                    .setRepositories(repos))
+                            .getManagedDependencies();
+                } catch (ArtifactDescriptorException e) {
+                    throw new MojoExecutionException("Failed to resolve artifact descriptor for " + bom, e);
+                }
+                deps.forEach(d -> allPlatformExtensions.add(new AppArtifactKey(d.getArtifact().getGroupId(),
+                        d.getArtifact().getArtifactId(), d.getArtifact().getClassifier(), d.getArtifact().getExtension())));
             }
         }
-        final List<ArtifactResult> artifactResults;
-        try {
-            artifactResults = repoSystem.resolveArtifacts(repoSession, requests);
-        } catch (ArtifactResolutionException e) {
-            throw new MojoExecutionException("Failed to resolve project dependencies", e);
-        }
-        final Map<ArtifactKey, String> extensions = new LinkedHashMap<>(artifactResults.size());
-        for (ArtifactResult ar : artifactResults) {
-            final Artifact a = ar.getArtifact();
-            if (isExtension(a.getFile().toPath())) {
-                extensions.put(new ArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension()),
-                        a.getVersion());
-            }
-        }
-        return extensions;
+        return allPlatformExtensions;
     }
 
-    private static boolean isExtension(Path p) throws MojoExecutionException {
-        if (!Files.exists(p)) {
-            throw new MojoExecutionException("Extension artifact " + p + " does not exist");
+    private AppModel resolveAppModel() throws MojoExecutionException {
+        final MavenArtifactResolver resolver;
+        try {
+            resolver = MavenArtifactResolver.builder()
+                    .setRepositorySystem(repoSystem)
+                    .setRepositorySystemSession(repoSession)
+                    .setRemoteRepositories(repos)
+                    .setRemoteRepositoryManager(remoteRepoManager)
+                    .setPreferPomsFromWorkspace(true)
+                    .build();
+        } catch (BootstrapMavenException e) {
+            throw new MojoExecutionException("Failed to initialize Maven artifact resolver", e);
         }
-        if (Files.isDirectory(p)) {
-            return Files.exists(p.resolve(BootstrapConstants.DESCRIPTOR_PATH));
-        } else {
-            try (FileSystem fs = FileSystems.newFileSystem(p, (ClassLoader) null)) {
-                return Files.exists(fs.getPath(BootstrapConstants.DESCRIPTOR_PATH));
-            } catch (IOException e) {
-                throw new MojoExecutionException("Failed to read archive " + p, e);
+
+        final AppModel appModel;
+        try {
+            appModel = new BootstrapAppModelResolver(resolver).resolveModel(
+                    new AppArtifact(project.getGroupId(), project.getArtifactId(), null, "pom", project.getVersion()));
+        } catch (AppModelResolverException e) {
+            throw new MojoExecutionException("Failed to resolve Quarkus application model", e);
+        }
+        return appModel;
+    }
+
+    private List<AppArtifactCoords> getBomImports(final AppModel appModel) {
+        final PlatformImports platformImports = appModel.getPlatforms();
+        AppArtifactCoords rhUniverseBom = null;
+        AppArtifactCoords rhProdBom = null;
+        final List<AppArtifactCoords> bomImports = new ArrayList<>();
+        for (AppArtifactCoords coords : platformImports.getImportedPlatformBoms()) {
+            if (coords.getArtifactId().equals("quarkus-universe-bom")) {
+                // in pre-2.x quarkus versions, the quarkus-bom descriptor would show up as a
+                // parent of the quarkus-universe-bom one
+                // even if it was not actually imported, so here we simply remove it, if it was
+                // found
+                bomImports.remove(new AppArtifactCoords(coords.getGroupId(), "quarkus-bom", "pom", coords.getVersion()));
+
+                if (coords.getVersion().contains("-redhat-")) {
+                    rhUniverseBom = coords;
+                } else if (rhUniverseBom != null && coords.getVersion().regionMatches(0,
+                        rhUniverseBom.getVersion(), 0,
+                        rhUniverseBom.getVersion().length() - 1 - rhUniverseBom.getVersion().indexOf("-redhat-"))) {
+                    continue;
+                }
+            } else if (coords.getArtifactId().equals("quarkus-product-bom")) {
+                // rhbq 1.x filtering
+                rhProdBom = coords;
+                if (bomImports.contains(
+                        new AppArtifactCoords(coords.getGroupId(), "quarkus-universe-bom", "pom", coords.getVersion()))) {
+                    continue;
+                }
+            } else if (rhProdBom != null && coords.getVersion().equals(rhProdBom.getVersion()) // rhbq 1.x filtering
+                    && coords.getArtifactId().equals("quarkus-bom")) {
+                continue;
             }
+            bomImports.add(coords);
         }
+        return bomImports;
     }
 }
