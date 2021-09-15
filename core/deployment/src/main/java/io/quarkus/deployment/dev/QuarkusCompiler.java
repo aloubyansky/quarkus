@@ -54,7 +54,7 @@ public class QuarkusCompiler implements Closeable {
 
         Set<URL> urls = new HashSet<>();
         for (AppDependency i : application.getAppModel().getUserDependencies()) {
-            for (Path p : i.getArtifact().getPaths()) {
+            for (Path p : i.getArtifact().getResolvedPaths()) {
                 urls.add(p.toUri().toURL());
             }
         }

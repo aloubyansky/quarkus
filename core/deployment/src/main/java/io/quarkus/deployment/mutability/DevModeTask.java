@@ -105,17 +105,20 @@ public class DevModeTask {
         Files.createDirectories(extracted);
         Map<AppArtifactKey, AppArtifact> userDependencies = new HashMap<>();
         for (AppDependency i : appModel.getUserDependencies()) {
-            userDependencies.put(i.getArtifact().getKey(), i.getArtifact());
+            userDependencies.put(new AppArtifactKey(i.getArtifact().getGroupId(), i.getArtifact().getArtifactId()),
+                    i.getArtifact());
         }
 
         //setup the classes that can be hot reloaded
         //this code needs to be kept in sync with the code in IsolatedRemoteDevModeMain
         //todo: look at a better way of doing this
         for (AppArtifactKey i : appModel.getLocalProjectArtifacts()) {
-            boolean appArtifact = i.equals(appModel.getAppArtifact().getKey());
+            boolean appArtifact = false;
             AppArtifact dep = userDependencies.get(i);
             Path moduleClasses = null;
             if (dep == null) {
+                appArtifact = i.getGroupId().equals(appModel.getAppArtifact().getGroupId())
+                        && i.getArtifactId().equals(appModel.getAppArtifact().getArtifactId());
                 //check if this is the application itself
                 if (appArtifact) {
                     dep = appModel.getAppArtifact();
@@ -129,7 +132,7 @@ public class DevModeTask {
                 continue;
             }
             IoUtils.createOrEmptyDir(moduleClasses);
-            for (Path p : dep.getPaths()) {
+            for (Path p : dep.getResolvedPaths()) {
                 if (Files.isDirectory(p)) {
                     Path moduleTarget = moduleClasses;
                     Files.walkFileTree(p, new FileVisitor<Path>() {

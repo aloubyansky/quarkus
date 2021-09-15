@@ -12,6 +12,8 @@ import io.quarkus.bootstrap.resolver.AppModelResolverException;
 import io.quarkus.bootstrap.util.BootstrapUtils;
 import io.quarkus.bootstrap.util.DependencyNodeUtils;
 import io.quarkus.bootstrap.util.ZipUtils;
+import io.quarkus.bootstrap.workspace.ProjectModule;
+import io.quarkus.maven.dependency.DependencyFlags;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -65,8 +67,8 @@ public class DeploymentInjectingDependencyVisitor {
     private final List<RemoteRepository> mainRepos;
     private final AppModel.Builder appBuilder;
 
-    private boolean collectingTopRuntimeNodes = true;
-    private boolean collectingDirectExtensionDeps = true;
+    private boolean collectingTopExtensionRuntimeNodes = true;
+    private boolean collectingDirectDeps = true;
     private final List<ExtensionDependency> topExtensionDeps = new ArrayList<>();
     private ExtensionDependency lastVisitedRuntimeExtNode;
     private final Map<AppArtifactKey, ExtensionInfo> allExtensions = new HashMap<>();
@@ -90,6 +92,7 @@ public class DeploymentInjectingDependencyVisitor {
                     .setRepositorySystemSession(session)
                     .setRemoteRepositories(resolver.getRepositories())
                     .setRemoteRepositoryManager(resolver.getRemoteRepositoryManager())
+                    .setCurrentProject(resolver.getMavenContext().getCurrentProject())
                     .setWorkspaceDiscovery(false)));
         } catch (BootstrapMavenException e) {
             throw new BootstrapDependencyProcessingException("Failed to initialize deployment dependencies resolver",
@@ -166,8 +169,8 @@ public class DeploymentInjectingDependencyVisitor {
 
     private void visitRuntimeDependency(DependencyNode node) {
 
-        final boolean prevCollectingDirectExtensionDeps = collectingDirectExtensionDeps;
-        final boolean prevCollectingTopRtNodes = collectingTopRuntimeNodes;
+        final boolean prevCollectingDirectDeps = collectingDirectDeps;
+        final boolean prevCollectingTopExtRtNodes = collectingTopExtensionRuntimeNodes;
         final ExtensionDependency prevLastVisitedRtExtNode = lastVisitedRuntimeExtNode;
 
         final boolean popExclusions;
@@ -177,24 +180,37 @@ public class DeploymentInjectingDependencyVisitor {
 
         Artifact artifact = node.getArtifact();
         AppArtifact newRtArtifactDep = null;
+        ProjectModule module = null;
         if (allRuntimeDeps.add(DependencyNodeUtils.toKey(artifact))) {
             artifact = resolve(artifact);
-            newRtArtifactDep = toAppArtifact(artifact);
+            if (resolver.getProjectModuleResolver() != null) {
+                module = resolver.getProjectModuleResolver().getProjectModule(artifact.getGroupId(), artifact.getArtifactId());
+            }
+            newRtArtifactDep = toAppArtifact(artifact, module);
         }
 
         try {
             final ExtensionDependency extDep = getExtensionDependencyOrNull(node, artifact);
 
             if (newRtArtifactDep != null) {
-                final AppDependency appDep = new AppDependency(newRtArtifactDep, node.getDependency().getScope(),
-                        node.getDependency().isOptional(),
-                        collectingDirectExtensionDeps ? AppDependency.DIRECT_FLAG : 0,
-                        extDep == null ? 0 : AppDependency.RUNTIME_EXTENSION_ARTIFACT_FLAG,
-                        AppDependency.RUNTIME_CP_FLAG, AppDependency.DEPLOYMENT_CP_FLAG);
+                int flags = DependencyFlags.RUNTIME_CP | DependencyFlags.DEPLOYMENT_CP;
+                if (extDep != null) {
+                    flags |= DependencyFlags.RUNTIME_EXTENSION_ARTIFACT;
+                }
+                if (collectingDirectDeps) {
+                    flags |= DependencyFlags.DIRECT;
+                }
+                if (node.getDependency().isOptional()) {
+                    flags |= DependencyFlags.OPTIONAL;
+                }
+                if (module != null) {
+                    flags |= DependencyFlags.PROJECT_MODULE | DependencyFlags.RELOADABLE;
+                }
+                final AppDependency appDep = new AppDependency(newRtArtifactDep, node.getDependency().getScope(), flags);
                 appBuilder.addDependency(appDep);
             }
 
-            collectingDirectExtensionDeps = false;
+            collectingDirectDeps = false;
 
             if (extDep != null) {
                 extDep.info.ensureActivated();
@@ -210,8 +226,8 @@ public class DeploymentInjectingDependencyVisitor {
         if (popExclusions) {
             exclusionStack.pollLast();
         }
-        collectingDirectExtensionDeps = prevCollectingDirectExtensionDeps;
-        collectingTopRuntimeNodes = prevCollectingTopRtNodes;
+        collectingDirectDeps = prevCollectingDirectDeps;
+        collectingTopExtensionRuntimeNodes = prevCollectingTopExtRtNodes;
         lastVisitedRuntimeExtNode = prevLastVisitedRtExtNode;
     }
 
@@ -248,8 +264,8 @@ public class DeploymentInjectingDependencyVisitor {
 
         collectConditionalDependencies(extDep);
 
-        if (collectingTopRuntimeNodes) {
-            collectingTopRuntimeNodes = false;
+        if (collectingTopExtensionRuntimeNodes) {
+            collectingTopExtensionRuntimeNodes = false;
             topExtensionDeps.add(extDep);
         }
         if (lastVisitedRuntimeExtNode != null) {
@@ -316,6 +332,11 @@ public class DeploymentInjectingDependencyVisitor {
             throws BootstrapDependencyProcessingException {
         log.debugf("Injecting deployment dependency %s", extDep.info.deploymentArtifact);
         final DependencyNode deploymentNode = collectDependencies(extDep.info.deploymentArtifact, extDep.exclusions);
+
+        if (resolver.getProjectModuleResolver() != null) {
+            clearReloadable(deploymentNode);
+        }
+
         final List<DependencyNode> deploymentDeps = deploymentNode.getChildren();
         if (!replaceDirectDepBranch(extDep, deploymentDeps)) {
             throw new BootstrapDependencyProcessingException(
@@ -329,6 +350,16 @@ public class DeploymentInjectingDependencyVisitor {
         runtimeNode.setArtifact(deploymentNode.getArtifact());
         runtimeNode.getDependency().setArtifact(deploymentNode.getArtifact());
         runtimeNode.setChildren(deploymentDeps);
+    }
+
+    private void clearReloadable(DependencyNode node) {
+        for (DependencyNode child : node.getChildren()) {
+            clearReloadable(child);
+        }
+        final AppDependency dep = appBuilder.getDependency(DependencyNodeUtils.toKey(node.getArtifact()));
+        if (dep != null && dep.isProjectModule()) {
+            dep.clearFlag(DependencyFlags.RELOADABLE);
+        }
     }
 
     private boolean replaceDirectDepBranch(ExtensionDependency extDep, List<DependencyNode> deploymentDeps)
@@ -547,7 +578,7 @@ public class DeploymentInjectingDependencyVisitor {
                 return;
             }
             activated = true;
-            collectingTopRuntimeNodes = false;
+            collectingTopExtensionRuntimeNodes = false;
             final ExtensionDependency extDep = getExtensionDependency();
             final DependencyNode originalNode = collectDependencies(info.runtimeArtifact, extDep.exclusions);
             final DefaultDependencyNode rtNode = (DefaultDependencyNode) extDep.runtimeNode;
@@ -584,9 +615,9 @@ public class DeploymentInjectingDependencyVisitor {
                 && a2.getExtension().equals(a1.getExtension());
     }
 
-    private static AppArtifact toAppArtifact(Artifact artifact) {
+    public static AppArtifact toAppArtifact(Artifact artifact, ProjectModule module) {
         final AppArtifact appArtifact = new AppArtifact(artifact.getGroupId(), artifact.getArtifactId(),
-                artifact.getClassifier(), artifact.getExtension(), artifact.getVersion());
+                artifact.getClassifier(), artifact.getExtension(), artifact.getVersion(), module);
         final File file = artifact.getFile();
         if (file != null) {
             appArtifact.setPaths(PathsCollection.of(file.toPath()));

@@ -18,10 +18,11 @@ import org.jboss.jandex.ClassInfo;
 
 import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.model.AppDependency;
-import io.quarkus.bootstrap.model.gradle.QuarkusModel;
-import io.quarkus.bootstrap.model.gradle.WorkspaceModule;
+import io.quarkus.bootstrap.model.gradle.ApplicationModel;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
 import io.quarkus.bootstrap.utils.BuildToolHelper;
+import io.quarkus.bootstrap.workspace.ProcessedSources;
+import io.quarkus.bootstrap.workspace.ProjectModule;
 import io.quarkus.deployment.ApplicationArchive;
 import io.quarkus.deployment.IsTest;
 import io.quarkus.deployment.annotations.BuildProducer;
@@ -133,22 +134,12 @@ public class JacocoProcessor {
             } else if (BuildToolHelper.isGradleProject(targetdir.toPath())) {
                 //this seems counter productive, but we want the dev mode model and not the test model
                 //as the test model will include the test classes that we don't want in the report
-                QuarkusModel model = BuildToolHelper.enableGradleAppModelForDevMode(targetdir.toPath());
-                for (WorkspaceModule i : model.getWorkspace().getAllModules()) {
-                    info.savedData.add(new File(i.getBuildDir(), config.dataFile).getAbsolutePath());
-                    for (File src : i.getSourceSourceSet().getSourceDirectories()) {
-                        sources.add(src.getAbsolutePath());
-                    }
-                    for (File classesDir : i.getSourceSet().getSourceDirectories()) {
-                        if (classesDir.isDirectory()) {
-                            for (final File file : FileUtils.getFiles(classesDir, includes, excludes,
-                                    true)) {
-                                if (file.getName().endsWith(".class")) {
-                                    classes.add(file.getAbsolutePath());
-                                }
-                            }
-                        }
-                    }
+                ApplicationModel model = BuildToolHelper.enableGradleAppModelForDevMode(targetdir.toPath());
+                if (model.getApplicationModule() != null) {
+                    addProjectModule(model.getApplicationModule(), config, info, includes, excludes, classes, sources);
+                }
+                for (ProjectModule module : model.getProjectModules()) {
+                    addProjectModule(module, config, info, includes, excludes, classes, sources);
                 }
             } else {
                 throw new RuntimeException("Cannot determine project type generating Jacoco report");
@@ -159,4 +150,19 @@ public class JacocoProcessor {
         }
     }
 
+    private void addProjectModule(ProjectModule module, JacocoConfig config, ReportInfo info, String includes,
+            String excludes, Set<String> classes, Set<String> sources) throws Exception {
+        info.savedData.add(new File(module.getBuildDir(), config.dataFile).getAbsolutePath());
+        for (ProcessedSources src : module.getMainSources()) {
+            sources.add(src.getSourceDir().getAbsolutePath());
+            if (src.getDestinationDir().isDirectory()) {
+                for (final File file : FileUtils.getFiles(src.getDestinationDir(), includes, excludes,
+                        true)) {
+                    if (file.getName().endsWith(".class")) {
+                        classes.add(file.getAbsolutePath());
+                    }
+                }
+            }
+        }
+    }
 }

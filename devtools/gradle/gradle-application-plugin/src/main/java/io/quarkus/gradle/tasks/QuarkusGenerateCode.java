@@ -132,9 +132,10 @@ public class QuarkusGenerateCode extends QuarkusTask {
                 if (!initAndRun.isPresent()) {
                     throw new GradleException("Failed to find " + INIT_AND_RUN + " method in " + CodeGenerator.class.getName());
                 }
+
                 initAndRun.get().invoke(null, deploymentClassLoader,
                         PathsCollection.from(sourcesDirectories),
-                        paths.iterator().next(),
+                        paths.get(0),
                         buildDir,
                         sourceRegistrar,
                         appCreationContext.getAppModel(),

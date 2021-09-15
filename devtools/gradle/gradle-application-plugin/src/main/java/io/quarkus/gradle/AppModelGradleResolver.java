@@ -17,7 +17,7 @@ import io.quarkus.bootstrap.model.AppArtifact;
 import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.model.AppDependency;
 import io.quarkus.bootstrap.model.AppModel;
-import io.quarkus.bootstrap.model.gradle.QuarkusModel;
+import io.quarkus.bootstrap.model.gradle.ApplicationModel;
 import io.quarkus.bootstrap.resolver.AppModelResolver;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
 import io.quarkus.bootstrap.util.QuarkusModelHelper;
@@ -26,9 +26,9 @@ public class AppModelGradleResolver implements AppModelResolver {
 
     private AppModel appModel;
     private final Project project;
-    private final QuarkusModel model;
+    private final ApplicationModel model;
 
-    public AppModelGradleResolver(Project project, QuarkusModel model) {
+    public AppModelGradleResolver(Project project, ApplicationModel model) {
         this.model = model;
         this.project = project;
     }
@@ -138,7 +138,7 @@ public class AppModelGradleResolver implements AppModelResolver {
                         "Requested artifact : " + appArtifact + ", does not match loaded model " + appModel.getAppArtifact());
             }
         }
-        appModel = QuarkusModelHelper.convert(model, appArtifact);
+        appModel = QuarkusModelHelper.convert(model);
         return appModel;
     }
 

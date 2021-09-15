@@ -544,8 +544,8 @@ public class QuarkusBootstrap implements Serializable {
             }
             this.appArtifact = appArtifact;
             this.applicationRoot = appArtifact.getPaths();
-            if (appArtifact.getPaths().isSinglePath()) {
-                this.projectRoot = appArtifact.getPaths().getSinglePath();
+            if (appArtifact.getResolvedPaths().isSinglePath()) {
+                this.projectRoot = appArtifact.getResolvedPaths().getSinglePath();
             }
             return this;
         }
@@ -624,7 +624,7 @@ public class QuarkusBootstrap implements Serializable {
         public QuarkusBootstrap build() {
             Objects.requireNonNull(applicationRoot, "Application root must not be null");
             if (appArtifact != null) {
-                localArtifacts.add(appArtifact.getKey());
+                localArtifacts.add(new AppArtifactKey(appArtifact.getGroupId(), appArtifact.getArtifactId()));
             }
 
             ConfiguredClassLoading classLoadingConfig = createClassLoadingConfig(applicationRoot, mode);

@@ -1,6 +1,9 @@
-package io.quarkus.bootstrap.model.gradle;
+package io.quarkus.maven.dependency;
 
 public interface ArtifactCoords {
+
+    String TYPE_JAR = "jar";
+    String TYPE_POM = "pom";
 
     String getGroupId();
 
@@ -8,7 +11,9 @@ public interface ArtifactCoords {
 
     String getClassifier();
 
+    String getType();
+
     String getVersion();
 
-    String getType();
+    ArtifactKey getKey();
 }

@@ -280,7 +280,7 @@ public class ClassTransformingBuildStep {
             for (AppDependency i : curateOutcomeBuildItem.getEffectiveModel().getUserDependencies()) {
                 Set<String> filtered = removed.remove(i.getArtifact().getKey());
                 if (filtered != null) {
-                    for (Path path : i.getArtifact().getPaths()) {
+                    for (Path path : i.getArtifact().getResolvedPaths()) {
                         transformedClassesByJar.computeIfAbsent(path, s -> new HashSet<>())
                                 .addAll(filtered.stream()
                                         .map(file -> new TransformedClassesBuildItem.TransformedClass(null, null, file, false))

@@ -1,7 +1,6 @@
 package io.quarkus.deployment.dev;
 
 import java.io.Closeable;
-import java.io.File;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -14,16 +13,17 @@ import org.jboss.logging.Logger;
 
 import io.quarkus.bootstrap.BootstrapGradleException;
 import io.quarkus.bootstrap.app.CuratedApplication;
+import io.quarkus.bootstrap.devmode.DependenciesFilter;
 import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.model.PathsCollection;
-import io.quarkus.bootstrap.model.gradle.QuarkusModel;
-import io.quarkus.bootstrap.model.gradle.WorkspaceModule;
+import io.quarkus.bootstrap.model.gradle.ApplicationModel;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
-import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
-import io.quarkus.bootstrap.util.PathsUtils;
 import io.quarkus.bootstrap.util.QuarkusModelHelper;
 import io.quarkus.bootstrap.utils.BuildToolHelper;
+import io.quarkus.bootstrap.workspace.ProcessedSources;
+import io.quarkus.bootstrap.workspace.ProjectModule;
+import io.quarkus.deployment.dev.DevModeContext.ModuleInfo;
 import io.quarkus.dev.spi.DevModeType;
 
 public class IDEDevModeMain implements BiConsumer<CuratedApplication, Map<String, Object>>, Closeable {
@@ -38,41 +38,27 @@ public class IDEDevModeMain implements BiConsumer<CuratedApplication, Map<String
         Path appClasses = (Path) stringObjectMap.get("app-classes");
         DevModeContext devModeContext = new DevModeContext();
         devModeContext.setArgs((String[]) stringObjectMap.get("args"));
+
+        ApplicationModel appModel = null;
         try {
             if (BuildToolHelper.isMavenProject(appClasses)) {
-                LocalProject project = (LocalProject) stringObjectMap.get(APP_PROJECT);
-                if (project == null) {
-                    project = LocalProject.loadWorkspace(appClasses);
-                }
-
-                DevModeContext.ModuleInfo root = toModule(project);
-                devModeContext.setApplicationRoot(root);
-
-                final LocalWorkspace workspace = project.getWorkspace();
-                for (AppArtifactKey localKey : curatedApplication.getAppModel().getLocalProjectArtifacts()) {
-                    final LocalProject depProject = workspace.getProject(localKey.getGroupId(), localKey.getArtifactId());
-                    if (project == depProject) {
-                        continue;
-                    }
-                    if (depProject == null) {
-                        throw new IllegalStateException(
-                                "Failed to locate project dependency " + localKey + " in the workspace");
-                    }
-                    devModeContext.getAdditionalModules().add(toModule(depProject));
-                    devModeContext.getLocalArtifacts().add(localKey);
-                }
+                appModel = curatedApplication.getAppModel();
             } else {
-                final QuarkusModel model = QuarkusModelHelper
+                appModel = QuarkusModelHelper
                         .deserializeQuarkusModel((Path) stringObjectMap.get(QuarkusModelHelper.SERIALIZED_QUARKUS_MODEL));
-                final WorkspaceModule launchingModule = model.getWorkspace().getMainModule();
-                DevModeContext.ModuleInfo root = toModule(launchingModule);
-                devModeContext.setApplicationRoot(root);
-                for (WorkspaceModule additionalModule : model.getWorkspace().getAllModules()) {
-                    if (!additionalModule.getArtifactCoords().equals(launchingModule.getArtifactCoords())) {
-                        devModeContext.getAdditionalModules().add(toModule(additionalModule));
+            }
+
+            if (appModel != null) {
+                for (ProjectModule project : DependenciesFilter.getReloadableModules(appModel)) {
+                    final ModuleInfo module = toModule(project);
+                    if (project == appModel.getApplicationModule()) {
+                        devModeContext.setApplicationRoot(module);
+                    } else {
+                        devModeContext.getAdditionalModules().add(module);
+                        devModeContext.getLocalArtifacts()
+                                .add(new AppArtifactKey(project.getId().getGroupId(), project.getId().getArtifactId()));
                     }
                 }
-
             }
         } catch (AppModelResolverException e) {
             log.error("Failed to load workspace, hot reload will not be available", e);
@@ -98,27 +84,37 @@ public class IDEDevModeMain implements BiConsumer<CuratedApplication, Map<String
         }
     }
 
-    private DevModeContext.ModuleInfo toModule(WorkspaceModule module) throws BootstrapGradleException {
-        AppArtifactKey key = new AppArtifactKey(module.getArtifactCoords().getGroupId(),
-                module.getArtifactCoords().getArtifactId(), module.getArtifactCoords().getClassifier());
+    private DevModeContext.ModuleInfo toModule(ProjectModule module) throws BootstrapGradleException {
+        AppArtifactKey key = new AppArtifactKey(module.getId().getGroupId(), module.getId().getArtifactId());
 
+        String classesDir = null;
         final Set<Path> sourceParents = new LinkedHashSet<>();
-        for (File srcDir : module.getSourceSourceSet().getSourceDirectories()) {
-            sourceParents.add(srcDir.getParentFile().toPath());
+        final PathsCollection.Builder srcPaths = PathsCollection.builder();
+        for (ProcessedSources src : module.getMainSources()) {
+            sourceParents.add(src.getSourceDir().getParentFile().toPath());
+            srcPaths.add(src.getSourceDir().toPath());
+            if (classesDir == null) {
+                classesDir = src.getDestinationDir().toString();
+            }
         }
+
         String resourceDirectory = null;
-        if (!module.getSourceSet().getResourceDirectories().isEmpty()) {
-            // Peek the first one as we assume that it is the primary
-            resourceDirectory = module.getSourceSet().getResourceDirectories().iterator().next().toString();
+        final PathsCollection.Builder resourcesPaths = PathsCollection.builder();
+        for (ProcessedSources src : module.getMainResources()) {
+            resourcesPaths.add(src.getSourceDir().toPath());
+            if (resourceDirectory == null) {
+                // Peek the first one as we assume that it is the primary
+                resourceDirectory = src.getDestinationDir().toString();
+            }
         }
 
         return new DevModeContext.ModuleInfo.Builder()
                 .setAppArtifactKey(key)
-                .setName(module.getArtifactCoords().getArtifactId())
-                .setProjectDirectory(module.getProjectRoot().getPath())
-                .setSourcePaths(PathsUtils.toPathsCollection(module.getSourceSourceSet().getSourceDirectories()))
-                .setClassesPath(QuarkusModelHelper.getClassPath(module).toAbsolutePath().toString())
-                .setResourcePaths(PathsUtils.toPathsCollection(module.getSourceSourceSet().getResourceDirectories()))
+                .setName(module.getId().getArtifactId())
+                .setProjectDirectory(module.getModuleDir().getPath())
+                .setSourcePaths(srcPaths.build())
+                .setClassesPath(classesDir)
+                .setResourcePaths(resourcesPaths.build())
                 .setResourcesOutputPath(resourceDirectory)
                 .setSourceParents(PathsCollection.from(sourceParents))
                 .setPreBuildOutputDir(module.getBuildDir().toPath().resolve("generated-sources").toAbsolutePath().toString())

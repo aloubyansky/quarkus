@@ -3,6 +3,7 @@ package io.quarkus.bootstrap.resolver;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import io.quarkus.bootstrap.model.AppDependency;
+import io.quarkus.maven.dependency.DependencyFlags;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -87,7 +88,7 @@ public abstract class CollectDependenciesBase extends ResolverSetupCleanup {
     protected void install(TsQuarkusExt ext, boolean collected) {
         ext.install(repo);
         if (collected) {
-            addCollectedDep(ext.getRuntime(), "compile", false, AppDependency.RUNTIME_EXTENSION_ARTIFACT_FLAG);
+            addCollectedDep(ext.getRuntime(), "compile", false, DependencyFlags.RUNTIME_EXTENSION_ARTIFACT);
             addCollectedDeploymentDep(ext.getDeployment());
         }
     }
@@ -95,8 +96,8 @@ public abstract class CollectDependenciesBase extends ResolverSetupCleanup {
     protected void installAsDep(TsQuarkusExt ext) {
         ext.install(repo);
         root.addDependency(ext);
-        addCollectedDep(ext.getRuntime(), "compile", false, AppDependency.DIRECT_FLAG,
-                AppDependency.RUNTIME_EXTENSION_ARTIFACT_FLAG);
+        addCollectedDep(ext.getRuntime(), "compile", false,
+                DependencyFlags.DIRECT | DependencyFlags.RUNTIME_EXTENSION_ARTIFACT);
         addCollectedDeploymentDep(ext.getDeployment());
     }
 
@@ -131,7 +132,7 @@ public abstract class CollectDependenciesBase extends ResolverSetupCleanup {
         if (!collected) {
             return;
         }
-        int allFlags = AppDependency.DIRECT_FLAG;
+        int allFlags = DependencyFlags.DIRECT;
         for (int f : flags) {
             allFlags |= f;
         }
@@ -143,7 +144,7 @@ public abstract class CollectDependenciesBase extends ResolverSetupCleanup {
     }
 
     protected void addCollectedDep(final TsArtifact artifact, final String scope, boolean optional, int... flags) {
-        int allFlags = AppDependency.RUNTIME_CP_FLAG | AppDependency.DEPLOYMENT_CP_FLAG;
+        int allFlags = DependencyFlags.RUNTIME_CP | DependencyFlags.DEPLOYMENT_CP;
         for (int f : flags) {
             allFlags |= f;
         }
@@ -157,7 +158,7 @@ public abstract class CollectDependenciesBase extends ResolverSetupCleanup {
         if (deploymentDeps.isEmpty()) {
             deploymentDeps = new ArrayList<>();
         }
-        deploymentDeps.add(new AppDependency(ext.toAppArtifact(), "compile", false, AppDependency.DEPLOYMENT_CP_FLAG));
+        deploymentDeps.add(new AppDependency(ext.toAppArtifact(), "compile", false, DependencyFlags.DEPLOYMENT_CP));
     }
 
     protected void addManagedDep(TsQuarkusExt ext) {

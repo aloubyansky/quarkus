@@ -144,7 +144,7 @@ public class GrpcCodeGen implements CodeGenProvider {
             AppArtifact artifact = dependency.getArtifact();
             if (scanAll
                     || dependenciesToScan.contains(String.format("%s:%s", artifact.getGroupId(), artifact.getArtifactId()))) {
-                for (Path path : artifact.getPaths()) {
+                for (Path path : artifact.getResolvedPaths()) {
                     Path jarName = path.getFileName();
                     if (jarName.toString().endsWith(".jar")) {
                         final JarFile jar;
@@ -257,7 +257,7 @@ public class GrpcCodeGen implements CodeGenProvider {
                     && artifactId.equals(artifact.getArtifactId())
                     && classifier.equals(artifact.getClassifier())
                     && packaging.equals(artifact.getType())) {
-                artifactPath = artifact.getPaths().getSinglePath();
+                artifactPath = artifact.getResolvedPaths().getSinglePath();
             }
         }
         return artifactPath;

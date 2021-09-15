@@ -332,7 +332,7 @@ public class JibProcessor {
             List<String> libFileNames = new ArrayList<>(libNameToPath.keySet());
             for (AppArtifact appArtifact : fastChangingLibs) {
                 String matchingLibDirFileName = null;
-                for (Path appArtifactPath : appArtifact.getPaths()) {
+                for (Path appArtifactPath : appArtifact.getResolvedPaths()) {
                     for (String libFileName : libFileNames) {
                         if (libFileName.contains(appArtifact.getGroupId())
                                 && libFileName.contains(appArtifactPath.getFileName().toString())) {

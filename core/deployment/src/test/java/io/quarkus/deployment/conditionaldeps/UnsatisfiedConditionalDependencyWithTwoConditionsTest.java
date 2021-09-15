@@ -11,6 +11,7 @@ import io.quarkus.bootstrap.model.AppDependency;
 import io.quarkus.bootstrap.resolver.TsArtifact;
 import io.quarkus.bootstrap.resolver.TsQuarkusExt;
 import io.quarkus.deployment.runnerjar.ExecutableOutputOutcomeTestBase;
+import io.quarkus.maven.dependency.DependencyFlags;
 
 public class UnsatisfiedConditionalDependencyWithTwoConditionsTest extends ExecutableOutputOutcomeTestBase {
 
@@ -42,10 +43,10 @@ public class UnsatisfiedConditionalDependencyWithTwoConditionsTest extends Execu
         final Set<AppDependency> expected = new HashSet<>();
         expected.add(new AppDependency(
                 new AppArtifact(TsArtifact.DEFAULT_GROUP_ID, "ext-c-deployment", TsArtifact.DEFAULT_VERSION), "compile",
-                AppDependency.DEPLOYMENT_CP_FLAG));
+                DependencyFlags.DEPLOYMENT_CP));
         expected.add(new AppDependency(
                 new AppArtifact(TsArtifact.DEFAULT_GROUP_ID, "ext-a-deployment", TsArtifact.DEFAULT_VERSION), "compile",
-                AppDependency.DEPLOYMENT_CP_FLAG));
+                DependencyFlags.DEPLOYMENT_CP));
         assertEquals(expected, new HashSet<>(deploymentDeps));
     }
 }

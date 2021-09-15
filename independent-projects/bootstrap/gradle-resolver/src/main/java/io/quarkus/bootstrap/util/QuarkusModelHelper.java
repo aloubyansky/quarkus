@@ -7,12 +7,14 @@ import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.model.AppDependency;
 import io.quarkus.bootstrap.model.AppModel;
 import io.quarkus.bootstrap.model.CapabilityContract;
+import io.quarkus.bootstrap.model.ExtensionCapabilities;
 import io.quarkus.bootstrap.model.PathsCollection;
-import io.quarkus.bootstrap.model.gradle.ArtifactCoords;
-import io.quarkus.bootstrap.model.gradle.Dependency;
-import io.quarkus.bootstrap.model.gradle.QuarkusModel;
-import io.quarkus.bootstrap.model.gradle.WorkspaceModule;
+import io.quarkus.bootstrap.model.gradle.ApplicationModel;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
+import io.quarkus.maven.dependency.Artifact;
+import io.quarkus.maven.dependency.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactKey;
+import io.quarkus.maven.dependency.Dependency;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -20,16 +22,14 @@ import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.UncheckedIOException;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Properties;
 
 public class QuarkusModelHelper {
@@ -44,26 +44,22 @@ public class QuarkusModelHelper {
     public final static List<String> ENABLE_JAR_PACKAGING = Collections
             .singletonList("-Dorg.gradle.java.compile-classpath-packaging=true");
 
-    public static void exportModel(QuarkusModel model, boolean test) throws AppModelResolverException, IOException {
+    public static void exportModel(ApplicationModel model, boolean test) throws AppModelResolverException, IOException {
         Path serializedModel = QuarkusModelHelper
                 .serializeAppModel(model, test);
         System.setProperty(test ? BootstrapConstants.SERIALIZED_TEST_APP_MODEL : BootstrapConstants.SERIALIZED_APP_MODEL,
                 serializedModel.toString());
     }
 
-    public static Path serializeAppModel(QuarkusModel model, boolean test) throws AppModelResolverException, IOException {
+    public static Path serializeAppModel(ApplicationModel model, boolean test) throws AppModelResolverException, IOException {
         final Path serializedModel = File.createTempFile("quarkus-" + (test ? "test-" : "") + "app-model", ".dat").toPath();
-        final ArtifactCoords artifactCoords = model.getWorkspace().getMainModule().getArtifactCoords();
-        AppArtifact appArtifact = new AppArtifact(artifactCoords.getGroupId(),
-                artifactCoords.getArtifactId(),
-                artifactCoords.getVersion());
         try (ObjectOutputStream out = new ObjectOutputStream(Files.newOutputStream(serializedModel))) {
-            out.writeObject(QuarkusModelHelper.convert(model, appArtifact));
+            out.writeObject(QuarkusModelHelper.convert(model));
         }
         return serializedModel;
     }
 
-    public static Path serializeQuarkusModel(QuarkusModel model) throws IOException {
+    public static Path serializeQuarkusModel(ApplicationModel model) throws IOException {
         final Path serializedModel = File.createTempFile("quarkus-model", ".dat").toPath();
         try (ObjectOutputStream out = new ObjectOutputStream(Files.newOutputStream(serializedModel))) {
             out.writeObject(model);
@@ -71,11 +67,11 @@ public class QuarkusModelHelper {
         return serializedModel;
     }
 
-    public static QuarkusModel deserializeQuarkusModel(Path modelPath) throws BootstrapGradleException {
+    public static ApplicationModel deserializeQuarkusModel(Path modelPath) throws BootstrapGradleException {
         if (Files.exists(modelPath)) {
             try (InputStream existing = Files.newInputStream(modelPath);
                     ObjectInputStream object = new ObjectInputStream(existing)) {
-                QuarkusModel model = (QuarkusModel) object.readObject();
+                ApplicationModel model = (ApplicationModel) object.readObject();
                 IoUtils.recursiveDelete(modelPath);
                 return model;
             } catch (IOException | ClassNotFoundException e) {
@@ -85,73 +81,42 @@ public class QuarkusModelHelper {
         throw new BootstrapGradleException("Unable to locate quarkus model");
     }
 
-    public static Path getClassPath(WorkspaceModule model) throws BootstrapGradleException {
-        // TODO handle multiple class directory
-        final Optional<Path> classDir = model.getSourceSet().getSourceDirectories().stream()
-                .filter(File::exists)
-                .map(File::toPath)
-                .findFirst();
-        if (!classDir.isPresent()) {
-            throw new BootstrapGradleException("Failed to locate class directory");
+    public static AppModel convert(ApplicationModel model) throws AppModelResolverException {
+
+        AppModel.Builder appBuilder = new AppModel.Builder()
+                .setAppArtifact(toAppArtifact(model.getAppArtifact()))
+                .setPlatformImports(model.getPlatformImports());
+
+        model.getDependencies().forEach(d -> appBuilder.addDependency(toAppDependency(d)));
+
+        if (model.getExtensionCapabilities() == null || model.getExtensionCapabilities().isEmpty()) {
+            appBuilder.setCapabilitiesContracts(Collections.emptyMap());
+        } else {
+            final Map<String, CapabilityContract> capabilitiesContracts = new HashMap<>(
+                    model.getExtensionCapabilities().size());
+            for (ExtensionCapabilities e : model.getExtensionCapabilities()) {
+                capabilitiesContracts.put(e.getExtension(), new CapabilityContract(e.getExtension(),
+                        new ArrayList<>(e.getProvidesCapabilities())));
+            }
+            appBuilder.setCapabilitiesContracts(capabilitiesContracts);
         }
-        return classDir.get();
+
+        model.getLowerPriorityArtifacts().forEach(a -> appBuilder.addLesserPriorityArtifact(toAppArtifactKey(a)));
+        model.getParentFirst().forEach(a -> appBuilder.addParentFirstArtifact(toAppArtifactKey(a)));
+        model.getRunnerParentFirst().forEach(a -> appBuilder.addRunnerParentFirstArtifact(toAppArtifactKey(a)));
+
+        if (model.getApplicationModule() != null) {
+            final ArtifactKey key = model.getAppArtifact().getKey();
+            appBuilder.addLocalProjectArtifact(new AppArtifactKey(key.getGroupId(), key.getArtifactId()));
+        }
+        model.getProjectModules().forEach(
+                p -> appBuilder.addLocalProjectArtifact(new AppArtifactKey(p.getId().getGroupId(), p.getId().getArtifactId())));
+
+        return appBuilder.build();
     }
 
-    public static AppModel convert(QuarkusModel model, AppArtifact appArtifact) throws AppModelResolverException {
-        AppModel.Builder appBuilder = new AppModel.Builder();
-
-        final Map<String, Object> capabilities = new HashMap<>();
-        final Map<String, CapabilityContract> capabilitiesContracts = new HashMap<>();
-        for (Dependency extensionDependency : model.getDependencies()) {
-            boolean extension = false;
-            for (File f : extensionDependency.getPaths()) {
-                final Path artifactPath = f.toPath();
-                if (!Files.exists(artifactPath) || !extensionDependency.getType().equals("jar")) {
-                    continue;
-                }
-                if (Files.isDirectory(artifactPath)) {
-                    extension |= processQuarkusDir(extensionDependency,
-                            artifactPath.resolve(BootstrapConstants.META_INF),
-                            appBuilder, capabilities, capabilitiesContracts);
-                } else {
-                    try (FileSystem artifactFs = FileSystems.newFileSystem(artifactPath,
-                            QuarkusModelHelper.class.getClassLoader())) {
-                        extension |= processQuarkusDir(extensionDependency,
-                                artifactFs.getPath(BootstrapConstants.META_INF),
-                                appBuilder, capabilities, capabilitiesContracts);
-                    } catch (IOException e) {
-                        throw new AppModelResolverException("Failed to process " + artifactPath, e);
-                    }
-                }
-            }
-            appBuilder.addDependency(toAppDependency(extensionDependency, extensionDependency.getFlags(),
-                    extension ? AppDependency.RUNTIME_EXTENSION_ARTIFACT_FLAG : 0));
-        }
-        appBuilder.setCapabilitiesContracts(capabilitiesContracts);
-
-        if (!appArtifact.isResolved()) {
-            PathsCollection.Builder paths = PathsCollection.builder();
-            WorkspaceModule module = model.getWorkspace().getMainModule();
-            module.getSourceSet().getSourceDirectories().stream()
-                    .filter(File::exists)
-                    .map(File::toPath)
-                    .forEach(paths::add);
-            module.getSourceSet().getResourceDirectories().stream()
-                    .filter(File::exists)
-                    .map(File::toPath)
-                    .forEach(paths::add);
-            appArtifact.setPaths(paths.build());
-        }
-
-        for (WorkspaceModule module : model.getWorkspace().getAllModules()) {
-            final ArtifactCoords coords = module.getArtifactCoords();
-            appBuilder.addLocalProjectArtifact(
-                    new AppArtifactKey(coords.getGroupId(), coords.getArtifactId(), null, coords.getType()));
-        }
-
-        appBuilder.setAppArtifact(appArtifact)
-                .setPlatformImports(model.getPlatformImports());
-        return appBuilder.build();
+    private static AppArtifactKey toAppArtifactKey(ArtifactKey a) {
+        return new AppArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getType());
     }
 
     public static AppDependency toAppDependency(Dependency dependency, int... flags) {
@@ -159,14 +124,15 @@ public class QuarkusModelHelper {
         for (int f : flags) {
             allFlags |= f;
         }
-        return new AppDependency(toAppArtifact(dependency), "runtime", allFlags);
+        return new AppDependency(toAppArtifact(dependency.getArtifact()), "runtime", allFlags);
     }
 
-    private static AppArtifact toAppArtifact(Dependency dependency) {
-        AppArtifact artifact = new AppArtifact(dependency.getGroupId(), dependency.getName(), dependency.getClassifier(),
-                dependency.getType(), dependency.getVersion());
-        artifact.setPaths(QuarkusModelHelper.toPathsCollection(dependency.getPaths()));
-        return artifact;
+    private static AppArtifact toAppArtifact(Artifact artifact) {
+        final ArtifactCoords coords = artifact.getCoords();
+        AppArtifact appArtifact = new AppArtifact(coords.getGroupId(), coords.getArtifactId(), coords.getClassifier(),
+                coords.getType(), coords.getVersion());
+        appArtifact.setPaths(PathsCollection.from(artifact.getResolvedPaths()));
+        return appArtifact;
     }
 
     public static PathsCollection toPathsCollection(Collection<File> files) {
@@ -190,32 +156,6 @@ public class QuarkusModelHelper {
             throw new UncheckedIOException("Failed to load extension description " + path, e);
         }
         return rtProps;
-    }
-
-    private static boolean processQuarkusDir(Dependency d, Path quarkusDir, AppModel.Builder appBuilder,
-            Map<String, Object> capabilities, Map<String, CapabilityContract> capabilitiesContracts) {
-        if (!Files.exists(quarkusDir)) {
-            return false;
-        }
-        final Path quarkusDescr = quarkusDir.resolve(BootstrapConstants.DESCRIPTOR_FILE_NAME);
-        if (!Files.exists(quarkusDescr)) {
-            return false;
-        }
-        final Properties extProps = QuarkusModelHelper.resolveDescriptor(quarkusDescr);
-        if (extProps == null) {
-            return false;
-        }
-        final String extensionCoords = d.getGroupId() + ":" + d.getName() + ":"
-                + (d.getClassifier() == null ? "" : d.getClassifier()) + ":"
-                + (d.getType() == null || d.getType().isEmpty() ? "jar" : d.getType()) + ":" + d.getVersion();
-        appBuilder.handleExtensionProperties(extProps, extensionCoords);
-
-        final String providesCapabilities = extProps.getProperty(BootstrapConstants.PROP_PROVIDES_CAPABILITIES);
-        if (providesCapabilities != null) {
-            capabilitiesContracts.put(extensionCoords,
-                    CapabilityContract.providesCapabilities(extensionCoords, providesCapabilities));
-        }
-        return true;
     }
 
     static AppDependency alignVersion(AppDependency dependency, Map<AppArtifactKey, AppDependency> versionMap) {

@@ -365,7 +365,7 @@ public class JarResultBuildStep {
                     continue;
                 }
 
-                for (Path resolvedDep : depArtifact.getPaths()) {
+                for (Path resolvedDep : depArtifact.getResolvedPaths()) {
                     Set<String> existingEntries = new HashSet<>();
                     Set<String> transformedFilesByJar = transformedClasses.getTransformedFilesByJar().get(resolvedDep);
                     if (transformedFilesByJar != null) {
@@ -903,7 +903,7 @@ public class JarResultBuildStep {
         if (runtimeArtifacts.containsKey(depArtifact.getKey())) {
             return;
         }
-        for (Path resolvedDep : depArtifact.getPaths()) {
+        for (Path resolvedDep : depArtifact.getResolvedPaths()) {
             final String fileName = depArtifact.getGroupId() + "." + resolvedDep.getFileName();
             final Path targetPath;
 
@@ -1151,7 +1151,7 @@ public class JarResultBuildStep {
                 continue;
             }
 
-            for (Path resolvedDep : depArtifact.getPaths()) {
+            for (Path resolvedDep : depArtifact.getResolvedPaths()) {
                 if (!Files.isDirectory(resolvedDep)) {
                     Set<String> transformedFromThisArchive = transformedClasses.getTransformedFilesByJar().get(resolvedDep);
                     if (transformedFromThisArchive == null || transformedFromThisArchive.isEmpty()) {

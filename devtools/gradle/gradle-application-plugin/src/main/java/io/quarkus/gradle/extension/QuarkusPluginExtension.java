@@ -14,9 +14,8 @@ import org.gradle.api.Action;
 import org.gradle.api.Project;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.RegularFile;
-import org.gradle.api.plugins.Convention;
 import org.gradle.api.plugins.JavaPlugin;
-import org.gradle.api.plugins.JavaPluginConvention;
+import org.gradle.api.plugins.JavaPluginExtension;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.SourceSetContainer;
@@ -26,12 +25,12 @@ import org.gradle.jvm.tasks.Jar;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.model.AppArtifact;
 import io.quarkus.bootstrap.model.AppModel;
+import io.quarkus.bootstrap.model.gradle.ApplicationModel;
 import io.quarkus.bootstrap.model.gradle.ModelParameter;
-import io.quarkus.bootstrap.model.gradle.QuarkusModel;
 import io.quarkus.bootstrap.model.gradle.impl.ModelParameterImpl;
 import io.quarkus.bootstrap.resolver.AppModelResolver;
 import io.quarkus.gradle.AppModelGradleResolver;
-import io.quarkus.gradle.builder.QuarkusModelBuilder;
+import io.quarkus.gradle.builder.GradleApplicationModelBuilder;
 import io.quarkus.gradle.tasks.QuarkusGradleUtils;
 import io.quarkus.runtime.LaunchMode;
 
@@ -108,10 +107,9 @@ public class QuarkusPluginExtension {
             }
         }
         if (classesDir == null) {
-            final Convention convention = project.getConvention();
-            JavaPluginConvention javaConvention = convention.findPlugin(JavaPluginConvention.class);
-            if (javaConvention != null) {
-                final SourceSet mainSourceSet = javaConvention.getSourceSets().getByName(SourceSet.MAIN_SOURCE_SET_NAME);
+            final JavaPluginExtension javaExtension = project.getExtensions().findByType(JavaPluginExtension.class);
+            if (javaExtension != null) {
+                final SourceSet mainSourceSet = javaExtension.getSourceSets().getByName(SourceSet.MAIN_SOURCE_SET_NAME);
                 final String classesPath = QuarkusGradleUtils.getClassesDir(mainSourceSet, jarTask.getTemporaryDir(), false);
                 if (classesPath != null) {
                     classesDir = Paths.get(classesPath);
@@ -211,22 +209,22 @@ public class QuarkusPluginExtension {
     }
 
     public AppModelResolver getAppModelResolver(LaunchMode mode) {
-        return new AppModelGradleResolver(project, getQuarkusModel(mode));
+        return new AppModelGradleResolver(project, getApplicationModel(mode));
     }
 
-    public QuarkusModel getQuarkusModel() {
-        return getQuarkusModel(LaunchMode.NORMAL);
+    public ApplicationModel getApplicationModel() {
+        return getApplicationModel(LaunchMode.NORMAL);
     }
 
-    public QuarkusModel getQuarkusModel(LaunchMode mode) {
+    public ApplicationModel getApplicationModel(LaunchMode mode) {
         return create(project, mode);
     }
 
-    private QuarkusModel create(Project project, LaunchMode mode) {
-        QuarkusModelBuilder builder = new QuarkusModelBuilder();
-        ModelParameter params = new ModelParameterImpl();
+    private ApplicationModel create(Project project, LaunchMode mode) {
+        final ModelParameter params = new ModelParameterImpl();
         params.setMode(mode.toString());
-        return (QuarkusModel) builder.buildAll(QuarkusModel.class.getName(), params, project);
+        return (ApplicationModel) new GradleApplicationModelBuilder().buildAll(ApplicationModel.class.getName(), params,
+                project);
     }
 
     /**
@@ -249,7 +247,8 @@ public class QuarkusPluginExtension {
      * @return the source sets associated with the current project.
      */
     private SourceSetContainer getSourceSets() {
-        return project.getConvention().getPlugin(JavaPluginConvention.class).getSourceSets();
+        final JavaPluginExtension javaExtension = project.getExtensions().findByType(JavaPluginExtension.class);
+        return javaExtension == null ? null : javaExtension.getSourceSets();
     }
 
 }

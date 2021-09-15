@@ -167,7 +167,7 @@ public class CuratedApplication implements Serializable, AutoCloseable {
             return;
         }
         cpeList = new ArrayList<>(2);
-        for (Path path : artifact.getPaths()) {
+        for (Path path : artifact.getResolvedPaths()) {
             final ClassPathElement element = ClassPathElement.fromPath(path);
             consumer.accept(element);
             cpeList.add(element);
@@ -299,7 +299,7 @@ public class CuratedApplication implements Serializable, AutoCloseable {
     }
 
     private static boolean isHotReloadable(AppArtifact a, Set<Path> hotReloadPaths) {
-        for (Path p : a.getPaths()) {
+        for (Path p : a.getResolvedPaths()) {
             if (hotReloadPaths.contains(p)) {
                 return true;
             }

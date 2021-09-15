@@ -11,6 +11,7 @@ import io.quarkus.bootstrap.model.AppDependency;
 import io.quarkus.bootstrap.resolver.TsArtifact;
 import io.quarkus.bootstrap.resolver.TsDependency;
 import io.quarkus.bootstrap.resolver.TsQuarkusExt;
+import io.quarkus.maven.dependency.DependencyFlags;
 
 public class OptionalDepsTest extends ExecutableOutputOutcomeTestBase {
 
@@ -69,15 +70,15 @@ public class OptionalDepsTest extends ExecutableOutputOutcomeTestBase {
     protected void assertDeploymentDeps(List<AppDependency> deploymentDeps) throws Exception {
         final Set<AppDependency> expected = new HashSet<>();
         expected.add(new AppDependency(new AppArtifact("io.quarkus.bootstrap.test", "ext-a-deployment", "1"), "compile", true,
-                AppDependency.DEPLOYMENT_CP_FLAG));
+                DependencyFlags.DEPLOYMENT_CP));
         expected.add(
                 new AppDependency(new AppArtifact("io.quarkus.bootstrap.test", "ext-b-deployment-dep", "1"), "compile", true,
-                        AppDependency.DEPLOYMENT_CP_FLAG));
+                        DependencyFlags.DEPLOYMENT_CP));
         expected.add(new AppDependency(new AppArtifact("io.quarkus.bootstrap.test", "ext-b-deployment", "1"), "compile", true,
-                AppDependency.DEPLOYMENT_CP_FLAG));
+                DependencyFlags.DEPLOYMENT_CP));
         expected.add(
                 new AppDependency(new AppArtifact("io.quarkus.bootstrap.test", "ext-d-deployment", "1"), "compile", false,
-                        AppDependency.DEPLOYMENT_CP_FLAG));
+                        DependencyFlags.DEPLOYMENT_CP));
         assertEquals(expected, new HashSet<>(deploymentDeps));
     }
 }

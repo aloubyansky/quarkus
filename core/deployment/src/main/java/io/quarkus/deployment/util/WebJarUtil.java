@@ -133,7 +133,7 @@ public class WebJarUtil {
 
         if (isEmpty(deploymentPath)) {
             ClassLoader classLoader = WebJarUtil.class.getClassLoader();
-            for (Path p : resourcesArtifact.getPaths()) {
+            for (Path p : resourcesArtifact.getResolvedPaths()) {
                 File artifactFile = p.toFile();
                 if (artifactFile.isFile()) {
                     // case of a jar file
@@ -151,7 +151,8 @@ public class WebJarUtil {
                                             jarFile.getInputStream(entry), fileName)) {
                                         String modulename = getModuleOverrideName(resourcesArtifact, fileName);
                                         if (IGNORE_LIST.contains(fileName)
-                                                && isOverride(userApplication.getPaths(), classLoader, fileName, modulename)) {
+                                                && isOverride(userApplication.getPaths(), classLoader, fileName,
+                                                        modulename)) {
                                             try (InputStream override = insertVariables(userApplication,
                                                     getOverride(userApplication.getPaths(), classLoader,
                                                             fileName, modulename, useDefaultQuarkusBranding),
@@ -236,7 +237,7 @@ public class WebJarUtil {
         //we could do this for dev mode as well but then we need to extract them every time
 
         ClassLoader classLoader = WebJarUtil.class.getClassLoader();
-        for (Path p : artifact.getPaths()) {
+        for (Path p : artifact.getResolvedPaths()) {
             File artifactFile = p.toFile();
             try (JarFile jarFile = JarFiles.create(artifactFile)) {
                 Enumeration<JarEntry> entries = jarFile.entries();

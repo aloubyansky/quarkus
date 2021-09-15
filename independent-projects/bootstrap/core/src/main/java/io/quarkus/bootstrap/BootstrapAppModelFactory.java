@@ -287,7 +287,7 @@ public class BootstrapAppModelFactory {
 
                                 log.debugf("Loaded cached AppModel %s from %s", appModel, cachedCpPath);
                                 for (AppDependency i : appModel.getFullDeploymentDeps()) {
-                                    for (Path p : i.getArtifact().getPaths()) {
+                                    for (Path p : i.getArtifact().getResolvedPaths()) {
                                         if (!Files.exists(p)) {
                                             throw new IOException("Cached artifact does not exist: " + p);
                                         }
@@ -420,7 +420,7 @@ public class BootstrapAppModelFactory {
                 depsI.remove();
                 continue;
             }
-            appDep.getPaths().forEach(path -> {
+            appDep.getResolvedPaths().forEach(path -> {
                 if (Files.isDirectory(path)) {
                     if (!Files.exists(path.resolve(BootstrapConstants.DESCRIPTOR_PATH))) {
                         depsI.remove();

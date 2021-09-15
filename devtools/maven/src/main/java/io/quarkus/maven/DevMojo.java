@@ -65,6 +65,7 @@ import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.collection.CollectRequest;
+import org.eclipse.aether.impl.RemoteRepositoryManager;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.repository.WorkspaceReader;
 import org.eclipse.aether.resolution.ArtifactRequest;
@@ -78,11 +79,14 @@ import org.fusesource.jansi.internal.Kernel32;
 import org.fusesource.jansi.internal.WindowsSupport;
 
 import io.quarkus.bootstrap.devmode.DependenciesFilter;
+import io.quarkus.bootstrap.model.AppArtifact;
 import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.model.AppModel;
 import io.quarkus.bootstrap.model.PathsCollection;
+import io.quarkus.bootstrap.resolver.BootstrapAppModelResolver;
+import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.options.BootstrapMavenOptions;
-import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
+import io.quarkus.bootstrap.workspace.ProjectModule;
 import io.quarkus.deployment.dev.DevModeContext;
 import io.quarkus.deployment.dev.DevModeMain;
 import io.quarkus.deployment.dev.QuarkusDevModeLauncher;
@@ -253,6 +257,9 @@ public class DevMojo extends AbstractMojo {
 
     @Component
     private RepositorySystem repoSystem;
+
+    @Component
+    RemoteRepositoryManager remoteRepositoryManager;
 
     @Parameter(defaultValue = "${repositorySystemSession}", readonly = true)
     private RepositorySystemSession repoSession;
@@ -637,7 +644,7 @@ public class DevMojo extends AbstractMojo {
         return null;
     }
 
-    private void addProject(MavenDevModeLauncher.Builder builder, LocalProject localProject, boolean root) throws Exception {
+    private void addProject(MavenDevModeLauncher.Builder builder, ProjectModule module, boolean root) throws Exception {
 
         String projectDirectory;
         Set<Path> sourcePaths;
@@ -649,13 +656,14 @@ public class DevMojo extends AbstractMojo {
         List<Profile> activeProfiles = Collections.emptyList();
 
         final MavenProject mavenProject = session.getProjectMap().get(
-                String.format("%s:%s:%s", localProject.getGroupId(), localProject.getArtifactId(), localProject.getVersion()));
+                String.format("%s:%s:%s", module.getId().getGroupId(), module.getId().getArtifactId(),
+                        module.getId().getVersion()));
         if (mavenProject == null) {
-            projectDirectory = localProject.getDir().toAbsolutePath().toString();
-            Path sourcePath = localProject.getSourcesSourcesDir().toAbsolutePath();
-            sourcePaths = Collections.singleton(sourcePath);
-            Path testSourcePath = localProject.getTestSourcesSourcesDir().toAbsolutePath();
-            testSourcePaths = Collections.singleton(testSourcePath);
+            projectDirectory = module.getModuleDir().getAbsolutePath();
+            sourcePaths = module.getMainSources().stream().map(src -> src.getSourceDir().toPath().toAbsolutePath())
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            testSourcePaths = module.getTestSources().stream().map(src -> src.getSourceDir().toPath().toAbsolutePath())
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
         } else {
             projectDirectory = mavenProject.getBasedir().getPath();
             sourcePaths = mavenProject.getCompileSourceRoots().stream()
@@ -668,19 +676,27 @@ public class DevMojo extends AbstractMojo {
                     .collect(Collectors.toCollection(LinkedHashSet::new));
             activeProfiles = mavenProject.getActiveProfiles();
         }
-        Path sourceParent = localProject.getSourcesDir().toAbsolutePath();
 
-        Path classesDir = localProject.getClassesDir();
-        if (Files.isDirectory(classesDir)) {
-            classesPath = classesDir.toAbsolutePath().toString();
+        final Path sourceParent;
+        if (module.getMainSources().isEmpty()) {
+            if (module.getMainResources().isEmpty()) {
+                throw new MojoExecutionException("The project does not appear to contain any sources or resources");
+            }
+            sourceParent = module.getMainResources().iterator().next().getSourceDir().toPath().toAbsolutePath().getParent();
+        } else {
+            sourceParent = module.getMainSources().iterator().next().getSourceDir().toPath().toAbsolutePath().getParent();
         }
-        Path testClassesDir = localProject.getTestClassesDir();
-        testClassesPath = testClassesDir.toAbsolutePath().toString();
-        resourcePaths = localProject.getResourcesSourcesDirs().toList().stream()
-                .map(Path::toAbsolutePath)
+
+        Path classesDir = module.getMainResources().iterator().next().getDestinationDir().toPath().toAbsolutePath();
+        if (Files.isDirectory(classesDir)) {
+            classesPath = classesDir.toString();
+        }
+        Path testClassesDir = module.getTestSources().iterator().next().getDestinationDir().toPath().toAbsolutePath();
+        testClassesPath = testClassesDir.toString();
+
+        resourcePaths = module.getMainResources().stream().map(src -> src.getSourceDir().toPath().toAbsolutePath())
                 .collect(Collectors.toCollection(LinkedHashSet::new));
-        testResourcePaths = localProject.getTestResourcesSourcesDirs().toList().stream()
-                .map(Path::toAbsolutePath)
+        testResourcePaths = module.getTestResources().stream().map(src -> src.getSourceDir().toPath().toAbsolutePath())
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         // Add the resources and test resources from the profiles
         for (Profile profile : activeProfiles) {
@@ -689,27 +705,28 @@ public class DevMojo extends AbstractMojo {
                 resourcePaths.addAll(
                         build.getResources().stream()
                                 .map(Resource::getDirectory)
-                                .map(localProject::resolveRelativeToBaseDir)
+                                .map(Paths::get)
                                 .map(Path::toAbsolutePath)
                                 .collect(Collectors.toList()));
                 testResourcePaths.addAll(
                         build.getTestResources().stream()
                                 .map(Resource::getDirectory)
-                                .map(localProject::resolveRelativeToBaseDir)
+                                .map(Paths::get)
                                 .map(Path::toAbsolutePath)
                                 .collect(Collectors.toList()));
             }
         }
 
         if (classesPath == null && (!sourcePaths.isEmpty() || !resourcePaths.isEmpty())) {
-            throw new MojoExecutionException("Hot reloadable dependency " + localProject.getAppArtifact()
+            throw new MojoExecutionException("Hot reloadable dependency " + module.getId()
                     + " has not been compiled yet (the classes directory " + classesDir + " does not exist)");
         }
 
         Path targetDir = Paths.get(project.getBuild().getDirectory());
 
-        DevModeContext.ModuleInfo moduleInfo = new DevModeContext.ModuleInfo.Builder().setAppArtifactKey(localProject.getKey())
-                .setName(localProject.getArtifactId())
+        DevModeContext.ModuleInfo moduleInfo = new DevModeContext.ModuleInfo.Builder()
+                .setAppArtifactKey(new AppArtifactKey(module.getId().getGroupId(), module.getId().getArtifactId()))
+                .setName(module.getId().getArtifactId())
                 .setProjectDirectory(projectDirectory)
                 .setSourcePaths(PathsCollection.from(sourcePaths))
                 .setClassesPath(classesPath)
@@ -865,18 +882,27 @@ public class DevMojo extends AbstractMojo {
         }
 
         setKotlinSpecificFlags(builder);
+
+        final MavenArtifactResolver resolver = MavenArtifactResolver.builder()
+                .setRepositorySystem(repoSystem)
+                .setRepositorySystemSession(repoSession)
+                .setRemoteRepositories(repos)
+                .setRemoteRepositoryManager(remoteRepositoryManager)
+                .setWorkspaceDiscovery(true)
+                .build();
+        final AppModel appModel = new BootstrapAppModelResolver(resolver).resolveModel(
+                new AppArtifact(project.getGroupId(), project.getArtifactId(), null, "jar", project.getVersion()));
+
         if (noDeps) {
-            final LocalProject localProject = LocalProject.load(project.getModel().getPomFile().toPath());
-            addProject(builder, localProject, true);
-            builder.watchedBuildFile(localProject.getRawModel().getPomFile().toPath());
-            builder.localArtifact(new AppArtifactKey(localProject.getGroupId(), localProject.getArtifactId(), null, "jar"));
+            addProject(builder, appModel.getApplicationModule(), true);
+            appModel.getApplicationModule().getBuildFiles().forEach(p -> builder.watchedBuildFile(p));
+            builder.localArtifact(
+                    new AppArtifactKey(appModel.getAppArtifact().getGroupId(), appModel.getAppArtifact().getArtifactId()));
         } else {
-            final LocalProject localProject = LocalProject.loadWorkspace(project.getModel().getPomFile().toPath());
-            for (LocalProject project : DependenciesFilter.filterNotReloadableDependencies(localProject,
-                    this.project.getArtifacts(), repoSystem, repoSession, repos)) {
-                addProject(builder, project, project == localProject);
-                builder.watchedBuildFile(project.getRawModel().getPomFile().toPath());
-                builder.localArtifact(new AppArtifactKey(project.getGroupId(), project.getArtifactId(), null, "jar"));
+            for (ProjectModule project : DependenciesFilter.getReloadableModules(appModel)) {
+                addProject(builder, project, project == appModel.getApplicationModule());
+                project.getBuildFiles().forEach(p -> builder.watchedBuildFile(p));
+                builder.localArtifact(new AppArtifactKey(project.getId().getGroupId(), project.getId().getArtifactId()));
             }
         }
 

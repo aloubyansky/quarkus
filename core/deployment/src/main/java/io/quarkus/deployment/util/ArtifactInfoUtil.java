@@ -57,7 +57,7 @@ public final class ArtifactInfoUtil {
                 // this is needed only for QuarkusDevModeTest inside Quarkus where the class is read from the corresponding directory
                 Path path = Paths.get(codeLocation.toURI());
                 for (AppDependency i : curateOutcomeBuildItem.getEffectiveModel().getFullDeploymentDeps()) {
-                    for (Path p : i.getArtifact().getPaths()) {
+                    for (Path p : i.getArtifact().getResolvedPaths()) {
                         if (path.equals(p)) {
 
                             String artifactId = i.getArtifact().getArtifactId();

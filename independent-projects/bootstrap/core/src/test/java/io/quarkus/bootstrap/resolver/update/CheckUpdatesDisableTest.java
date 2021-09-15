@@ -9,6 +9,7 @@ import io.quarkus.bootstrap.model.AppDependency;
 import io.quarkus.bootstrap.model.AppModel;
 import io.quarkus.bootstrap.resolver.TsArtifact;
 import io.quarkus.bootstrap.resolver.TsQuarkusExt;
+import io.quarkus.maven.dependency.DependencyFlags;
 import java.util.Arrays;
 import java.util.Collections;
 
@@ -47,21 +48,21 @@ public class CheckUpdatesDisableTest extends CreatorOutcomeTestBase {
 
         final AppModel effectiveModel = outcome.getAppModel();
         assertEquals(Arrays.asList(new AppDependency[] {
-                new AppDependency(TsArtifact.jar("ext1", "1.0.0").toAppArtifact(), "compile", AppDependency.DIRECT_FLAG,
-                        AppDependency.RUNTIME_EXTENSION_ARTIFACT_FLAG, AppDependency.RUNTIME_CP_FLAG,
-                        AppDependency.DEPLOYMENT_CP_FLAG),
-                new AppDependency(TsArtifact.jar("random").toAppArtifact(), "compile", AppDependency.DIRECT_FLAG,
-                        AppDependency.RUNTIME_CP_FLAG, AppDependency.DEPLOYMENT_CP_FLAG),
-                new AppDependency(TsArtifact.jar("ext2", "1.0.0").toAppArtifact(), "compile", AppDependency.DIRECT_FLAG,
-                        AppDependency.RUNTIME_EXTENSION_ARTIFACT_FLAG, AppDependency.RUNTIME_CP_FLAG,
-                        AppDependency.DEPLOYMENT_CP_FLAG)
+                new AppDependency(TsArtifact.jar("ext1", "1.0.0").toAppArtifact(), "compile", DependencyFlags.DIRECT,
+                        DependencyFlags.RUNTIME_EXTENSION_ARTIFACT, DependencyFlags.RUNTIME_CP,
+                        DependencyFlags.DEPLOYMENT_CP),
+                new AppDependency(TsArtifact.jar("random").toAppArtifact(), "compile", DependencyFlags.DIRECT,
+                        DependencyFlags.RUNTIME_CP, DependencyFlags.DEPLOYMENT_CP),
+                new AppDependency(TsArtifact.jar("ext2", "1.0.0").toAppArtifact(), "compile", DependencyFlags.DIRECT,
+                        DependencyFlags.RUNTIME_EXTENSION_ARTIFACT, DependencyFlags.RUNTIME_CP,
+                        DependencyFlags.DEPLOYMENT_CP)
         }), effectiveModel.getUserDependencies());
 
         assertEquals(Arrays.asList(new AppDependency[] {
                 new AppDependency(TsArtifact.jar("ext1-deployment", "1.0.0").toAppArtifact(), "compile",
-                        AppDependency.DEPLOYMENT_CP_FLAG),
+                        DependencyFlags.DEPLOYMENT_CP),
                 new AppDependency(TsArtifact.jar("ext2-deployment", "1.0.0").toAppArtifact(), "compile",
-                        AppDependency.DEPLOYMENT_CP_FLAG)
+                        DependencyFlags.DEPLOYMENT_CP)
         }), effectiveModel.getDeploymentDependencies());
 
     }

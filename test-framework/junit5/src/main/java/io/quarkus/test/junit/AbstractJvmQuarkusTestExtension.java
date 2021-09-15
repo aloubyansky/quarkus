@@ -23,9 +23,8 @@ import io.quarkus.bootstrap.app.AugmentAction;
 import io.quarkus.bootstrap.app.CuratedApplication;
 import io.quarkus.bootstrap.app.QuarkusBootstrap;
 import io.quarkus.bootstrap.model.PathsCollection;
-import io.quarkus.bootstrap.model.gradle.QuarkusModel;
+import io.quarkus.bootstrap.model.gradle.ApplicationModel;
 import io.quarkus.bootstrap.runner.Timing;
-import io.quarkus.bootstrap.util.PathsUtils;
 import io.quarkus.bootstrap.utils.BuildToolHelper;
 import io.quarkus.deployment.dev.testing.CurrentTestApplication;
 import io.quarkus.runtime.configuration.ProfileManager;
@@ -116,16 +115,24 @@ public class AbstractJvmQuarkusTestExtension {
 
         // If gradle project running directly with IDE
         if (System.getProperty(BootstrapConstants.SERIALIZED_TEST_APP_MODEL) == null) {
-            QuarkusModel model = BuildToolHelper.enableGradleAppModelForTest(projectRoot);
-            if (model != null) {
-                final PathsCollection classDirectories = PathsUtils
-                        .toPathsCollection(model.getWorkspace().getMainModule().getSourceSet()
-                                .getSourceDirectories());
-                for (Path classes : classDirectories) {
-                    if (Files.exists(classes) && !rootBuilder.contains(classes)) {
-                        rootBuilder.add(classes);
+            ApplicationModel model = BuildToolHelper.enableGradleAppModelForTest(projectRoot);
+            if (model != null && model.getApplicationModule() != null) {
+                model.getApplicationModule().getTestSources().forEach(src -> {
+                    if (src.getDestinationDir().exists()) {
+                        final Path classesDir = src.getDestinationDir().toPath();
+                        if (!rootBuilder.contains(classesDir)) {
+                            rootBuilder.add(classesDir);
+                        }
                     }
-                }
+                });
+                model.getApplicationModule().getMainSources().forEach(src -> {
+                    if (src.getDestinationDir().exists()) {
+                        final Path classesDir = src.getDestinationDir().toPath();
+                        if (!rootBuilder.contains(classesDir)) {
+                            rootBuilder.add(classesDir);
+                        }
+                    }
+                });
             }
         } else if (System.getProperty(BootstrapConstants.OUTPUT_SOURCES_DIR) != null) {
             final String[] sourceDirectories = System.getProperty(BootstrapConstants.OUTPUT_SOURCES_DIR).split(",");

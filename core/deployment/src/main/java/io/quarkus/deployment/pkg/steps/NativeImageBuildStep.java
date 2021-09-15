@@ -304,7 +304,7 @@ public class NativeImageBuildStep {
         for (AppDependency appDep : appDeps) {
             final AppArtifact depArtifact = appDep.getArtifact();
             if (depArtifact.getType().equals("jar")) {
-                for (Path resolvedDep : depArtifact.getPaths()) {
+                for (Path resolvedDep : depArtifact.getResolvedPaths()) {
                     if (!Files.isDirectory(resolvedDep)) {
                         // Do we need to handle transformed classes?
                         // Their bytecode might have been modified but is there source for such modification?

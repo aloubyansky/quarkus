@@ -165,7 +165,7 @@ public class ApplicationArchiveBuildStep {
                     throw new RuntimeException(
                             "Could not resolve artifact " + key + " among the runtime dependencies of the application");
                 }
-                for (Path path : artifact.getPaths()) {
+                for (Path path : artifact.getResolvedPaths()) {
                     if (!root.isExcludedFromIndexing(path) && !root.getPaths().contains(path) && indexedDeps.add(path)) {
                         appArchives.add(createApplicationArchive(buildCloseables, classLoader, indexCache, path, key,
                                 removedResources));

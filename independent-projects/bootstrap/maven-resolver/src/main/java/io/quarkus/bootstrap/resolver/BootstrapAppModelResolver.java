@@ -12,7 +12,8 @@ import io.quarkus.bootstrap.resolver.maven.BuildDependencyGraphVisitor;
 import io.quarkus.bootstrap.resolver.maven.DeploymentInjectingDependencyVisitor;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.SimpleDependencyGraphTransformationContext;
-import java.io.File;
+import io.quarkus.bootstrap.workspace.ProjectModule;
+import io.quarkus.maven.dependency.DependencyFlags;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -90,7 +91,7 @@ public class BootstrapAppModelResolver implements AppModelResolver {
     @Override
     public Path resolve(AppArtifact artifact) throws AppModelResolverException {
         if (artifact.isResolved()) {
-            return artifact.getPaths().iterator().next();
+            return artifact.getResolvedPaths().iterator().next();
         }
         final Path path = mvn.resolve(toAetherArtifact(artifact)).getArtifact().getFile().toPath();
         artifact.setPaths(PathsCollection.of(path));
@@ -153,6 +154,17 @@ public class BootstrapAppModelResolver implements AppModelResolver {
         if (appArtifact == null) {
             throw new IllegalArgumentException("Application artifact is null");
         }
+
+        if (appArtifact.getModule() == null && mvn.getProjectModuleResolver() != null) {
+            final ProjectModule module = mvn.getProjectModuleResolver().getProjectModule(appArtifact.getGroupId(),
+                    appArtifact.getArtifactId());
+            if (module != null) {
+                final AppArtifact tmp = new AppArtifact(appArtifact, module);
+                tmp.setPaths(appArtifact.getPaths());
+                appArtifact = tmp;
+            }
+        }
+
         final Artifact mvnArtifact = toAetherArtifact(appArtifact);
 
         AppModel.Builder appBuilder = new AppModel.Builder().setAppArtifact(appArtifact);
@@ -238,19 +250,29 @@ public class BootstrapAppModelResolver implements AppModelResolver {
                 }
                 final List<DependencyNode> deploymentDepNodes = buildDepsVisitor.getDeploymentNodes();
                 for (DependencyNode dep : deploymentDepNodes) {
-                    appBuilder.addDependency(new AppDependency(BootstrapAppModelResolver.toAppArtifact(dep.getArtifact()),
-                            dep.getDependency().getScope(), dep.getDependency().isOptional(),
-                            AppDependency.DEPLOYMENT_CP_FLAG));
+                    int flags = DependencyFlags.DEPLOYMENT_CP;
+                    if (dep.getDependency().isOptional()) {
+                        flags |= DependencyFlags.OPTIONAL;
+                    }
+                    ProjectModule module = null;
+                    if (mvn.getProjectModuleResolver() != null) {
+                        module = mvn.getProjectModuleResolver().getProjectModule(dep.getArtifact().getGroupId(),
+                                dep.getArtifact().getArtifactId());
+                        if (module != null) {
+                            flags |= DependencyFlags.PROJECT_MODULE;
+                        }
+                    }
+                    appBuilder
+                            .addDependency(new AppDependency(BootstrapAppModelResolver.toAppArtifact(dep.getArtifact(), module),
+                                    dep.getDependency().getScope(), flags));
                 }
             }
         }
 
         collectPlatformProperties(appBuilder, managedDeps);
 
-        //we need these to have a type of 'jar'
-        //type is blank when loaded
         for (AppArtifactKey i : localProjects) {
-            appBuilder.addLocalProjectArtifact(new AppArtifactKey(i.getGroupId(), i.getArtifactId(), null, "jar"));
+            appBuilder.addLocalProjectArtifact(new AppArtifactKey(i.getGroupId(), i.getArtifactId()));
         }
         return appBuilder.build();
     }
@@ -395,13 +417,11 @@ public class BootstrapAppModelResolver implements AppModelResolver {
     }
 
     private static AppArtifact toAppArtifact(Artifact artifact) {
-        final AppArtifact appArtifact = new AppArtifact(artifact.getGroupId(), artifact.getArtifactId(),
-                artifact.getClassifier(), artifact.getExtension(), artifact.getVersion());
-        final File file = artifact.getFile();
-        if (file != null) {
-            appArtifact.setPaths(PathsCollection.of(file.toPath()));
-        }
-        return appArtifact;
+        return toAppArtifact(artifact, null);
+    }
+
+    static AppArtifact toAppArtifact(Artifact artifact, ProjectModule module) {
+        return DeploymentInjectingDependencyVisitor.toAppArtifact(artifact, module);
     }
 
     private static List<Dependency> toAetherDeps(List<AppDependency> directDeps) {
