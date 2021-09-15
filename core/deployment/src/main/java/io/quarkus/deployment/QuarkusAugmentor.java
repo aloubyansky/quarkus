@@ -17,7 +17,7 @@ import org.eclipse.microprofile.config.spi.ConfigProviderResolver;
 import org.jboss.logging.Logger;
 
 import io.quarkus.bootstrap.classloading.QuarkusClassLoader;
-import io.quarkus.bootstrap.model.AppModel;
+import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.bootstrap.model.PathsCollection;
 import io.quarkus.builder.BuildChain;
 import io.quarkus.builder.BuildChainBuilder;
@@ -55,7 +55,7 @@ public class QuarkusAugmentor {
     private final LiveReloadBuildItem liveReloadBuildItem;
     private final Properties buildSystemProperties;
     private final Path targetDir;
-    private final AppModel effectiveModel;
+    private final ApplicationModel effectiveModel;
     private final String baseName;
     private final Consumer<ConfigBuilder> configCustomizer;
     private final boolean rebuild;
@@ -200,7 +200,7 @@ public class QuarkusAugmentor {
         LiveReloadBuildItem liveReloadState = new LiveReloadBuildItem();
         Properties buildSystemProperties;
 
-        AppModel effectiveModel;
+        ApplicationModel effectiveModel;
         String baseName = "quarkus-application";
         Consumer<ConfigBuilder> configCustomizer;
         ClassLoader deploymentClassLoader;
@@ -328,7 +328,7 @@ public class QuarkusAugmentor {
             return this;
         }
 
-        public Builder setEffectiveModel(AppModel effectiveModel) {
+        public Builder setEffectiveModel(ApplicationModel effectiveModel) {
             this.effectiveModel = effectiveModel;
             return this;
         }
