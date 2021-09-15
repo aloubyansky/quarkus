@@ -2,18 +2,19 @@ package io.quarkus.bootstrap.resolver.maven;
 
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.BootstrapDependencyProcessingException;
-import io.quarkus.bootstrap.model.AppArtifact;
-import io.quarkus.bootstrap.model.AppArtifactKey;
-import io.quarkus.bootstrap.model.AppDependency;
-import io.quarkus.bootstrap.model.AppModel;
+import io.quarkus.bootstrap.model.ApplicationModelBuilder;
 import io.quarkus.bootstrap.model.CapabilityContract;
-import io.quarkus.bootstrap.model.PathsCollection;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
 import io.quarkus.bootstrap.util.BootstrapUtils;
 import io.quarkus.bootstrap.util.DependencyNodeUtils;
 import io.quarkus.bootstrap.util.ZipUtils;
+import io.quarkus.bootstrap.workspace.WorkspaceModule;
+import io.quarkus.maven.dependency.ArtifactDependency;
+import io.quarkus.maven.dependency.ArtifactKey;
+import io.quarkus.maven.dependency.DependencyFlags;
+import io.quarkus.maven.dependency.GACT;
+import io.quarkus.maven.dependency.ResolvedDependencyBuilder;
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
@@ -63,22 +64,21 @@ public class DeploymentInjectingDependencyVisitor {
     private final MavenArtifactResolver resolver;
     private final List<Dependency> managedDeps;
     private final List<RemoteRepository> mainRepos;
-    private final AppModel.Builder appBuilder;
+    private final ApplicationModelBuilder appBuilder;
 
-    private boolean collectingTopRuntimeNodes = true;
-    private boolean collectingDirectExtensionDeps = true;
+    private boolean collectingTopExtensionRuntimeNodes = true;
+    private boolean collectingDirectDeps = true;
     private final List<ExtensionDependency> topExtensionDeps = new ArrayList<>();
     private ExtensionDependency lastVisitedRuntimeExtNode;
-    private final Map<AppArtifactKey, ExtensionInfo> allExtensions = new HashMap<>();
+    private final Map<ArtifactKey, ExtensionInfo> allExtensions = new HashMap<>();
     private List<ConditionalDependency> conditionalDepsToProcess = new ArrayList<>();
     private final Deque<Collection<Exclusion>> exclusionStack = new ArrayDeque<>();
 
-    public final Set<AppArtifactKey> allRuntimeDeps = new HashSet<>();
-
-    private final Map<String, CapabilityContract> capabilitiesContracts = new HashMap<>();
+    public final Set<ArtifactKey> allRuntimeDeps = new HashSet<>();
 
     public DeploymentInjectingDependencyVisitor(MavenArtifactResolver resolver, List<Dependency> managedDeps,
-            List<RemoteRepository> mainRepos, AppModel.Builder appBuilder) throws BootstrapDependencyProcessingException {
+            List<RemoteRepository> mainRepos, ApplicationModelBuilder appBuilder)
+            throws BootstrapDependencyProcessingException {
         // we need to be able to take into account whether the deployment dependencies are on an optional dependency branch
         // for that we are going to use a custom dependency selector and re-initialize the resolver to use it
         final DefaultRepositorySystemSession session = new DefaultRepositorySystemSession(resolver.getSession());
@@ -90,6 +90,7 @@ public class DeploymentInjectingDependencyVisitor {
                     .setRepositorySystemSession(session)
                     .setRemoteRepositories(resolver.getRepositories())
                     .setRemoteRepositoryManager(resolver.getRemoteRepositoryManager())
+                    .setCurrentProject(resolver.getMavenContext().getCurrentProject())
                     .setWorkspaceDiscovery(false)));
         } catch (BootstrapMavenException e) {
             throw new BootstrapDependencyProcessingException("Failed to initialize deployment dependencies resolver",
@@ -149,11 +150,9 @@ public class DeploymentInjectingDependencyVisitor {
                 injectDeploymentDependencies(cd.getExtensionDependency());
             }
         }
-
-        appBuilder.setCapabilitiesContracts(capabilitiesContracts);
     }
 
-    private boolean isRuntimeArtifact(AppArtifactKey key) {
+    private boolean isRuntimeArtifact(ArtifactKey key) {
         return allRuntimeDeps.contains(key);
     }
 
@@ -166,8 +165,8 @@ public class DeploymentInjectingDependencyVisitor {
 
     private void visitRuntimeDependency(DependencyNode node) {
 
-        final boolean prevCollectingDirectExtensionDeps = collectingDirectExtensionDeps;
-        final boolean prevCollectingTopRtNodes = collectingTopRuntimeNodes;
+        final boolean prevCollectingDirectDeps = collectingDirectDeps;
+        final boolean prevCollectingTopExtRtNodes = collectingTopExtensionRuntimeNodes;
         final ExtensionDependency prevLastVisitedRtExtNode = lastVisitedRuntimeExtNode;
 
         final boolean popExclusions;
@@ -176,25 +175,35 @@ public class DeploymentInjectingDependencyVisitor {
         }
 
         Artifact artifact = node.getArtifact();
-        AppArtifact newRtArtifactDep = null;
-        if (allRuntimeDeps.add(DependencyNodeUtils.toKey(artifact))) {
+        ResolvedDependencyBuilder newRtDep = null;
+        if (allRuntimeDeps.add(getKey(artifact))) {
             artifact = resolve(artifact);
-            newRtArtifactDep = toAppArtifact(artifact);
+            WorkspaceModule module = null;
+            if (resolver.getProjectModuleResolver() != null) {
+                module = resolver.getProjectModuleResolver().getProjectModule(artifact.getGroupId(), artifact.getArtifactId());
+            }
+            newRtDep = toAppArtifact(artifact, module)
+                    .setRuntimeCp()
+                    .setDeploymentCp()
+                    .setOptional(node.getDependency().isOptional())
+                    .setScope(node.getDependency().getScope())
+                    .setDirect(collectingDirectDeps);
+            if (module != null) {
+                newRtDep.setWorkspaceModule().setReloadable();
+            }
         }
 
         try {
             final ExtensionDependency extDep = getExtensionDependencyOrNull(node, artifact);
 
-            if (newRtArtifactDep != null) {
-                final AppDependency appDep = new AppDependency(newRtArtifactDep, node.getDependency().getScope(),
-                        node.getDependency().isOptional(),
-                        collectingDirectExtensionDeps ? AppDependency.DIRECT_FLAG : 0,
-                        extDep == null ? 0 : AppDependency.RUNTIME_EXTENSION_ARTIFACT_FLAG,
-                        AppDependency.RUNTIME_CP_FLAG, AppDependency.DEPLOYMENT_CP_FLAG);
-                appBuilder.addDependency(appDep);
+            if (newRtDep != null) {
+                if (extDep != null) {
+                    newRtDep.setRuntimeExtensionArtifact();
+                }
+                appBuilder.addDependency(newRtDep.build());
             }
 
-            collectingDirectExtensionDeps = false;
+            collectingDirectDeps = false;
 
             if (extDep != null) {
                 extDep.info.ensureActivated();
@@ -210,8 +219,8 @@ public class DeploymentInjectingDependencyVisitor {
         if (popExclusions) {
             exclusionStack.pollLast();
         }
-        collectingDirectExtensionDeps = prevCollectingDirectExtensionDeps;
-        collectingTopRuntimeNodes = prevCollectingTopRtNodes;
+        collectingDirectDeps = prevCollectingDirectDeps;
+        collectingTopExtensionRuntimeNodes = prevCollectingTopExtRtNodes;
         lastVisitedRuntimeExtNode = prevLastVisitedRtExtNode;
     }
 
@@ -248,8 +257,8 @@ public class DeploymentInjectingDependencyVisitor {
 
         collectConditionalDependencies(extDep);
 
-        if (collectingTopRuntimeNodes) {
-            collectingTopRuntimeNodes = false;
+        if (collectingTopExtensionRuntimeNodes) {
+            collectingTopExtensionRuntimeNodes = false;
             topExtensionDeps.add(extDep);
         }
         if (lastVisitedRuntimeExtNode != null) {
@@ -282,7 +291,7 @@ public class DeploymentInjectingDependencyVisitor {
         if (!artifact.getExtension().equals("jar")) {
             return null;
         }
-        final AppArtifactKey extKey = DependencyNodeUtils.toKey(artifact);
+        final ArtifactKey extKey = getKey(artifact);
         ExtensionInfo ext = allExtensions.get(extKey);
         if (ext != null) {
             return ext;
@@ -316,6 +325,11 @@ public class DeploymentInjectingDependencyVisitor {
             throws BootstrapDependencyProcessingException {
         log.debugf("Injecting deployment dependency %s", extDep.info.deploymentArtifact);
         final DependencyNode deploymentNode = collectDependencies(extDep.info.deploymentArtifact, extDep.exclusions);
+
+        if (resolver.getProjectModuleResolver() != null) {
+            clearReloadable(deploymentNode);
+        }
+
         final List<DependencyNode> deploymentDeps = deploymentNode.getChildren();
         if (!replaceDirectDepBranch(extDep, deploymentDeps)) {
             throw new BootstrapDependencyProcessingException(
@@ -329,6 +343,16 @@ public class DeploymentInjectingDependencyVisitor {
         runtimeNode.setArtifact(deploymentNode.getArtifact());
         runtimeNode.getDependency().setArtifact(deploymentNode.getArtifact());
         runtimeNode.setChildren(deploymentDeps);
+    }
+
+    private void clearReloadable(DependencyNode node) {
+        for (DependencyNode child : node.getChildren()) {
+            clearReloadable(child);
+        }
+        final io.quarkus.maven.dependency.Dependency dep = appBuilder.getDependency(getKey(node.getArtifact()));
+        if (dep != null && dep.isWorkspacetModule()) {
+            ((ArtifactDependency) dep).clearFlag(DependencyFlags.RELOADABLE);
+        }
     }
 
     private boolean replaceDirectDepBranch(ExtensionDependency extDep, List<DependencyNode> deploymentDeps)
@@ -431,7 +455,7 @@ public class DeploymentInjectingDependencyVisitor {
         final Properties props;
         final Artifact deploymentArtifact;
         final Artifact[] conditionalDeps;
-        final AppArtifactKey[] dependencyCondition;
+        final ArtifactKey[] dependencyCondition;
         boolean activated;
 
         ExtensionInfo(Artifact runtimeArtifact, Properties props) throws BootstrapDependencyProcessingException {
@@ -478,7 +502,7 @@ public class DeploymentInjectingDependencyVisitor {
 
             final String providesCapabilities = props.getProperty(BootstrapConstants.PROP_PROVIDES_CAPABILITIES);
             if (providesCapabilities != null) {
-                capabilitiesContracts.put(toGactv(runtimeArtifact),
+                appBuilder.addExtensionCapabilities(
                         CapabilityContract.providesCapabilities(toGactv(runtimeArtifact), providesCapabilities));
             }
         }
@@ -547,7 +571,7 @@ public class DeploymentInjectingDependencyVisitor {
                 return;
             }
             activated = true;
-            collectingTopRuntimeNodes = false;
+            collectingTopExtensionRuntimeNodes = false;
             final ExtensionDependency extDep = getExtensionDependency();
             final DependencyNode originalNode = collectDependencies(info.runtimeArtifact, extDep.exclusions);
             final DefaultDependencyNode rtNode = (DefaultDependencyNode) extDep.runtimeNode;
@@ -568,7 +592,7 @@ public class DeploymentInjectingDependencyVisitor {
             if (info.dependencyCondition == null) {
                 return true;
             }
-            for (AppArtifactKey key : info.dependencyCondition) {
+            for (ArtifactKey key : info.dependencyCondition) {
                 if (!isRuntimeArtifact(key)) {
                     return false;
                 }
@@ -584,14 +608,19 @@ public class DeploymentInjectingDependencyVisitor {
                 && a2.getExtension().equals(a1.getExtension());
     }
 
-    private static AppArtifact toAppArtifact(Artifact artifact) {
-        final AppArtifact appArtifact = new AppArtifact(artifact.getGroupId(), artifact.getArtifactId(),
-                artifact.getClassifier(), artifact.getExtension(), artifact.getVersion());
-        final File file = artifact.getFile();
-        if (file != null) {
-            appArtifact.setPaths(PathsCollection.of(file.toPath()));
-        }
-        return appArtifact;
+    public static GACT getKey(Artifact a) {
+        return new GACT(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
+    }
+
+    public static ResolvedDependencyBuilder toAppArtifact(Artifact artifact, WorkspaceModule module) {
+        return ResolvedDependencyBuilder.newInstance()
+                .setWorkspaceModule(module)
+                .setGroupId(artifact.getGroupId())
+                .setArtifactId(artifact.getArtifactId())
+                .setClassifier(artifact.getClassifier())
+                .setType(artifact.getExtension())
+                .setVersion(artifact.getVersion())
+                .setResolvedPath(artifact.getFile() == null ? null : artifact.getFile().toPath());
     }
 
     private static String toGactv(Artifact a) {

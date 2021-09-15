@@ -311,7 +311,7 @@ public class AugmentActionImpl implements AugmentAction {
             chainBuilder.setClassLoader(classLoader);
 
             ExtensionLoader.loadStepsFrom(classLoader, new Properties(),
-                    curatedApplication.getAppModel(), launchMode, devModeType, null)
+                    curatedApplication.getApplicationModel(), launchMode, devModeType, null)
                     .accept(chainBuilder);
             chainBuilder.loadProviders(classLoader);
 
@@ -375,7 +375,7 @@ public class AugmentActionImpl implements AugmentAction {
                     .setTargetDir(quarkusBootstrap.getTargetDirectory())
                     .setDeploymentClassLoader(deploymentClassLoader)
                     .setBuildSystemProperties(quarkusBootstrap.getBuildSystemProperties())
-                    .setEffectiveModel(curatedApplication.getAppModel());
+                    .setEffectiveModel(curatedApplication.getApplicationModel());
             if (quarkusBootstrap.getBaseName() != null) {
                 builder.setBaseName(quarkusBootstrap.getBaseName());
             }
