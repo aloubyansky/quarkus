@@ -230,6 +230,9 @@ public class BootstrapAppModelFactory {
         } else {
             serializedModel = System.getProperty(BootstrapConstants.SERIALIZED_APP_MODEL);
         }
+
+        System.out.println("BootstrapAppModelFactory.resolveAppModel " + serializedModel);
+
         if (serializedModel != null) {
             final Path p = Paths.get(serializedModel);
             if (Files.exists(p)) {

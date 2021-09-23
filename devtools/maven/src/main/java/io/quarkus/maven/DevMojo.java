@@ -78,6 +78,7 @@ import org.eclipse.aether.util.artifact.JavaScopes;
 import org.fusesource.jansi.internal.Kernel32;
 import org.fusesource.jansi.internal.WindowsSupport;
 
+import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.devmode.DependenciesFilter;
 import io.quarkus.bootstrap.model.AppArtifact;
 import io.quarkus.bootstrap.model.AppArtifactKey;
@@ -86,6 +87,7 @@ import io.quarkus.bootstrap.model.PathsCollection;
 import io.quarkus.bootstrap.resolver.BootstrapAppModelResolver;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.options.BootstrapMavenOptions;
+import io.quarkus.bootstrap.util.QuarkusModelHelper;
 import io.quarkus.bootstrap.workspace.ProjectModule;
 import io.quarkus.deployment.dev.DevModeContext;
 import io.quarkus.deployment.dev.DevModeMain;
@@ -892,6 +894,10 @@ public class DevMojo extends AbstractMojo {
                 .build();
         final AppModel appModel = new BootstrapAppModelResolver(resolver).resolveModel(
                 new AppArtifact(project.getGroupId(), project.getArtifactId(), null, "jar", project.getVersion()));
+
+        Path appModelPath = QuarkusModelHelper.serializeAppModel(appModel, false);
+        System.out.println("APP MODEL FILE " + appModelPath);
+        builder.jvmArgs("-D" + BootstrapConstants.SERIALIZED_APP_MODEL + "=" + appModelPath);
 
         if (noDeps) {
             addProject(builder, appModel.getApplicationModule(), true);
