@@ -205,7 +205,7 @@ public class BootstrapMavenContext {
     }
 
     public File getUserSettings() {
-        return userSettings == null
+        File file = userSettings == null
                 ? userSettings = resolveSettingsFile(
                         getCliOptions().getOptionValue(BootstrapMavenOptions.ALTERNATE_USER_SETTINGS),
                         () -> {
@@ -214,6 +214,9 @@ public class BootstrapMavenContext {
                                     : new File(quarkusMavenSettings);
                         })
                 : userSettings;
+        log.info("command line " + BootstrapMavenOptions.getMavenCmdLine());
+        log.info("user settings " + file);
+        return file;
     }
 
     private String getProperty(String name) {
@@ -226,7 +229,7 @@ public class BootstrapMavenContext {
     }
 
     public File getGlobalSettings() {
-        return globalSettings == null
+        File file = globalSettings == null
                 ? globalSettings = resolveSettingsFile(
                         getCliOptions().getOptionValue(BootstrapMavenOptions.ALTERNATE_GLOBAL_SETTINGS),
                         () -> {
@@ -240,6 +243,8 @@ public class BootstrapMavenContext {
                             return new File(mavenHome, "conf/settings.xml");
                         })
                 : globalSettings;
+        log.info("global settings " + file);
+        return file;
     }
 
     public boolean isOffline() throws BootstrapMavenException {
@@ -321,10 +326,13 @@ public class BootstrapMavenContext {
             return localRepo;
         }
         localRepo = getProperty("maven.repo.local");
+        log.info("maven.repo.local " + localRepo);
         if (localRepo != null) {
             return localRepo;
         }
         localRepo = settings.getLocalRepository();
+        log.info("settings local repo " + localRepo);
+        log.info("userMavenConfigurationHome " + userMavenConfigurationHome);
         return localRepo == null ? new File(userMavenConfigurationHome, "repository").getAbsolutePath() : localRepo;
     }
 
@@ -401,7 +409,7 @@ public class BootstrapMavenContext {
         if (mirrors != null && !mirrors.isEmpty()) {
             final DefaultMirrorSelector ms = new DefaultMirrorSelector();
             for (Mirror m : mirrors) {
-                ms.add(m.getId(), m.getUrl(), m.getLayout(), false, m.getMirrorOf(), m.getMirrorOfLayouts());
+                ms.add(m.getId(), m.getUrl(), m.getLayout(), false, m.isBlocked(), m.getMirrorOf(), m.getMirrorOfLayouts());
             }
             session.setMirrorSelector(ms);
         }
@@ -498,7 +506,9 @@ public class BootstrapMavenContext {
     }
 
     private List<RemoteRepository> resolveRemoteRepos() throws BootstrapMavenException {
+
         final List<RemoteRepository> rawRepos = new ArrayList<>();
+        readMavenReposFromEnv(rawRepos, System.getenv());
 
         getActiveSettingsProfiles().forEach(p -> addProfileRepos(p.getRepositories(), rawRepos));
 
@@ -509,7 +519,12 @@ public class BootstrapMavenContext {
         final List<RemoteRepository> repos = getRepositorySystem().newResolutionRepositories(getRepositorySystemSession(),
                 rawRepos);
 
-        return workspace == null ? repos : resolveCurrentProjectRepos(repos);
+        List<RemoteRepository> list = workspace == null ? repos : resolveCurrentProjectRepos(repos);
+        log.info("remote repositories");
+        list.forEach(r -> {
+            log.info(" - " + r.getId() + " " + r.getUrl());
+        });
+        return list;
     }
 
     private List<RemoteRepository> resolveRemotePluginRepos() throws BootstrapMavenException {
@@ -861,5 +876,86 @@ public class BootstrapMavenContext {
             effectiveModelBuilder = s == null ? false : Boolean.parseBoolean(s);
         }
         return effectiveModelBuilder;
+    }
+
+    static final String BOOTSTRAP_MAVEN_REPOS = "BOOTSTRAP_MAVEN_REPOS";
+    static final String BOOTSTRAP_MAVEN_REPO_PREFIX = "BOOTSTRAP_MAVEN_REPO_";
+    static final String URL_SUFFIX = "_URL";
+    static final String SNAPSHOT_SUFFIX = "_SNAPSHOT";
+    static final String RELEASE_SUFFIX = "_RELEASE";
+
+    static void readMavenReposFromEnv(List<RemoteRepository> repos, Map<String, String> env) {
+        final String envRepos = env.get(BOOTSTRAP_MAVEN_REPOS);
+        if (envRepos == null || envRepos.isBlank()) {
+            return;
+        }
+        final StringBuilder buf = new StringBuilder();
+        for (int i = 0; i < envRepos.length(); ++i) {
+            final char c = envRepos.charAt(i);
+            if (c == ',') {
+                initMavenRepoFromEnv(envRepos, buf.toString(), env, repos);
+                buf.setLength(0);
+            } else {
+                buf.append(c);
+            }
+        }
+        if (buf.length() > 0) {
+            initMavenRepoFromEnv(envRepos, buf.toString(), env, repos);
+        }
+    }
+
+    private static void initMavenRepoFromEnv(String envRepos, String repoId, Map<String, String> env,
+            List<RemoteRepository> repos) {
+        final String envRepoId = toEnvVarPart(repoId);
+        String repoUrl = null;
+        boolean snapshot = true;
+        boolean release = true;
+        for (Map.Entry<String, String> envvar : env.entrySet()) {
+            final String varName = envvar.getKey();
+            if (varName.startsWith(BOOTSTRAP_MAVEN_REPO_PREFIX)
+                    && varName.regionMatches(BOOTSTRAP_MAVEN_REPO_PREFIX.length(), envRepoId, 0, envRepoId.length())) {
+                if (isMavenRepoEnvVarOption(varName, repoId, URL_SUFFIX)) {
+                    repoUrl = envvar.getValue();
+                } else if (isMavenRepoEnvVarOption(varName, repoId, SNAPSHOT_SUFFIX)) {
+                    snapshot = Boolean.parseBoolean(envvar.getValue());
+                } else if (isMavenRepoEnvVarOption(varName, repoId, RELEASE_SUFFIX)) {
+                    release = Boolean.parseBoolean(envvar.getValue());
+                }
+            }
+        }
+        if (repoUrl == null || repoUrl.isBlank()) {
+            log.warn("Maven repository " + repoId + " listed in " + BOOTSTRAP_MAVEN_REPOS + "=" + envRepos
+                    + " was ignored because the corresponding " + BOOTSTRAP_MAVEN_REPO_PREFIX + envRepoId + URL_SUFFIX
+                    + " is missing");
+        } else {
+            final RemoteRepository.Builder repoBuilder = new RemoteRepository.Builder(repoId, "default", repoUrl);
+            if (!release) {
+                repoBuilder.setReleasePolicy(new RepositoryPolicy(false, RepositoryPolicy.UPDATE_POLICY_DAILY,
+                        RepositoryPolicy.CHECKSUM_POLICY_WARN));
+            }
+            if (!snapshot) {
+                repoBuilder.setSnapshotPolicy(new RepositoryPolicy(false, RepositoryPolicy.UPDATE_POLICY_DAILY,
+                        RepositoryPolicy.CHECKSUM_POLICY_WARN));
+            }
+            repos.add(repoBuilder.build());
+        }
+    }
+
+    private static String toEnvVarPart(String s) {
+        final StringBuilder buf = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); ++i) {
+            final char c = s.charAt(i);
+            if (c == '.' || c == '-') {
+                buf.append('_');
+            } else {
+                buf.append(Character.toUpperCase(c));
+            }
+        }
+        return buf.toString();
+    }
+
+    private static boolean isMavenRepoEnvVarOption(String varName, String repoId, String option) {
+        return varName.length() == BOOTSTRAP_MAVEN_REPO_PREFIX.length() + repoId.length() + option.length()
+                && varName.endsWith(option);
     }
 }
