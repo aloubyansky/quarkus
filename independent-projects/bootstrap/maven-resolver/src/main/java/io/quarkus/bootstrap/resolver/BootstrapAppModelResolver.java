@@ -173,7 +173,7 @@ public class BootstrapAppModelResolver implements AppModelResolver {
             throw new IllegalArgumentException("Application artifact is null");
         }
         final Artifact mvnArtifact = toAetherArtifact(coords);
-
+        new Exception("BootstrapAppModelResolver.doResolveModel " + coords).printStackTrace();
         List<Dependency> managedDeps = Collections.emptyList();
         List<RemoteRepository> managedRepos = Collections.emptyList();
         if (managingProject != null) {

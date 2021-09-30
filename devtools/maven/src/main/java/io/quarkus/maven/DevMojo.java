@@ -95,6 +95,7 @@ import io.quarkus.maven.MavenDevModeLauncher.Builder;
 import io.quarkus.maven.components.MavenVersionEnforcer;
 import io.quarkus.maven.dependency.GACT;
 import io.quarkus.maven.dependency.GACTV;
+import io.quarkus.runtime.LaunchMode;
 
 /**
  * The dev mojo, that runs a quarkus app in a forked process. A background compilation process is launched and any changes are
@@ -509,12 +510,13 @@ public class DevMojo extends AbstractMojo {
     }
 
     private void initToolchain() throws MojoExecutionException {
-        executeIfConfigured(ORG_APACHE_MAVEN_PLUGINS, MAVEN_TOOLCHAINS_PLUGIN, "toolchain");
+        executeIfConfigured(ORG_APACHE_MAVEN_PLUGINS, MAVEN_TOOLCHAINS_PLUGIN, "toolchain", Collections.emptyMap());
     }
 
     private void triggerPrepare() throws MojoExecutionException {
         final PluginDescriptor pluginDescr = getPluginDescriptor();
-        executeIfConfigured(pluginDescr.getGroupId(), pluginDescr.getArtifactId(), QUARKUS_GENERATE_CODE_GOAL);
+        executeIfConfigured(pluginDescr.getGroupId(), pluginDescr.getArtifactId(), QUARKUS_GENERATE_CODE_GOAL,
+                Collections.singletonMap("mode", LaunchMode.DEVELOPMENT.name()));
     }
 
     private PluginDescriptor getPluginDescriptor() {
@@ -525,10 +527,12 @@ public class DevMojo extends AbstractMojo {
         handleResources(test);
 
         // compile the Kotlin sources if needed
-        executeIfConfigured(ORG_JETBRAINS_KOTLIN, KOTLIN_MAVEN_PLUGIN, test ? "test-compile" : "compile");
+        executeIfConfigured(ORG_JETBRAINS_KOTLIN, KOTLIN_MAVEN_PLUGIN, test ? "test-compile" : "compile",
+                Collections.emptyMap());
 
         // Compile the Java sources if needed
-        executeIfConfigured(ORG_APACHE_MAVEN_PLUGINS, MAVEN_COMPILER_PLUGIN, test ? "testCompile" : "compile");
+        executeIfConfigured(ORG_APACHE_MAVEN_PLUGINS, MAVEN_COMPILER_PLUGIN, test ? "testCompile" : "compile",
+                Collections.emptyMap());
     }
 
     /**
@@ -539,10 +543,12 @@ public class DevMojo extends AbstractMojo {
         if (resources.isEmpty()) {
             return;
         }
-        executeIfConfigured(ORG_APACHE_MAVEN_PLUGINS, MAVEN_RESOURCES_PLUGIN, test ? "testResources" : "resources");
+        executeIfConfigured(ORG_APACHE_MAVEN_PLUGINS, MAVEN_RESOURCES_PLUGIN, test ? "testResources" : "resources",
+                Collections.emptyMap());
     }
 
-    private void executeIfConfigured(String pluginGroupId, String pluginArtifactId, String goal) throws MojoExecutionException {
+    private void executeIfConfigured(String pluginGroupId, String pluginArtifactId, String goal, Map<String, String> params)
+            throws MojoExecutionException {
         final Plugin plugin = getConfiguredPluginOrNull(pluginGroupId, pluginArtifactId);
         if (!isGoalConfigured(plugin, goal)) {
             return;
@@ -556,7 +562,7 @@ public class DevMojo extends AbstractMojo {
                         version(plugin.getVersion()),
                         plugin.getDependencies()),
                 goal(goal),
-                getPluginConfig(plugin, goal),
+                getPluginConfig(plugin, goal, params),
                 executionEnvironment(
                         project,
                         session,
@@ -575,7 +581,7 @@ public class DevMojo extends AbstractMojo {
         return false;
     }
 
-    private Xpp3Dom getPluginConfig(Plugin plugin, String goal) throws MojoExecutionException {
+    private Xpp3Dom getPluginConfig(Plugin plugin, String goal, Map<String, String> params) throws MojoExecutionException {
         Xpp3Dom mergedConfig = null;
         if (!plugin.getExecutions().isEmpty()) {
             for (PluginExecution exec : plugin.getExecutions()) {
@@ -606,6 +612,12 @@ public class DevMojo extends AbstractMojo {
                     configuration.addChild(child);
                 }
             }
+        }
+
+        for (Map.Entry<String, String> param : params.entrySet()) {
+            final Xpp3Dom p = new Xpp3Dom(param.getKey());
+            p.setValue(param.getValue());
+            configuration.addChild(p);
         }
 
         return configuration;

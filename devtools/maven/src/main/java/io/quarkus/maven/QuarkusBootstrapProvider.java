@@ -32,6 +32,7 @@ import io.quarkus.maven.dependency.GACT;
 import io.quarkus.maven.dependency.GACTV;
 import io.quarkus.maven.dependency.ResolvedArtifactDependency;
 import io.quarkus.maven.dependency.ResolvedDependency;
+import io.quarkus.runtime.LaunchMode;
 import io.smallrye.common.expression.Expression;
 
 @Component(role = QuarkusBootstrapProvider.class, instantiationStrategy = "singleton")
@@ -68,14 +69,9 @@ public class QuarkusBootstrapProvider implements Closeable {
         return provider(mojo.projectId(), mojo.executionId()).artifactResolver(mojo);
     }
 
-    public QuarkusBootstrap bootstrapQuarkus(QuarkusBootstrapMojo mojo)
+    public CuratedApplication bootstrapApplication(QuarkusBootstrapMojo mojo, LaunchMode mode)
             throws MojoExecutionException {
-        return provider(mojo.projectId(), mojo.executionId()).bootstrapQuarkus(mojo);
-    }
-
-    public CuratedApplication bootstrapApplication(QuarkusBootstrapMojo mojo)
-            throws MojoExecutionException {
-        return provider(mojo.projectId(), mojo.executionId()).curateApplication(mojo);
+        return provider(mojo.projectId(), mojo.executionId()).curateApplication(mojo, mode);
     }
 
     @Override
@@ -96,7 +92,6 @@ public class QuarkusBootstrapProvider implements Closeable {
 
         private ResolvedDependency appArtifact;
         private MavenArtifactResolver artifactResolver;
-        private QuarkusBootstrap quarkusBootstrap;
         private CuratedApplication curatedApp;
 
         private MavenArtifactResolver artifactResolver(QuarkusBootstrapMojo mojo)
@@ -117,10 +112,8 @@ public class QuarkusBootstrapProvider implements Closeable {
             }
         }
 
-        protected QuarkusBootstrap bootstrapQuarkus(QuarkusBootstrapMojo mojo) throws MojoExecutionException {
-            if (quarkusBootstrap != null) {
-                return quarkusBootstrap;
-            }
+        protected CuratedApplication bootstrapQuarkus(QuarkusBootstrapMojo mojo, LaunchMode mode)
+                throws MojoExecutionException {
 
             final Properties projectProperties = mojo.mavenProject().getProperties();
             final Properties effectiveProperties = new Properties();
@@ -169,24 +162,30 @@ public class QuarkusBootstrapProvider implements Closeable {
                     .setBaseName(mojo.finalName())
                     .setTargetDirectory(mojo.buildDir().toPath());
 
+            if (mode == LaunchMode.DEVELOPMENT) {
+                builder.setMode(QuarkusBootstrap.Mode.DEV);
+            } else if (mode == LaunchMode.TEST) {
+                builder.setMode(QuarkusBootstrap.Mode.TEST);
+            }
+
             for (MavenProject project : mojo.mavenProject().getCollectedProjects()) {
                 builder.addLocalArtifact(new AppArtifactKey(project.getGroupId(), project.getArtifactId()));
             }
 
-            return quarkusBootstrap = builder.build();
-        }
-
-        protected CuratedApplication curateApplication(QuarkusBootstrapMojo mojo) throws MojoExecutionException {
-            if (curatedApp != null) {
-                return curatedApp;
-            }
             try {
-                return curatedApp = bootstrapQuarkus(mojo).bootstrap();
-            } catch (MojoExecutionException e) {
-                throw e;
+                return builder.build().bootstrap();
             } catch (BootstrapException e) {
                 throw new MojoExecutionException("Failed to bootstrap the application", e);
             }
+        }
+
+        protected CuratedApplication curateApplication(QuarkusBootstrapMojo mojo, LaunchMode mode)
+                throws MojoExecutionException {
+            System.out.println("QuarkusBootstrapProvider.curateApplication " + mode);
+            if (curatedApp != null) {
+                return curatedApp;
+            }
+            return curatedApp = bootstrapQuarkus(mojo, mode);
         }
 
         protected GACTV managingProject(QuarkusBootstrapMojo mojo) {
@@ -288,7 +287,6 @@ public class QuarkusBootstrapProvider implements Closeable {
                 curatedApp = null;
             }
             appArtifact = null;
-            quarkusBootstrap = null;
         }
     }
 }

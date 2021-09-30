@@ -20,9 +20,9 @@ import org.eclipse.aether.impl.RemoteRepositoryManager;
 import org.eclipse.aether.repository.RemoteRepository;
 
 import io.quarkus.bootstrap.app.CuratedApplication;
-import io.quarkus.bootstrap.app.QuarkusBootstrap;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.maven.dependency.GACT;
+import io.quarkus.runtime.LaunchMode;
 
 public abstract class QuarkusBootstrapMojo extends AbstractMojo {
 
@@ -207,11 +207,11 @@ public abstract class QuarkusBootstrapMojo extends AbstractMojo {
         return bootstrapProvider.artifactResolver(this);
     }
 
-    protected QuarkusBootstrap bootstrapQuarkus() throws MojoExecutionException {
-        return bootstrapProvider.bootstrapQuarkus(this);
+    protected CuratedApplication bootstrapApplication() throws MojoExecutionException {
+        return bootstrapApplication(LaunchMode.NORMAL);
     }
 
-    protected CuratedApplication bootstrapApplication() throws MojoExecutionException {
-        return bootstrapProvider.bootstrapApplication(this);
+    protected CuratedApplication bootstrapApplication(LaunchMode mode) throws MojoExecutionException {
+        return bootstrapProvider.bootstrapApplication(this, mode);
     }
 }
