@@ -271,11 +271,11 @@ public class CuratedApplication implements Serializable, AutoCloseable {
             Set<Path> hotReloadPaths = new HashSet<>();
             for (AdditionalDependency i : quarkusBootstrap.getAdditionalApplicationArchives()) {
                 if (!i.isHotReloadable()) {
-                    for (Path root : i.getArchivePath()) {
+                    for (Path root : i.getResolvedPaths()) {
                         builder.addElement(ClassPathElement.fromPath(root));
                     }
                 } else {
-                    for (Path root : i.getArchivePath()) {
+                    for (Path root : i.getResolvedPaths()) {
                         hotReloadPaths.add(root);
                         builder.addBannedElement(new ClassFilteredBannedElement(ClassPathElement.fromPath(root)));
                     }
@@ -335,7 +335,7 @@ public class CuratedApplication implements Serializable, AutoCloseable {
 
         //additional user class path elements first
         for (AdditionalDependency i : quarkusBootstrap.getAdditionalApplicationArchives()) {
-            for (Path root : i.getArchivePath()) {
+            for (Path root : i.getResolvedPaths()) {
                 builder.addElement(ClassPathElement.fromPath(root));
             }
         }
@@ -369,7 +369,7 @@ public class CuratedApplication implements Serializable, AutoCloseable {
 
         for (AdditionalDependency i : getQuarkusBootstrap().getAdditionalApplicationArchives()) {
             if (i.isHotReloadable()) {
-                for (Path root : i.getArchivePath()) {
+                for (Path root : i.getResolvedPaths()) {
                     builder.addElement(ClassPathElement.fromPath(root));
                 }
             }

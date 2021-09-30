@@ -73,7 +73,7 @@ public class MutableJarApplicationModel implements Serializable {
             model.addLesserPriorityArtifact(i);
         }
         for (ArtifactKey i : localProjectArtifacts) {
-            model.addLocalProjectArtifact(i);
+            model.addReloadableWorkspaceModule(i);
         }
         for (ExtensionCapabilities ec : capabilitiesContracts) {
             model.addExtensionCapabilities(ec);
@@ -108,7 +108,7 @@ public class MutableJarApplicationModel implements Serializable {
             for (String i : paths) {
                 builder.add(root.resolve(i));
             }
-            return ResolvedDependencyBuilder.newInstance()
+            final ResolvedDependency d = ResolvedDependencyBuilder.newInstance()
                     .setGroupId(getGroupId())
                     .setArtifactId(getArtifactId())
                     .setClassifier(getClassifier())
@@ -116,6 +116,7 @@ public class MutableJarApplicationModel implements Serializable {
                     .setResolvedPaths(builder.build())
                     .setFlags(flags)
                     .build();
+            return d;
         }
     }
 }

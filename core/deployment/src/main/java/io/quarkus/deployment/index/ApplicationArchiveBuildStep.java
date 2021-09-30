@@ -134,7 +134,7 @@ public class ApplicationArchiveBuildStep {
                 indexCache, curateOutcomeBuildItem, removedResources);
 
         for (AdditionalApplicationArchiveBuildItem i : additionalApplicationArchives) {
-            for (Path apPath : i.getPaths()) {
+            for (Path apPath : i.getResolvedPaths()) {
                 if (!root.getPaths().contains(apPath) && indexedPaths.add(apPath)) {
                     appArchives.add(createApplicationArchive(buildCloseables, classLoader, indexCache, apPath, null,
                             removedResources));

@@ -14,6 +14,7 @@ import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.maven.dependency.DependencyFlags;
 import io.quarkus.maven.dependency.GACT;
 import io.quarkus.maven.dependency.ResolvedDependencyBuilder;
+import io.quarkus.paths.PathList;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.FileSystem;
@@ -65,6 +66,8 @@ public class DeploymentInjectingDependencyVisitor {
     private final List<Dependency> managedDeps;
     private final List<RemoteRepository> mainRepos;
     private final ApplicationModelBuilder appBuilder;
+    private final boolean preferWorkspacePaths;
+    private final boolean collectReloadableModules;
 
     private boolean collectingTopExtensionRuntimeNodes = true;
     private boolean collectingDirectDeps = true;
@@ -77,8 +80,11 @@ public class DeploymentInjectingDependencyVisitor {
     public final Set<ArtifactKey> allRuntimeDeps = new HashSet<>();
 
     public DeploymentInjectingDependencyVisitor(MavenArtifactResolver resolver, List<Dependency> managedDeps,
-            List<RemoteRepository> mainRepos, ApplicationModelBuilder appBuilder)
+            List<RemoteRepository> mainRepos, ApplicationModelBuilder appBuilder, boolean preferWorkspacePaths,
+            boolean collectReloadableModules)
             throws BootstrapDependencyProcessingException {
+        this.preferWorkspacePaths = preferWorkspacePaths;
+        this.collectReloadableModules = collectReloadableModules;
         // we need to be able to take into account whether the deployment dependencies are on an optional dependency branch
         // for that we are going to use a custom dependency selector and re-initialize the resolver to use it
         final DefaultRepositorySystemSession session = new DefaultRepositorySystemSession(resolver.getSession());
@@ -182,7 +188,7 @@ public class DeploymentInjectingDependencyVisitor {
             if (resolver.getProjectModuleResolver() != null) {
                 module = resolver.getProjectModuleResolver().getProjectModule(artifact.getGroupId(), artifact.getArtifactId());
             }
-            newRtDep = toAppArtifact(artifact, module)
+            newRtDep = toAppArtifact(artifact, module, preferWorkspacePaths)
                     .setRuntimeCp()
                     .setDeploymentCp()
                     .setOptional(node.getDependency().isOptional())
@@ -190,6 +196,9 @@ public class DeploymentInjectingDependencyVisitor {
                     .setDirect(collectingDirectDeps);
             if (module != null) {
                 newRtDep.setWorkspaceModule().setReloadable();
+                if (collectReloadableModules) {
+                    appBuilder.addReloadableWorkspaceModule(new GACT(artifact.getGroupId(), artifact.getArtifactId()));
+                }
             }
         }
 
@@ -612,15 +621,30 @@ public class DeploymentInjectingDependencyVisitor {
         return new GACT(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
     }
 
-    public static ResolvedDependencyBuilder toAppArtifact(Artifact artifact, WorkspaceModule module) {
-        return ResolvedDependencyBuilder.newInstance()
+    public static ResolvedDependencyBuilder toAppArtifact(Artifact artifact, WorkspaceModule module,
+            boolean preferWorkspacePaths) {
+        final ResolvedDependencyBuilder builder = ResolvedDependencyBuilder.newInstance()
                 .setWorkspaceModule(module)
                 .setGroupId(artifact.getGroupId())
                 .setArtifactId(artifact.getArtifactId())
                 .setClassifier(artifact.getClassifier())
                 .setType(artifact.getExtension())
-                .setVersion(artifact.getVersion())
-                .setResolvedPath(artifact.getFile() == null ? null : artifact.getFile().toPath());
+                .setVersion(artifact.getVersion());
+        if (preferWorkspacePaths && module != null) {
+            final PathList.Builder pathBuilder = PathList.builder();
+            module.getMainSources().forEach(src -> pathBuilder.add(src.getDestinationDir().toPath()));
+            module.getMainResources().forEach(src -> {
+                final Path p = src.getDestinationDir().toPath();
+                if (!pathBuilder.contains(p)) {
+                    pathBuilder.add(p);
+                }
+            });
+            builder.setResolvedPaths(pathBuilder.build());
+        } else {
+            builder.setResolvedPath(artifact.getFile() == null ? null : artifact.getFile().toPath());
+
+        }
+        return builder;
     }
 
     private static String toGactv(Artifact a) {

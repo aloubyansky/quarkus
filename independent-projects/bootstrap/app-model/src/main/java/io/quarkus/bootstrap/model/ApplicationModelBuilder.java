@@ -36,7 +36,7 @@ public class ApplicationModelBuilder {
     final Set<ArtifactKey> runnerParentFirstArtifacts = new HashSet<>();
     final Set<ArtifactKey> excludedArtifacts = new HashSet<>();
     final Set<ArtifactKey> lesserPriorityArtifacts = new HashSet<>();
-    final Set<ArtifactKey> localProjectArtifacts = new HashSet<>();
+    final Set<ArtifactKey> reloadableWorkspaceModules = new HashSet<>();
     final List<ExtensionCapabilities> extensionCapabilities = new ArrayList<>();
     PlatformImports platformImports;
     final Map<WorkspaceModuleId, DefaultWorkspaceModule> projectModules = new HashMap<>();
@@ -107,13 +107,13 @@ public class ApplicationModelBuilder {
         return this;
     }
 
-    public ApplicationModelBuilder addLocalProjectArtifact(ArtifactKey deps) {
-        this.localProjectArtifacts.add(deps);
+    public ApplicationModelBuilder addReloadableWorkspaceModule(ArtifactKey key) {
+        this.reloadableWorkspaceModules.add(key);
         return this;
     }
 
-    public ApplicationModelBuilder addLocalProjectArtifacts(Collection<ArtifactKey> deps) {
-        this.localProjectArtifacts.addAll(deps);
+    public ApplicationModelBuilder addReloadableWorkspaceModules(Collection<ArtifactKey> key) {
+        this.reloadableWorkspaceModules.addAll(key);
         return this;
     }
 
