@@ -401,7 +401,7 @@ public class AugmentActionImpl implements AugmentAction {
                 //but we only need to add it to the additional app archives
                 //if it is forced as an app archive
                 if (i.isForceApplicationArchive()) {
-                    builder.addAdditionalApplicationArchive(i.getArchivePath());
+                    builder.addAdditionalApplicationArchive(i.getResolvedPaths());
                 }
             }
             builder.excludeFromIndexing(quarkusBootstrap.getExcludeFromClassPath());

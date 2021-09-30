@@ -78,14 +78,15 @@ import org.eclipse.aether.util.artifact.JavaScopes;
 import org.fusesource.jansi.internal.Kernel32;
 import org.fusesource.jansi.internal.WindowsSupport;
 
+import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.devmode.DependenciesFilter;
 import io.quarkus.bootstrap.model.AppArtifactKey;
-import io.quarkus.bootstrap.model.AppModel;
 import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.bootstrap.model.PathsCollection;
 import io.quarkus.bootstrap.resolver.BootstrapAppModelResolver;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.options.BootstrapMavenOptions;
+import io.quarkus.bootstrap.util.BootstrapUtils;
 import io.quarkus.bootstrap.workspace.WorkspaceModule;
 import io.quarkus.deployment.dev.DevModeContext;
 import io.quarkus.deployment.dev.DevModeMain;
@@ -885,15 +886,32 @@ public class DevMojo extends AbstractMojo {
 
         setKotlinSpecificFlags(builder);
 
-        final MavenArtifactResolver resolver = MavenArtifactResolver.builder()
+        final MavenArtifactResolver.Builder resolverBuilder = MavenArtifactResolver.builder()
                 .setRepositorySystem(repoSystem)
-                .setRepositorySystemSession(repoSession)
                 .setRemoteRepositories(repos)
                 .setRemoteRepositoryManager(remoteRepositoryManager)
-                .setWorkspaceDiscovery(true)
-                .build();
-        final ApplicationModel appModel = new BootstrapAppModelResolver(resolver).resolveModel(
-                new GACTV(project.getGroupId(), project.getArtifactId(), null, "jar", project.getVersion()));
+                .setWorkspaceDiscovery(true);
+
+        // path to the serialized application model
+        final Path appModelLocation = resolveSerializedModelLocation();
+        // if it already exists, it may be a reload triggered by a change in a POM
+        // in which case we should not be using the original Maven session
+        boolean reinitializeMavenSession = Files.exists(appModelLocation);
+        if (reinitializeMavenSession) {
+            Files.delete(appModelLocation);
+        } else {
+            // we can re-use the original Maven session
+            resolverBuilder.setRepositorySystemSession(repoSession);
+        }
+
+        final ApplicationModel appModel = new BootstrapAppModelResolver(resolverBuilder.build())
+                .setDevMode(true)
+                .setCollectReloadableDependencies(!noDeps)
+                .resolveModel(new GACTV(project.getGroupId(), project.getArtifactId(), null, "jar", project.getVersion()));
+
+        // serialize the app model to avoid re-resolving it in the dev process
+        BootstrapUtils.serializeAppModel(appModel, appModelLocation);
+        builder.jvmArgs("-D" + BootstrapConstants.SERIALIZED_APP_MODEL + "=" + appModelLocation);
 
         if (noDeps) {
             addProject(builder, appModel.getApplicationModule(), true);
@@ -921,7 +939,7 @@ public class DevMojo extends AbstractMojo {
                         Properties p = new Properties();
                         try (InputStream inputStream = file.getInputStream(entry)) {
                             p.load(inputStream);
-                            String parentFirst = p.getProperty(AppModel.PARENT_FIRST_ARTIFACTS);
+                            String parentFirst = p.getProperty(ApplicationModel.PARENT_FIRST_ARTIFACTS);
                             if (parentFirst != null) {
                                 String[] artifacts = parentFirst.split(",");
                                 for (String artifact : artifacts) {
@@ -1103,5 +1121,11 @@ public class DevMojo extends AbstractMojo {
             }
         }
         return Optional.empty();
+    }
+
+    private Path resolveSerializedModelLocation() {
+        final Path p = BootstrapUtils.resolveSerializedAppModelPath(Paths.get(project.getBuild().getDirectory()));
+        p.toFile().deleteOnExit();
+        return p;
     }
 }

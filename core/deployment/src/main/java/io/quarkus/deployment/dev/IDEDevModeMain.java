@@ -10,6 +10,7 @@ import java.util.function.BiConsumer;
 
 import org.jboss.logging.Logger;
 
+import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.BootstrapGradleException;
 import io.quarkus.bootstrap.app.CuratedApplication;
 import io.quarkus.bootstrap.devmode.DependenciesFilter;
@@ -17,7 +18,7 @@ import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.bootstrap.model.PathsCollection;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
-import io.quarkus.bootstrap.util.QuarkusModelHelper;
+import io.quarkus.bootstrap.util.BootstrapUtils;
 import io.quarkus.bootstrap.utils.BuildToolHelper;
 import io.quarkus.bootstrap.workspace.ProcessedSources;
 import io.quarkus.bootstrap.workspace.WorkspaceModule;
@@ -44,8 +45,8 @@ public class IDEDevModeMain implements BiConsumer<CuratedApplication, Map<String
             if (BuildToolHelper.isMavenProject(appClasses)) {
                 appModel = curatedApplication.getApplicationModel();
             } else {
-                appModel = QuarkusModelHelper
-                        .deserializeQuarkusModel((Path) stringObjectMap.get(QuarkusModelHelper.SERIALIZED_QUARKUS_MODEL));
+                appModel = BootstrapUtils
+                        .deserializeQuarkusModel((Path) stringObjectMap.get(BootstrapConstants.SERIALIZED_APP_MODEL));
             }
 
             if (appModel != null) {

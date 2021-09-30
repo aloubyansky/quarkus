@@ -90,7 +90,7 @@ public class BootstrapAppModelFactory {
     private MavenArtifactResolver mavenArtifactResolver;
 
     private BootstrapMavenContext mvnContext;
-    Set<ArtifactKey> localArtifacts = Collections.emptySet();
+    Set<ArtifactKey> reloadableModules = Collections.emptySet();
 
     private Collection<io.quarkus.maven.dependency.Dependency> forcedDependencies = Collections.emptyList();
 
@@ -108,7 +108,7 @@ public class BootstrapAppModelFactory {
     }
 
     public BootstrapAppModelFactory setLocalArtifacts(Set<AppArtifactKey> localArtifacts) {
-        this.localArtifacts = localArtifacts.stream()
+        this.reloadableModules = localArtifacts.stream()
                 .map(k -> new GACT(k.getGroupId(), k.getArtifactId(), k.getClassifier(), k.getType()))
                 .collect(Collectors.toSet());
         return this;
@@ -236,6 +236,7 @@ public class BootstrapAppModelFactory {
         } else {
             serializedModel = System.getProperty(BootstrapConstants.SERIALIZED_APP_MODEL);
         }
+
         if (serializedModel != null) {
             final Path p = Paths.get(serializedModel);
             if (Files.exists(p)) {
@@ -314,7 +315,7 @@ public class BootstrapAppModelFactory {
                 }
             }
             CurationResult curationResult = new CurationResult(getAppModelResolver()
-                    .resolveManagedModel(appArtifact, forcedDependencies, managingProject, localArtifacts));
+                    .resolveManagedModel(appArtifact, forcedDependencies, managingProject, reloadableModules));
             if (cachedCpPath != null) {
                 Files.createDirectories(cachedCpPath.getParent());
                 try (DataOutputStream out = new DataOutputStream(Files.newOutputStream(cachedCpPath))) {
@@ -404,7 +405,7 @@ public class BootstrapAppModelFactory {
             } else {
                 //we need some way to figure out dependencies here
                 initialDepsList = modelResolver.resolveManagedModel(appArtifact, Collections.emptyList(), managingProject,
-                        localArtifacts);
+                        reloadableModules);
             }
         } catch (AppModelResolverException | IOException e) {
             throw new RuntimeException("Failed to resolve initial application dependencies", e);
@@ -469,7 +470,7 @@ public class BootstrapAppModelFactory {
         if (availableUpdates != null) {
             try {
                 return new CurationResult(
-                        modelResolver.resolveManagedModel(appArtifact, availableUpdates, managingProject, localArtifacts),
+                        modelResolver.resolveManagedModel(appArtifact, availableUpdates, managingProject, reloadableModules),
                         availableUpdates,
                         loadedFromState, appArtifact, stateArtifact);
             } catch (AppModelResolverException e) {

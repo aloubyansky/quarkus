@@ -694,7 +694,7 @@ public class JarResultBuildStep {
             }
         }
         for (AdditionalApplicationArchiveBuildItem i : additionalApplicationArchiveBuildItems) {
-            for (Path path : i.getPaths()) {
+            for (Path path : i.getResolvedPaths()) {
                 if (!path.getParent().equals(userProviders)) {
                     throw new RuntimeException(
                             "Additional application archives can only be provided from the user providers directory. " + path

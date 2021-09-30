@@ -26,7 +26,7 @@ public class DefaultApplicationModel implements ApplicationModel, Serializable {
         this.parentFirstArtifacts = builder.parentFirstArtifacts;
         this.runnerParentFirstArtifacts = builder.runnerParentFirstArtifacts;
         this.lesserPriorityArtifacts = builder.lesserPriorityArtifacts;
-        this.localProjectArtifacts = builder.localProjectArtifacts;
+        this.localProjectArtifacts = builder.reloadableWorkspaceModules;
     }
 
     @Override

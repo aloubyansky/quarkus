@@ -4,10 +4,9 @@ import io.quarkus.bootstrap.app.AdditionalDependency;
 import io.quarkus.bootstrap.app.CuratedApplication;
 import io.quarkus.bootstrap.app.QuarkusBootstrap;
 import io.quarkus.bootstrap.model.ApplicationModel;
-import io.quarkus.bootstrap.model.PathsCollection;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
-import io.quarkus.bootstrap.util.QuarkusModelHelper;
+import io.quarkus.bootstrap.util.BootstrapUtils;
 import io.quarkus.bootstrap.utils.BuildToolHelper;
 import io.quarkus.bootstrap.workspace.WorkspaceModule;
 import java.io.Closeable;
@@ -41,8 +40,7 @@ public class IDELauncherImpl implements Closeable {
                     .setTargetDirectory(classesDir.getParent());
             if (BuildToolHelper.isGradleProject(classesDir)) {
                 final ApplicationModel quarkusModel = BuildToolHelper.enableGradleAppModelForDevMode(classesDir);
-                context.put(QuarkusModelHelper.SERIALIZED_QUARKUS_MODEL,
-                        QuarkusModelHelper.serializeQuarkusModel(quarkusModel));
+                context.put(BootstrapConstants.SERIALIZED_APP_MODEL, BootstrapUtils.serializeAppModel(quarkusModel, false));
 
                 final Path launchingModulePath = quarkusModel.getApplicationModule().getMainSources().iterator().next()
                         .getDestinationDir().toPath();
@@ -54,15 +52,13 @@ public class IDELauncherImpl implements Closeable {
 
                 for (WorkspaceModule additionalModule : quarkusModel.getWorkspaceModules()) {
                     additionalModule.getMainSources().forEach(src -> {
-                        builder.addAdditionalApplicationArchive(new AdditionalDependency(
-                                PathsCollection.of(src.getDestinationDir().toPath()),
-                                true, false));
+                        builder.addAdditionalApplicationArchive(
+                                new AdditionalDependency(src.getDestinationDir().toPath(), true, false));
 
                     });
                     additionalModule.getMainResources().forEach(src -> {
-                        builder.addAdditionalApplicationArchive(new AdditionalDependency(
-                                PathsCollection.of(src.getDestinationDir().toPath()),
-                                true, false));
+                        builder.addAdditionalApplicationArchive(
+                                new AdditionalDependency(src.getDestinationDir().toPath(), true, false));
 
                     });
                 }

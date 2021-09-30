@@ -43,6 +43,10 @@ public class PathList implements PathCollection, Serializable {
             return paths.contains(p);
         }
 
+        public boolean isEmpty() {
+            return paths.isEmpty();
+        }
+
         public PathList build() {
             return new PathList(paths);
         }

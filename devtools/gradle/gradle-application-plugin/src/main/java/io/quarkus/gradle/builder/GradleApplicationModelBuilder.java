@@ -1,7 +1,9 @@
 package io.quarkus.gradle.builder;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -42,7 +44,6 @@ import io.quarkus.bootstrap.model.PlatformImportsImpl;
 import io.quarkus.bootstrap.model.gradle.ModelParameter;
 import io.quarkus.bootstrap.model.gradle.impl.ModelParameterImpl;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
-import io.quarkus.bootstrap.util.QuarkusModelHelper;
 import io.quarkus.bootstrap.workspace.DefaultProcessedSources;
 import io.quarkus.bootstrap.workspace.DefaultWorkspaceModule;
 import io.quarkus.bootstrap.workspace.ProcessedSources;
@@ -149,7 +150,7 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
         final ResolvedDependency appArtifact = getProjectArtifact(project, mode);
         final ApplicationModelBuilder modelBuilder = new ApplicationModelBuilder()
                 .setAppArtifact(appArtifact)
-                .addLocalProjectArtifact(new GACT(appArtifact.getGroupId(), appArtifact.getArtifactId()))
+                .addReloadableWorkspaceModule(new GACT(appArtifact.getGroupId(), appArtifact.getArtifactId()))
                 .setPlatformImports(platformImports);
 
         final Map<ArtifactKey, ResolvedDependencyBuilder> appDependencies = new LinkedHashMap<>();
@@ -216,7 +217,7 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
         if (!Files.exists(quarkusDescr)) {
             return;
         }
-        final Properties extProps = QuarkusModelHelper.resolveDescriptor(quarkusDescr);
+        final Properties extProps = readDescriptor(quarkusDescr);
         if (extProps == null) {
             return;
         }
@@ -229,6 +230,21 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
             modelBuilder
                     .addExtensionCapabilities(CapabilityContract.providesCapabilities(extensionCoords, providesCapabilities));
         }
+    }
+
+    private static Properties readDescriptor(final Path path) {
+        final Properties rtProps;
+        if (!Files.exists(path)) {
+            // not a platform artifact
+            return null;
+        }
+        rtProps = new Properties();
+        try (BufferedReader reader = Files.newBufferedReader(path)) {
+            rtProps.load(reader);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to load extension description " + path, e);
+        }
+        return rtProps;
     }
 
     private PlatformImports resolvePlatformImports(Project project,
@@ -439,7 +455,7 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
             });
         }
 
-        appModel.addLocalProjectArtifact(
+        appModel.addReloadableWorkspaceModule(
                 new GACT(resolvedArtifact.getModuleVersion().getId().getGroup(), resolvedArtifact.getName()));
         return projectModule;
     }
@@ -450,13 +466,10 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
                 return;
             }
             if (Files.isDirectory(artifactPath)) {
-                processQuarkusDir(artifactBuilder,
-                        artifactPath.resolve(BootstrapConstants.META_INF), modelBuilder);
+                processQuarkusDir(artifactBuilder, artifactPath.resolve(BootstrapConstants.META_INF), modelBuilder);
             } else {
-                try (FileSystem artifactFs = FileSystems.newFileSystem(artifactPath,
-                        QuarkusModelHelper.class.getClassLoader())) {
-                    processQuarkusDir(artifactBuilder,
-                            artifactFs.getPath(BootstrapConstants.META_INF), modelBuilder);
+                try (FileSystem artifactFs = FileSystems.newFileSystem(artifactPath, null)) {
+                    processQuarkusDir(artifactBuilder, artifactFs.getPath(BootstrapConstants.META_INF), modelBuilder);
                 } catch (IOException e) {
                     throw new RuntimeException("Failed to process " + artifactPath, e);
                 }
