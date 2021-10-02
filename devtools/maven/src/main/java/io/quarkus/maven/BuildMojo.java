@@ -91,6 +91,8 @@ public class BuildMojo extends QuarkusBootstrapMojo {
 
     @Override
     protected void doExecute() throws MojoExecutionException {
+
+        System.out.println("BUILD " + executionId());
         try {
             Set<String> propertiesToClear = new HashSet<>();
 

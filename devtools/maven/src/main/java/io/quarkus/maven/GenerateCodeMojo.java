@@ -42,6 +42,7 @@ public class GenerateCodeMojo extends QuarkusBootstrapMojo {
 
     @Override
     protected void doExecute() throws MojoExecutionException, MojoFailureException {
+        System.out.println("GENERATE-CODE " + executionId());
         String projectDir = mavenProject().getBasedir().getAbsolutePath();
         Path sourcesDir = Paths.get(projectDir, "src", "main");
         generateCode(sourcesDir, path -> mavenProject().addCompileSourceRoot(path.toString()), false);
