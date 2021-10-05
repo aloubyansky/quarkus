@@ -43,6 +43,7 @@ import org.eclipse.aether.resolution.DependencyResult;
 import org.eclipse.aether.resolution.VersionRangeRequest;
 import org.eclipse.aether.resolution.VersionRangeResolutionException;
 import org.eclipse.aether.resolution.VersionRangeResult;
+import org.eclipse.aether.transfer.ArtifactNotFoundException;
 import org.eclipse.aether.util.artifact.JavaScopes;
 import org.eclipse.aether.util.version.GenericVersionScheme;
 import org.eclipse.aether.version.InvalidVersionSpecificationException;
@@ -259,27 +260,27 @@ public class MavenArtifactResolver {
             return repoSystem.resolveDependencies(repoSession,
                     new DependencyRequest().setCollectRequest(request));
         } catch (DependencyResolutionException e) {
-            throw new BootstrapMavenException("Failed to resolve dependencies for " + artifact, e);
+            throw toBootstrapMavenException(e, request, artifact);
         }
     }
 
     public DependencyResult resolveManagedDependencies(Artifact artifact, List<Dependency> deps, List<Dependency> managedDeps,
             List<RemoteRepository> mainRepos, String... excludedScopes) throws BootstrapMavenException {
+        final CollectRequest collectRequest = newCollectManagedRequest(artifact, deps, managedDeps, mainRepos, excludedScopes);
         try {
-            return repoSystem.resolveDependencies(repoSession,
-                    new DependencyRequest().setCollectRequest(
-                            newCollectManagedRequest(artifact, deps, managedDeps, mainRepos, excludedScopes)));
+            return repoSystem.resolveDependencies(repoSession, new DependencyRequest().setCollectRequest(collectRequest));
         } catch (DependencyResolutionException e) {
-            throw new BootstrapMavenException("Failed to resolve dependencies for " + artifact, e);
+            throw toBootstrapMavenException(e, collectRequest, artifact);
         }
     }
 
     public DependencyResult resolvePluginDependencies(Artifact pluginArtifact) throws BootstrapMavenException {
+        final CollectRequest collectRequest = new CollectRequest()
+                .setRoot(new Dependency(pluginArtifact, null)).setRepositories(context.getRemotePluginRepositories());
         try {
-            return repoSystem.resolveDependencies(repoSession, new DependencyRequest().setCollectRequest(new CollectRequest()
-                    .setRoot(new Dependency(pluginArtifact, null)).setRepositories(context.getRemotePluginRepositories())));
+            return repoSystem.resolveDependencies(repoSession, new DependencyRequest().setCollectRequest(collectRequest));
         } catch (DependencyResolutionException e) {
-            throw new BootstrapMavenException("Failed to resolve dependencies for Maven plugin " + pluginArtifact, e);
+            throw toBootstrapMavenException(e, collectRequest, pluginArtifact);
         }
     }
 
@@ -315,6 +316,32 @@ public class MavenArtifactResolver {
         } catch (DependencyCollectionException e) {
             throw new BootstrapMavenException("Failed to collect dependencies for " + artifact, e);
         }
+    }
+
+    private BootstrapMavenException toBootstrapMavenException(DependencyResolutionException e, CollectRequest request,
+            Artifact artifact)
+            throws BootstrapMavenException {
+        ArtifactNotFoundException anfe = null;
+        Throwable t = e.getCause();
+        while (t != null) {
+            if (t instanceof ArtifactNotFoundException) {
+                anfe = (ArtifactNotFoundException) t;
+                break;
+            }
+            t = t.getCause();
+        }
+        final StringBuilder buf = new StringBuilder();
+        buf.append("Failed to resolve dependencies of ").append(artifact);
+        if (anfe != null) {
+            buf.append(": artifact ").append(anfe.getArtifact())
+                    .append(" was not found in any of the configured repositories: ");
+            buf.append(repoSession.getLocalRepository().getId()).append("(")
+                    .append(repoSession.getLocalRepository().getBasedir()).append(")");
+            request.getRepositories().forEach(r -> {
+                buf.append(", ").append(r.getId()).append("(").append(r.getUrl()).append(")");
+            });
+        }
+        return new BootstrapMavenException(buf.toString(), e);
     }
 
     private CollectRequest newCollectManagedRequest(Artifact artifact, List<Dependency> deps, List<Dependency> managedDeps,
