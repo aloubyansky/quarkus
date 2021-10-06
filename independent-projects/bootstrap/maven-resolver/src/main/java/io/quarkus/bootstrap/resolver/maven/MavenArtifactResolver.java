@@ -5,6 +5,7 @@ package io.quarkus.bootstrap.resolver.maven;
 
 import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.util.PropertyUtils;
+import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -330,8 +331,11 @@ public class MavenArtifactResolver {
             }
             t = t.getCause();
         }
+        final File f = new File(repoSession.getLocalRepository().getBasedir(),
+                repoSession.getLocalRepositoryManager().getPathForLocalArtifact(artifact));
         final StringBuilder buf = new StringBuilder();
-        buf.append("Failed to resolve dependencies of ").append(artifact);
+        buf.append("Failed to resolve dependencies of ").append(artifact).append(" ").append(f).append(" exists ")
+                .append(f.exists());
         if (anfe != null) {
             buf.append(": artifact ").append(anfe.getArtifact())
                     .append(" was not found in any of the configured repositories: ");
