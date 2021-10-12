@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.gradle.api.GradleException;
 import org.gradle.api.Project;
@@ -32,8 +33,11 @@ import org.gradle.api.internal.artifacts.dependencies.DefaultExternalModuleDepen
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.plugins.JavaPluginConvention;
 import org.gradle.api.tasks.SourceSet;
+import org.gradle.api.tasks.SourceTask;
 import org.gradle.api.tasks.TaskCollection;
 import org.gradle.api.tasks.compile.AbstractCompile;
+import org.gradle.api.tasks.testing.Test;
+import org.gradle.jvm.tasks.Jar;
 import org.gradle.language.jvm.tasks.ProcessResources;
 import org.gradle.tooling.provider.model.ParameterizedToolingModelBuilder;
 
@@ -193,7 +197,83 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
             collectDestinationDirs(src, paths);
         });
 
+        System.out.println("GradleApplicationModelBuilder.getProjectArtifact " + project.getName());
+        System.out.println("  source sets:");
+        javaConvention.getSourceSets().forEach(s -> {
+            System.out.println("  - " + s.getName());
+            System.out.println("    source dirs:");
+            s.getAllJava().getSrcDirs().forEach(f -> {
+                if (f.exists()) {
+                    System.out.println("    - " + f + " " + f.exists());
+                }
+            });
+            System.out.println("    output classes:");
+            s.getOutput().getClassesDirs().forEach(f -> {
+                if (f.exists()) {
+                    System.out.println("    - " + f + " " + f.exists());
+                }
+            });
+            System.out.println("    resources dirs:");
+            s.getResources().getSrcDirs().forEach(f -> {
+                if (f.exists()) {
+                    System.out.println("    - " + f + " " + f.exists());
+                }
+            });
+            System.out.println("    output resources:");
+            System.out.println("    - " + s.getOutput().getResourcesDir() + " " + s.getOutput().getResourcesDir().exists());
+        });
+
+        final Map<File, AbstractCompile> compileTasksByDestination = project.getTasks().withType(AbstractCompile.class).stream()
+                .filter(AbstractCompile::getDidWork)
+                .collect(Collectors.toMap(t -> t.getDestinationDirectory().getAsFile().get(), t -> t));
+
+        System.out.println("  Test Tasks:");
+        project.getTasks().withType(Test.class).forEach(s -> {
+            s.getTestClassesDirs().forEach(f -> {
+                if (!f.exists()) {
+                    return;
+                }
+                final AbstractCompile compileTask = compileTasksByDestination.get(f);
+                if (compileTask == null) {
+                    return;
+                }
+                System.out.println("  - " + s.getName() + " " + s.getClass().getName());
+                System.out.println("      test classes: " + f + " " + f.exists());
+                for (File src : collectSourceDirs(compileTask)) {
+                    System.out.println("      source dir: " + src);
+                }
+            });
+            System.out.println("      classpath:");
+            s.getClasspath().forEach(f -> {
+                if (f.isDirectory()) {
+                    System.out.println("      - " + f);
+                }
+            });
+        });
+
+        System.out.println("  ProcessResources");
+        project.getTasks().withType(ProcessResources.class).forEach(t -> {
+            if (!t.getDidWork()) {
+                return;
+            }
+            System.out.println("    " + t.getName());
+            System.out.println("      dest " + t.getDestinationDir());
+        });
+
         return appArtifact.setWorkspaceModule(mainModule).setResolvedPaths(paths.build()).build();
+    }
+
+    private static Collection<File> collectSourceDirs(SourceTask t) {
+        final Set<File> dirs = new HashSet<>(1);
+        t.getSource().visit(v -> {
+            if (v.getRelativePath().getSegments().length == 1) {
+                final File parent = v.getFile().getParentFile();
+                if (parent.exists()) {
+                    dirs.add(parent);
+                }
+            }
+        });
+        return dirs;
     }
 
     private static void collectDestinationDirs(ProcessedSources src, final PathList.Builder paths) {
@@ -453,6 +533,18 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
                 collectDestinationDirs(src, buildPaths);
             });
         }
+
+        System.out.println("GradleApplicationModelBuilder.initProjectModuleAndBuildPaths " + project + " jar tasks:");
+        project.getTasks().withType(Jar.class).forEach(t -> {
+            if (t.getDidWork()) {
+                System.out.println("  - " + t.getName());
+                System.out.println("    built jar: " + t.getArchiveFile().get().getAsFile());
+                System.out.println("    source:");
+                t.getSource().forEach(f -> {
+                    System.out.println("    - " + f);
+                });
+            }
+        });
 
         appModel.addReloadableWorkspaceModule(
                 new GACT(resolvedArtifact.getModuleVersion().getId().getGroup(), resolvedArtifact.getName()));
