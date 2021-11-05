@@ -147,11 +147,15 @@ public class StaticResourcesProcessor {
     private Set<StaticResourcesBuildItem.Entry> getClasspathResources(ApplicationArchivesBuildItem applicationArchivesBuildItem)
             throws Exception {
         Set<StaticResourcesBuildItem.Entry> knownPaths = new HashSet<>();
+
         for (ApplicationArchive i : applicationArchivesBuildItem.getAllApplicationArchives()) {
-            Path resource = i.getChildPath(StaticResourcesRecorder.META_INF_RESOURCES);
-            if (resource != null && Files.exists(resource)) {
-                collectKnownPaths(resource, knownPaths);
-            }
+            i.withContentTree(tree -> {
+                Path resource = tree.getPath(StaticResourcesRecorder.META_INF_RESOURCES);
+                if (resource != null && Files.exists(resource)) {
+                    collectKnownPaths(resource, knownPaths);
+                }
+                return null;
+            });
         }
 
         ClassPathUtils.consumeAsPaths(StaticResourcesRecorder.META_INF_RESOURCES, resource -> {

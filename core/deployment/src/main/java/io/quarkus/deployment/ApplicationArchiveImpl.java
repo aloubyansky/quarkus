@@ -1,6 +1,9 @@
 package io.quarkus.deployment;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Path;
+import java.util.function.Function;
 
 import org.jboss.jandex.IndexView;
 
@@ -8,26 +11,19 @@ import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.model.PathsCollection;
 import io.quarkus.builder.item.MultiBuildItem;
 import io.quarkus.maven.dependency.ArtifactKey;
+import io.quarkus.paths.OpenPathTree;
 import io.quarkus.paths.PathCollection;
 import io.quarkus.paths.PathList;
 
 public final class ApplicationArchiveImpl extends MultiBuildItem implements ApplicationArchive {
 
     private final IndexView indexView;
-    private final PathCollection rootDirs;
-    private final PathCollection paths;
+    private final OpenPathTree openTree;
     private final ArtifactKey artifactKey;
 
-    public ApplicationArchiveImpl(IndexView indexView, Path archiveRoot,
-            Path archiveLocation, ArtifactKey artifactKey) {
-        this(indexView, PathList.of(archiveRoot), PathList.of(archiveLocation), artifactKey);
-    }
-
-    public ApplicationArchiveImpl(IndexView indexView, PathCollection rootDirs, PathCollection paths,
-            ArtifactKey artifactKey) {
+    public ApplicationArchiveImpl(IndexView indexView, OpenPathTree openTree, ArtifactKey artifactKey) {
         this.indexView = indexView;
-        this.rootDirs = rootDirs;
-        this.paths = paths;
+        this.openTree = openTree;
         this.artifactKey = artifactKey;
     }
 
@@ -39,32 +35,37 @@ public final class ApplicationArchiveImpl extends MultiBuildItem implements Appl
     @Override
     @Deprecated
     public Path getArchiveLocation() {
-        return paths.iterator().next();
+        return openTree.getOriginalTree().getRoots().iterator().next();
     }
 
     @Override
     @Deprecated
     public PathsCollection getRootDirs() {
-        return PathsCollection.from(rootDirs);
+        return PathsCollection.from(openTree.getRoots());
     }
 
     @Override
     public PathCollection getRootDirectories() {
-        return rootDirs;
+        return PathList.from(openTree.getRoots());
     }
 
     @Override
     @Deprecated
     public PathsCollection getPaths() {
-        return PathsCollection.from(paths);
+        return PathsCollection.from(openTree.getOriginalTree().getRoots());
     }
 
     @Override
     public PathCollection getResolvedPaths() {
-        return paths;
+        return PathList.from(openTree.getOriginalTree().getRoots());
     }
 
     @Override
+    @Deprecated
+    /**
+     * @deprecated in favor of {@link #getKey()}
+     * @return archive key
+     */
     public AppArtifactKey getArtifactKey() {
         return artifactKey == null ? null
                 : new AppArtifactKey(artifactKey.getGroupId(), artifactKey.getArtifactId(), artifactKey.getClassifier(),
@@ -74,5 +75,23 @@ public final class ApplicationArchiveImpl extends MultiBuildItem implements Appl
     @Override
     public ArtifactKey getKey() {
         return artifactKey;
+    }
+
+    @Override
+    public <T> T withContentTree(Function<OpenPathTree, T> func) {
+        if (openTree.isOpen()) {
+            try {
+                return func.apply(openTree);
+            } catch (Exception e) {
+                if (openTree.isOpen()) {
+                    throw e;
+                }
+            }
+        }
+        try (OpenPathTree openTree = this.openTree.getOriginalTree().openTree()) {
+            return func.apply(openTree);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to open path tree with root " + openTree.getOriginalTree().getRoots(), e);
+        }
     }
 }
