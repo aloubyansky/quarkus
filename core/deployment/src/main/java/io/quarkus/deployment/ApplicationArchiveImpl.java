@@ -3,6 +3,7 @@ package io.quarkus.deployment;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.jboss.jandex.IndexView;
@@ -78,7 +79,7 @@ public final class ApplicationArchiveImpl extends MultiBuildItem implements Appl
     }
 
     @Override
-    public <T> T withContentTree(Function<OpenPathTree, T> func) {
+    public <T> T apply(Function<OpenPathTree, T> func) {
         if (openTree.isOpen()) {
             try {
                 return func.apply(openTree);
@@ -88,8 +89,27 @@ public final class ApplicationArchiveImpl extends MultiBuildItem implements Appl
                 }
             }
         }
-        try (OpenPathTree openTree = this.openTree.getOriginalTree().openTree()) {
+        try (OpenPathTree openTree = this.openTree.getOriginalTree().open()) {
             return func.apply(openTree);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to open path tree with root " + openTree.getOriginalTree().getRoots(), e);
+        }
+    }
+
+    @Override
+    public void accept(Consumer<OpenPathTree> func) {
+        if (openTree.isOpen()) {
+            try {
+                func.accept(openTree);
+                return;
+            } catch (Exception e) {
+                if (openTree.isOpen()) {
+                    throw e;
+                }
+            }
+        }
+        try (OpenPathTree openTree = this.openTree.getOriginalTree().open()) {
+            func.accept(openTree);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to open path tree with root " + openTree.getOriginalTree().getRoots(), e);
         }

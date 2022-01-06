@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.jar.Manifest;
 
@@ -44,7 +45,7 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
     }
 
     @Override
-    public <T> T processPath(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
+    public <T> T apply(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
         if (!PathFilter.isVisible(pathFilter, relativePath)) {
             return func.apply(null);
         }
@@ -57,12 +58,36 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
                 if (!Files.exists(path)) {
                     continue;
                 }
-                return PathTreeVisit.processPath(archive, root, path, pathFilter, func);
+                return PathTreeVisit.process(archive, root, path, pathFilter, func);
             }
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read " + archive, e);
         }
         return func.apply(null);
+    }
+
+    @Override
+    public void accept(String relativePath, Consumer<PathVisit> consumer, boolean multiReleaseSupport) {
+        if (!PathFilter.isVisible(pathFilter, relativePath)) {
+            consumer.accept(null);
+            return;
+        }
+        if (multiReleaseSupport) {
+            relativePath = toMultiReleaseRelativePath(relativePath);
+        }
+        try (FileSystem fs = openFs()) {
+            for (Path root : fs.getRootDirectories()) {
+                final Path path = root.resolve(relativePath);
+                if (!Files.exists(path)) {
+                    continue;
+                }
+                PathTreeVisit.consume(archive, root, path, pathFilter, consumer);
+                return;
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read " + archive, e);
+        }
+        consumer.accept(null);
     }
 
     @Override
@@ -91,7 +116,7 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
     }
 
     @Override
-    public OpenPathTree openTree() {
+    public OpenPathTree open() {
         try {
             return new OpenArchivePathTree(openFs());
         } catch (IOException e) {
@@ -157,14 +182,22 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
         }
 
         @Override
-        public <T> T processPath(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
+        public <T> T apply(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
             lock.readLock().lock();
             try {
-                if (!isOpen()) {
-                    throw new RuntimeException("Failed to process " + relativePath + " in " + ArchivePathTree.this.getRoots()
-                            + " because the FileSystem has been closed");
-                }
-                return super.processPath(relativePath, func, multiReleaseSupport);
+                ensureOpen();
+                return super.apply(relativePath, func, multiReleaseSupport);
+            } finally {
+                lock.readLock().unlock();
+            }
+        }
+
+        @Override
+        public void accept(String relativePath, Consumer<PathVisit> consumer, boolean multiReleaseSupport) {
+            lock.readLock().lock();
+            try {
+                ensureOpen();
+                super.accept(relativePath, consumer, multiReleaseSupport);
             } finally {
                 lock.readLock().unlock();
             }
@@ -207,7 +240,7 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
             if (isOpen()) {
                 return;
             }
-            throw new RuntimeException("Failed to walk over " + ArchivePathTree.this.getRoots()
+            throw new RuntimeException("Failed to access " + ArchivePathTree.this.getRoots()
                     + " because the FileSystem has been closed");
         }
 

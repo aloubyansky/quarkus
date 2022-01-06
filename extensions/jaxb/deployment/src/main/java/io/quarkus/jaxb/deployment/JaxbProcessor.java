@@ -357,7 +357,7 @@ class JaxbProcessor {
     private void iterateResources(ApplicationArchivesBuildItem applicationArchivesBuildItem, String path,
             BuildProducer<NativeImageResourceBuildItem> resource, BuildProducer<ReflectiveClassBuildItem> reflectiveClass) {
         for (ApplicationArchive archive : applicationArchivesBuildItem.getAllApplicationArchives()) {
-            archive.withContentTree(tree -> {
+            archive.accept(tree -> {
                 var arch = tree.getPath(path);
                 if (arch != null && Files.isDirectory(arch)) {
                     JaxbProcessor.safeWalk(arch)
@@ -365,7 +365,6 @@ class JaxbProcessor {
                             .filter(p -> p.getFileName().toString().equals("jaxb.index"))
                             .forEach(p1 -> handleJaxbFile(p1, resource, reflectiveClass));
                 }
-                return null;
             });
         }
     }

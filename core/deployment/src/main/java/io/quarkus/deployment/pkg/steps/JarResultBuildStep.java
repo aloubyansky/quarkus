@@ -1381,7 +1381,7 @@ public class JarResultBuildStep {
     private void copyFiles(ApplicationArchive archive, FileSystem fs, Map<String, List<byte[]>> services,
             Predicate<String> ignoredEntriesPredicate) throws IOException {
         try {
-            archive.withContentTree(tree -> {
+            archive.accept(tree -> {
                 tree.walk(new PathVisitor() {
                     @Override
                     public void visitPath(PathVisit visit) {
@@ -1418,7 +1418,6 @@ public class JarResultBuildStep {
                         }
                     }
                 });
-                return null;
             });
         } catch (RuntimeException re) {
             final Throwable cause = re.getCause();

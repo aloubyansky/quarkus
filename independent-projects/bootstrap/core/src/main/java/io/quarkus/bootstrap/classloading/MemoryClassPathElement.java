@@ -59,7 +59,7 @@ public class MemoryClassPathElement extends AbstractClassPathElement {
     }
 
     @Override
-    public <T> T withOpenTree(Function<OpenPathTree, T> func) {
+    public <T> T apply(Function<OpenPathTree, T> func) {
         return func.apply(EmptyPathTree.getInstance());
     }
 

@@ -131,7 +131,7 @@ public class BeanArchiveProcessor {
     }
 
     private boolean isExplicitBeanArchive(ApplicationArchive archive) {
-        return archive.withContentTree(tree -> tree.contains("META-INF/beans.xml") || tree.contains("WEB-INF/beans.xml"));
+        return archive.apply(tree -> tree.contains("META-INF/beans.xml") || tree.contains("WEB-INF/beans.xml"));
     }
 
     private boolean isImplicitBeanArchive(IndexView index, Set<DotName> beanDefiningAnnotations) {

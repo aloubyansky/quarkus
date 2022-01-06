@@ -8,6 +8,7 @@ import java.nio.file.Paths;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class DirectoryPathTree extends PathTreeWithManifest implements OpenPathTree, Serializable {
@@ -41,7 +42,7 @@ public class DirectoryPathTree extends PathTreeWithManifest implements OpenPathT
     }
 
     @Override
-    public <T> T processPath(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
+    public <T> T apply(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
         if (!PathFilter.isVisible(pathFilter, relativePath)) {
             return func.apply(null);
         }
@@ -49,7 +50,21 @@ public class DirectoryPathTree extends PathTreeWithManifest implements OpenPathT
         if (!Files.exists(path)) {
             return func.apply(null);
         }
-        return PathTreeVisit.processPath(dir, dir, path, pathFilter, func);
+        return PathTreeVisit.process(dir, dir, path, pathFilter, func);
+    }
+
+    @Override
+    public void accept(String relativePath, Consumer<PathVisit> consumer, boolean multiReleaseSupport) {
+        if (!PathFilter.isVisible(pathFilter, relativePath)) {
+            consumer.accept(null);
+            return;
+        }
+        final Path path = dir.resolve(multiReleaseSupport ? toMultiReleaseRelativePath(relativePath) : relativePath);
+        if (!Files.exists(path)) {
+            consumer.accept(null);
+            return;
+        }
+        PathTreeVisit.consume(dir, dir, path, pathFilter, consumer);
     }
 
     @Override
@@ -81,7 +96,7 @@ public class DirectoryPathTree extends PathTreeWithManifest implements OpenPathT
     }
 
     @Override
-    public OpenPathTree openTree() {
+    public OpenPathTree open() {
         return this;
     }
 

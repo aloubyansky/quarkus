@@ -237,7 +237,7 @@ public class UndertowBuildStep {
 
         //check for the file in the handlers dir
         final boolean handlerPath = applicationArchivesBuildItem.getRootArchive()
-                .withContentTree(tree -> tree.contains(UndertowHandlersConfServletExtension.META_INF_UNDERTOW_HANDLERS_CONF));
+                .apply(tree -> tree.contains(UndertowHandlersConfServletExtension.META_INF_UNDERTOW_HANDLERS_CONF));
         if (handlerPath) {
             producer.produce(new ServletExtensionBuildItem(new UndertowHandlersConfServletExtension()));
             nativeImageResourceBuildItemBuildProducer.produce(

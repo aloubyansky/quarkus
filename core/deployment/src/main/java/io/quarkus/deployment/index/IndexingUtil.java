@@ -58,7 +58,7 @@ public class IndexingUtil {
 
     public static Index indexTree(OpenPathTree tree, Set<String> removed) throws IOException {
         if (removed == null) {
-            final Index i = tree.processPath(JANDEX_INDEX, MetaInfJandexReader.getInstance());
+            final Index i = tree.apply(JANDEX_INDEX, MetaInfJandexReader.getInstance());
             if (i != null) {
                 return i;
             }

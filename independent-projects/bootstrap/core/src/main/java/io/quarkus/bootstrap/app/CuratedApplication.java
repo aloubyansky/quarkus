@@ -442,8 +442,8 @@ public class CuratedApplication implements Serializable, AutoCloseable {
         }
 
         @Override
-        public <T> T withOpenTree(Function<OpenPathTree, T> func) {
-            return delegate.withOpenTree(func);
+        public <T> T apply(Function<OpenPathTree, T> func) {
+            return delegate.apply(func);
         }
 
         @Override

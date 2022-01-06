@@ -8,6 +8,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -33,12 +34,21 @@ class PathTreeVisit implements PathVisit {
         visit.visitMultiReleasePaths(visitor);
     }
 
-    static <T> T processPath(Path root, Path rootDir, Path path, PathFilter pathFilter, Function<PathVisit, T> func) {
+    static <T> T process(Path root, Path rootDir, Path path, PathFilter pathFilter, Function<PathVisit, T> func) {
         final PathTreeVisit visit = new PathTreeVisit(root, rootDir, pathFilter, Collections.emptyMap());
         if (visit.setCurrent(path)) {
             return func.apply(visit);
         }
         return func.apply(null);
+    }
+
+    static void consume(Path root, Path rootDir, Path path, PathFilter pathFilter, Consumer<PathVisit> func) {
+        final PathTreeVisit visit = new PathTreeVisit(root, rootDir, pathFilter, Collections.emptyMap());
+        if (visit.setCurrent(path)) {
+            func.accept(visit);
+        } else {
+            func.accept(null);
+        }
     }
 
     private final Path root;

@@ -52,7 +52,7 @@ public class PathTreeClassPathElement extends AbstractClassPathElement {
     }
 
     public PathTreeClassPathElement(PathTree pathTree, boolean runtime, ArtifactKey dependencyKey) {
-        this.pathTree = Objects.requireNonNull(pathTree, "Path tree is null").openTree();
+        this.pathTree = Objects.requireNonNull(pathTree, "Path tree is null").open();
         this.lock = new ReentrantReadWriteLock();
         this.runtime = runtime;
         this.dependencyKey = dependencyKey;
@@ -111,18 +111,18 @@ public class PathTreeClassPathElement extends AbstractClassPathElement {
         if (resources != null && !resources.contains(sanitized)) {
             return null;
         }
-        return withOpenTree(
-                tree -> tree.processPath(sanitized, visit -> visit == null ? null : new PathTreeClassPathResource(visit)));
+        return apply(
+                tree -> tree.apply(sanitized, visit -> visit == null ? null : new PathTreeClassPathResource(visit)));
     }
 
     @Override
-    public <T> T withOpenTree(Function<OpenPathTree, T> func) {
+    public <T> T apply(Function<OpenPathTree, T> func) {
         lock.readLock().lock();
         try {
             if (closed) {
                 //we still need this to work if it is closed, so shutdown hooks work
                 //once it is closed it simply does not hold on to any resources
-                try (OpenPathTree openTree = pathTree.getOriginalTree().openTree()) {
+                try (OpenPathTree openTree = pathTree.getOriginalTree().open()) {
                     return func.apply(openTree);
                 } catch (IOException e) {
                     throw new UncheckedIOException(e);
@@ -139,7 +139,7 @@ public class PathTreeClassPathElement extends AbstractClassPathElement {
     public Set<String> getProvidedResources() {
         Set<String> resources = this.resources;
         if (resources == null) {
-            resources = withOpenTree(tree -> {
+            resources = apply(tree -> {
                 final Set<String> relativePaths = new HashSet<>();
                 tree.walk(new PathVisitor() {
                     @Override
@@ -160,7 +160,7 @@ public class PathTreeClassPathElement extends AbstractClassPathElement {
 
     @Override
     protected Manifest readManifest() {
-        return withOpenTree(OpenPathTree::getManifest);
+        return apply(OpenPathTree::getManifest);
     }
 
     @Override
@@ -218,8 +218,8 @@ public class PathTreeClassPathElement extends AbstractClassPathElement {
             lock.readLock().lock();
             try {
                 if (closed) {
-                    return url = withOpenTree(
-                            tree -> tree.processPath(name, visit -> visit == null ? null : visit.getUrl()));
+                    return url = apply(
+                            tree -> tree.apply(name, visit -> visit == null ? null : visit.getUrl()));
                 }
                 return url = path.toUri().toURL();
             } catch (MalformedURLException e) {
@@ -234,8 +234,8 @@ public class PathTreeClassPathElement extends AbstractClassPathElement {
             lock.readLock().lock();
             try {
                 if (closed) {
-                    return withOpenTree(
-                            tree -> tree.processPath(name, visit -> visit == null ? null : readPath(visit.getPath())));
+                    return apply(
+                            tree -> tree.apply(name, visit -> visit == null ? null : readPath(visit.getPath())));
                 }
                 return readPath(path);
             } finally {
@@ -248,7 +248,7 @@ public class PathTreeClassPathElement extends AbstractClassPathElement {
             lock.readLock().lock();
             try {
                 if (closed) {
-                    return withOpenTree(tree -> tree.processPath(name,
+                    return apply(tree -> tree.apply(name,
                             visit -> visit == null ? null : Files.isDirectory(visit.getPath())));
                 }
                 return Files.isDirectory(path);

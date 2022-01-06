@@ -1035,7 +1035,7 @@ public class MessageBundleProcessor {
 
     private Set<Path> findMessageFiles(ApplicationArchivesBuildItem applicationArchivesBuildItem,
             BuildProducer<HotDeploymentWatchedFileBuildItem> watchedFiles) throws IOException {
-        return applicationArchivesBuildItem.getRootArchive().withContentTree(tree -> {
+        return applicationArchivesBuildItem.getRootArchive().apply(tree -> {
             final Path messagesPath = tree.getPath(MESSAGES);
             if (messagesPath == null) {
                 return Collections.emptySet();

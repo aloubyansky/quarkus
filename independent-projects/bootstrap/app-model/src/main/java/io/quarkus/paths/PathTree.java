@@ -5,19 +5,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Collection;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.jar.Manifest;
 
 public interface PathTree {
 
-    static PathTree of(Path p) {
+    static PathTree ofDirectoryOrFile(Path p) {
         try {
-            BasicFileAttributes fileAttributes = Files.readAttributes(p, BasicFileAttributes.class);
-            if (fileAttributes.isDirectory()) {
-                return new DirectoryPathTree(p);
-            }
-
-            return new FilePathTree(p);
+            final BasicFileAttributes fileAttributes = Files.readAttributes(p, BasicFileAttributes.class);
+            return fileAttributes.isDirectory() ? new DirectoryPathTree(p) : new FilePathTree(p);
         } catch (IOException e) {
             throw new IllegalArgumentException(p + " does not exist", e);
         }
@@ -25,12 +22,8 @@ public interface PathTree {
 
     static PathTree ofDirectoryOrArchive(Path p) {
         try {
-            BasicFileAttributes fileAttributes = Files.readAttributes(p, BasicFileAttributes.class);
-            if (fileAttributes.isDirectory()) {
-                return new DirectoryPathTree(p);
-            }
-
-            return new ArchivePathTree(p);
+            final BasicFileAttributes fileAttributes = Files.readAttributes(p, BasicFileAttributes.class);
+            return fileAttributes.isDirectory() ? new DirectoryPathTree(p) : new ArchivePathTree(p);
         } catch (IOException e) {
             throw new IllegalArgumentException(p + " does not exist", e);
         }
@@ -61,11 +54,17 @@ public interface PathTree {
 
     void walk(PathVisitor visitor);
 
-    default <T> T processPath(String relativePath, Function<PathVisit, T> func) {
-        return processPath(relativePath, func, true);
+    default <T> T apply(String relativePath, Function<PathVisit, T> func) {
+        return apply(relativePath, func, true);
     }
 
-    <T> T processPath(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport);
+    <T> T apply(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport);
+
+    default void accept(String relativePath, Consumer<PathVisit> consumer) {
+        accept(relativePath, consumer, true);
+    }
+
+    void accept(String relativePath, Consumer<PathVisit> consumer, boolean multiReleaseSupport);
 
     default boolean contains(String relativePath) {
         return contains(relativePath, true);
@@ -73,5 +72,5 @@ public interface PathTree {
 
     boolean contains(String relativePath, boolean multiReleaseSupport);
 
-    OpenPathTree openTree();
+    OpenPathTree open();
 }

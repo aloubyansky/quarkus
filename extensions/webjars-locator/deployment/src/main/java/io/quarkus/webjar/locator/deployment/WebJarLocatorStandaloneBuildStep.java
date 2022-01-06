@@ -62,7 +62,7 @@ public class WebJarLocatorStandaloneBuildStep {
                     if (provider == null) {
                         continue;
                     }
-                    provider.withOpenTree(tree -> {
+                    provider.apply(tree -> {
                         final Path webjarsDir = tree.getPath(WEBJARS_PREFIX);
                         final Path nameDir;
                         try {

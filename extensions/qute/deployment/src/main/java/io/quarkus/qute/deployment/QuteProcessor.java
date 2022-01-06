@@ -1254,7 +1254,7 @@ public class QuteProcessor {
             }
         }
         for (ApplicationArchive archive : allApplicationArchives) {
-            archive.withContentTree(tree -> {
+            archive.accept(tree -> {
                 for (Path rootDir : tree.getRoots()) {
                     // Note that we cannot use ApplicationArchive.getChildPath(String) here because we would not be able to detect 
                     // a wrong directory name on case-insensitive file systems
@@ -1271,7 +1271,6 @@ public class QuteProcessor {
                         throw new UncheckedIOException(e);
                     }
                 }
-                return null;
             });
         }
     }

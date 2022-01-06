@@ -59,7 +59,7 @@ public class ResteasyReactiveDevModeProcessor {
     void addStaticResourcesExceptionMapper(ApplicationArchivesBuildItem applicationArchivesBuildItem,
             ExceptionMapperRecorder recorder) {
         recorder.setStaticResourceRoots(applicationArchivesBuildItem.getAllApplicationArchives().stream()
-                .map(i -> i.withContentTree(t -> {
+                .map(i -> i.apply(t -> {
                     var p = t.getPath(META_INF_RESOURCES);
                     return p == null ? null : p.toAbsolutePath().toString();
                 }))

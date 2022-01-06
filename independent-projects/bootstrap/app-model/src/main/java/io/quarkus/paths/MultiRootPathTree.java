@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.jar.Manifest;
 
@@ -51,14 +53,37 @@ public class MultiRootPathTree implements OpenPathTree {
     }
 
     @Override
-    public <T> T processPath(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
+    public <T> T apply(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
         for (PathTree tree : trees) {
-            T result = tree.processPath(relativePath, func, multiReleaseSupport);
+            T result = tree.apply(relativePath, func, multiReleaseSupport);
             if (result != null) {
                 return result;
             }
         }
         return null;
+    }
+
+    @Override
+    public void accept(String relativePath, Consumer<PathVisit> func, boolean multiReleaseSupport) {
+        final AtomicBoolean consumed = new AtomicBoolean();
+        final Consumer<PathVisit> wrapper = new Consumer<>() {
+            @Override
+            public void accept(PathVisit t) {
+                if (t != null) {
+                    func.accept(t);
+                    consumed.set(true);
+                }
+            }
+        };
+        for (PathTree tree : trees) {
+            tree.accept(relativePath, wrapper, multiReleaseSupport);
+            if (consumed.get()) {
+                break;
+            }
+        }
+        if (!consumed.get()) {
+            func.accept(null);
+        }
     }
 
     @Override
@@ -87,7 +112,7 @@ public class MultiRootPathTree implements OpenPathTree {
     }
 
     @Override
-    public OpenPathTree openTree() {
+    public OpenPathTree open() {
         return this;
     }
 

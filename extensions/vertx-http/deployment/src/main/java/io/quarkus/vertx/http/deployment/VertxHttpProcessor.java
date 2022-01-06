@@ -344,8 +344,8 @@ class VertxHttpProcessor {
             return;
         }
         for (ClassPathElement cpe : elements) {
-            cpe.withOpenTree(tree -> {
-                return tree.processPath(META_INF_SERVICES_EXCHANGE_ATTRIBUTE_BUILDER, visit -> {
+            cpe.apply(tree -> {
+                tree.accept(META_INF_SERVICES_EXCHANGE_ATTRIBUTE_BUILDER, visit -> {
                     if (visit == null) {
                         logger.debug("Skipping registration of service providers for " + ExchangeAttributeBuilder.class
                                 + " since no service descriptor file found");
@@ -361,8 +361,8 @@ class VertxHttpProcessor {
                         }
                         exchangeAttributeBuilderService.produce(serviceProviderBuildItem);
                     }
-                    return null;
                 });
+                return null;
             });
         }
     }

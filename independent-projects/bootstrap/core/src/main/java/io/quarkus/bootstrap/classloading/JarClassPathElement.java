@@ -94,8 +94,8 @@ public class JarClassPathElement implements ClassPathElement {
     }
 
     @Override
-    public <T> T withOpenTree(Function<OpenPathTree, T> func) {
-        try (OpenPathTree openTree = PathTree.ofArchive(root).openTree()) {
+    public <T> T apply(Function<OpenPathTree, T> func) {
+        try (OpenPathTree openTree = PathTree.ofArchive(root).open()) {
             return func.apply(openTree);
         } catch (IOException e) {
             throw new UncheckedIOException(e);

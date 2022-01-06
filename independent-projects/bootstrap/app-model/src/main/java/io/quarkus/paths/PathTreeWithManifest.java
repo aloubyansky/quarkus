@@ -65,7 +65,7 @@ public abstract class PathTreeWithManifest implements PathTree {
                 return manifest;
             }
             manifestReadLock().unlock();
-            final Manifest m = processPath("META-INF/MANIFEST.MF", ManifestReader.INSTANCE, false);
+            final Manifest m = apply("META-INF/MANIFEST.MF", ManifestReader.INSTANCE, false);
             manifestWriteLock().lock();
             initManifest(m);
             manifestReadLock().lock();
@@ -98,7 +98,7 @@ public abstract class PathTreeWithManifest implements PathTree {
             return multiReleaseMapping;
         }
         final Map<String, String> mrMapping = isMultiReleaseJar()
-                ? processPath(META_INF_VERSIONS, MultiReleaseMappingReader.INSTANCE, false)
+                ? apply(META_INF_VERSIONS, MultiReleaseMappingReader.INSTANCE, false)
                 : Collections.emptyMap();
         initMultiReleaseMapping(mrMapping);
         return mrMapping;

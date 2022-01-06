@@ -38,7 +38,8 @@ public class DirectoryClassPathElement extends AbstractClassPathElement {
         this.runtime = runtime;
     }
 
-    public <T> T withOpenTree(Function<OpenPathTree, T> func) {
+    @Override
+    public <T> T apply(Function<OpenPathTree, T> func) {
         return func.apply(new DirectoryPathTree(root));
     }
 

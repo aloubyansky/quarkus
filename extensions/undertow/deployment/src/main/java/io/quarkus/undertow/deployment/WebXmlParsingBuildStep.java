@@ -58,7 +58,7 @@ public class WebXmlParsingBuildStep {
             Consumer<AdditionalBeanBuildItem> additionalBeanBuildItemConsumer) throws Exception {
 
         WebMetaData result = applicationArchivesBuildItem.getRootArchive()
-                .withContentTree(tree -> {
+                .apply(tree -> {
                     var webXml = tree.getPath(WEB_XML);
                     if (webXml == null) {
                         return new WebMetaData();
@@ -116,7 +116,7 @@ public class WebXmlParsingBuildStep {
     private List<WebFragmentMetaData> parseWebFragments(ApplicationArchivesBuildItem applicationArchivesBuildItem) {
         List<WebFragmentMetaData> webFragments = new ArrayList<>();
         for (ApplicationArchive archive : applicationArchivesBuildItem.getAllApplicationArchives()) {
-            archive.withContentTree(tree -> {
+            archive.accept(tree -> {
                 Path webFragment = tree.getPath(WEB_FRAGMENT_XML);
                 if (webFragment != null && Files.isRegularFile(webFragment)) {
                     try (InputStream is = Files.newInputStream(webFragment)) {
@@ -135,7 +135,6 @@ public class WebXmlParsingBuildStep {
                         throw new RuntimeException("Failed to parse " + webFragment, e);
                     }
                 }
-                return null;
             });
         }
         return webFragments;

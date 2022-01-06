@@ -43,7 +43,7 @@ public interface ClassPathElement extends Closeable {
      * @param func content processing function
      * @return processing result
      */
-    <T> T withOpenTree(Function<OpenPathTree, T> func);
+    <T> T apply(Function<OpenPathTree, T> func);
 
     /**
      * Loads a resource from the class path element, or null if it does not exist.
@@ -99,7 +99,7 @@ public interface ClassPathElement extends Closeable {
         }
 
         @Override
-        public <T> T withOpenTree(Function<OpenPathTree, T> func) {
+        public <T> T apply(Function<OpenPathTree, T> func) {
             return func.apply(EmptyPathTree.getInstance());
         }
 

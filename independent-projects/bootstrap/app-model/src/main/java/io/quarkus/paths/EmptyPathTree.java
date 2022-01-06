@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.jar.Manifest;
 
@@ -30,8 +31,13 @@ public class EmptyPathTree implements OpenPathTree {
     }
 
     @Override
-    public <T> T processPath(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
+    public <T> T apply(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
         return func.apply(null);
+    }
+
+    @Override
+    public void accept(String relativePath, Consumer<PathVisit> func, boolean multiReleaseSupport) {
+        func.accept(null);
     }
 
     @Override
@@ -45,7 +51,7 @@ public class EmptyPathTree implements OpenPathTree {
     }
 
     @Override
-    public OpenPathTree openTree() {
+    public OpenPathTree open() {
         return this;
     }
 

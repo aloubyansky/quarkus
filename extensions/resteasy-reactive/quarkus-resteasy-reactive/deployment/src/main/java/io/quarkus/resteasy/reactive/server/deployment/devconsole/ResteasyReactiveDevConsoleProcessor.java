@@ -43,12 +43,11 @@ public class ResteasyReactiveDevConsoleProcessor {
         StaticResourceInfo staticResourceInfo = new StaticResourceInfo();
 
         for (ApplicationArchive i : applicationArchivesBuildItem.getAllApplicationArchives()) {
-            i.withContentTree(tree -> {
+            i.accept(tree -> {
                 Path resource = tree.getPath(StaticResourcesRecorder.META_INF_RESOURCES);
                 if (resource != null && Files.exists(resource)) {
                     collectKnownPaths(resource, staticResourceInfo);
                 }
-                return null;
             });
 
         }

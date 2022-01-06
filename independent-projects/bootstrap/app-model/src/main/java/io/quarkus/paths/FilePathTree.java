@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.jar.Manifest;
 
@@ -66,11 +67,20 @@ class FilePathTree implements OpenPathTree {
     }
 
     @Override
-    public <T> T processPath(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
+    public <T> T apply(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
         if (relativePath.isEmpty()) {
-            return PathTreeVisit.processPath(file, file, file, pathFilter, func);
+            return PathTreeVisit.process(file, file, file, pathFilter, func);
         }
         return func.apply(null);
+    }
+
+    @Override
+    public void accept(String relativePath, Consumer<PathVisit> func, boolean multiReleaseSupport) {
+        if (relativePath.isEmpty()) {
+            PathTreeVisit.consume(file, file, file, pathFilter, func);
+            return;
+        }
+        func.accept(null);
     }
 
     @Override
@@ -84,7 +94,7 @@ class FilePathTree implements OpenPathTree {
     }
 
     @Override
-    public OpenPathTree openTree() {
+    public OpenPathTree open() {
         return this;
     }
 

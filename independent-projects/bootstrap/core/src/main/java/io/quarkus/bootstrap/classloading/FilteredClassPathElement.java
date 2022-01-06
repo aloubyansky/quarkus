@@ -32,8 +32,8 @@ public class FilteredClassPathElement implements ClassPathElement {
     }
 
     @Override
-    public <T> T withOpenTree(Function<OpenPathTree, T> func) {
-        return delegate.withOpenTree(func);
+    public <T> T apply(Function<OpenPathTree, T> func) {
+        return delegate.apply(func);
     }
 
     @Override

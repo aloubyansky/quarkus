@@ -149,12 +149,11 @@ public class StaticResourcesProcessor {
         Set<StaticResourcesBuildItem.Entry> knownPaths = new HashSet<>();
 
         for (ApplicationArchive i : applicationArchivesBuildItem.getAllApplicationArchives()) {
-            i.withContentTree(tree -> {
+            i.accept(tree -> {
                 Path resource = tree.getPath(StaticResourcesRecorder.META_INF_RESOURCES);
                 if (resource != null && Files.exists(resource)) {
                     collectKnownPaths(resource, knownPaths);
                 }
-                return null;
             });
         }
 

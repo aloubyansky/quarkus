@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.jar.Manifest;
 
@@ -68,12 +69,22 @@ public class CachingPathTree implements OpenPathTree {
     }
 
     @Override
-    public <T> T processPath(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
+    public <T> T apply(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
         final LinkedHashMap<String, PathVisitSnapshot> snapshot = walkSnapshot;
         if (snapshot != null) {
             return func.apply((PathVisit) snapshot.get(relativePath));
         }
-        return delegate.processPath(relativePath, func, multiReleaseSupport);
+        return delegate.apply(relativePath, func, multiReleaseSupport);
+    }
+
+    @Override
+    public void accept(String relativePath, Consumer<PathVisit> func, boolean multiReleaseSupport) {
+        final LinkedHashMap<String, PathVisitSnapshot> snapshot = walkSnapshot;
+        if (snapshot != null) {
+            func.accept((PathVisit) snapshot.get(relativePath));
+            return;
+        }
+        delegate.accept(relativePath, func, multiReleaseSupport);
     }
 
     @Override
@@ -99,7 +110,7 @@ public class CachingPathTree implements OpenPathTree {
     }
 
     @Override
-    public OpenPathTree openTree() {
+    public OpenPathTree open() {
         return this;
     }
 

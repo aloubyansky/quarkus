@@ -1,6 +1,7 @@
 package io.quarkus.deployment;
 
 import java.nio.file.Path;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.jboss.jandex.IndexView;
@@ -83,13 +84,20 @@ public interface ApplicationArchive {
     ArtifactKey getKey();
 
     /**
-     * Allows to apply a function to the content tree of the archive.
+     * Applies a function to the content tree of the archive.
      * 
      * @param <T> result type of the function
      * @param func function to apply
      * @return the result of the function
      */
-    <T> T withContentTree(Function<OpenPathTree, T> func);
+    <T> T apply(Function<OpenPathTree, T> func);
+
+    /**
+     * Accepts a consumer for the content tree of the archive.
+     * 
+     * @param func consumer
+     */
+    void accept(Consumer<OpenPathTree> func);
 
     /**
      * Convenience method, returns the child path if it exists, otherwise null.
@@ -98,6 +106,6 @@ public interface ApplicationArchive {
      * @return The child path, or null if it does not exist.
      */
     default Path getChildPath(String path) {
-        return withContentTree(tree -> tree.getPath(path));
+        return apply(tree -> tree.getPath(path));
     }
 }

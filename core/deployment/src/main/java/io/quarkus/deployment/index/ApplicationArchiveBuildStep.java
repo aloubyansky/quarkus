@@ -209,7 +209,7 @@ public class ApplicationArchiveBuildStep {
             openTree = new DirectoryPathTree(dep);
             index = indexPathTree(openTree, removed);
         } else {
-            openTree = buildCloseables.add(PathTree.ofArchive(dep).openTree());
+            openTree = buildCloseables.add(PathTree.ofArchive(dep).open());
             index = handleJarPath(dep, indexCache, removed);
         }
         return new ApplicationArchiveImpl(index, openTree, artifactKey);
@@ -235,7 +235,7 @@ public class ApplicationArchiveBuildStep {
                 if (dependencyKey == null || !indexedElements.add(dependencyKey)) {
                     continue;
                 }
-                cpe.withOpenTree(tree -> {
+                cpe.apply(tree -> {
                     indexedPaths.addAll(tree.getOriginalTree().getRoots());
 
                     final Path rootPath = tree.getOriginalTree().getRoots().size() == 1
@@ -259,7 +259,7 @@ public class ApplicationArchiveBuildStep {
                         return null;
                     }
 
-                    final ApplicationArchive archive = tree.processPath(marker, visit -> {
+                    final ApplicationArchive archive = tree.apply(marker, visit -> {
                         if (visit == null || root.isExcludedFromIndexing(visit.getRoot())) {
                             return null;
                         }
