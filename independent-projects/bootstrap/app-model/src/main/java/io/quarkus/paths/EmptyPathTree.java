@@ -31,22 +31,22 @@ public class EmptyPathTree implements OpenPathTree {
     }
 
     @Override
-    public <T> T apply(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
+    public <T> T apply(String relativePath, Function<PathVisit, T> func) {
         return func.apply(null);
     }
 
     @Override
-    public void accept(String relativePath, Consumer<PathVisit> func, boolean multiReleaseSupport) {
+    public void accept(String relativePath, Consumer<PathVisit> func) {
         func.accept(null);
     }
 
     @Override
-    public boolean contains(String relativePath, boolean multiReleaseSupport) {
+    public boolean contains(String relativePath) {
         return false;
     }
 
     @Override
-    public Path getPath(String relativePath, boolean multiReleaseSupport) {
+    public Path getPath(String relativePath) {
         return null;
     }
 

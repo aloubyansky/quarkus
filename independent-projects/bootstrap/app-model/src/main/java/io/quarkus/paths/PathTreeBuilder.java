@@ -7,13 +7,23 @@ import java.util.List;
 
 public class PathTreeBuilder {
 
-    private final boolean archive;
+    private boolean archive;
+    private Boolean manifestEnabled;
     private Path root;
     private List<String> includes;
     private List<String> excludes;
 
-    public PathTreeBuilder(boolean archive) {
+    public PathTreeBuilder() {
+    }
+
+    public PathTreeBuilder setArchive(boolean archive) {
         this.archive = archive;
+        return this;
+    }
+
+    public PathTreeBuilder setManifestEnabled(boolean manifestEnabled) {
+        this.manifestEnabled = manifestEnabled;
+        return this;
     }
 
     public PathTreeBuilder setRoot(Path root) {
@@ -61,10 +71,10 @@ public class PathTreeBuilder {
             throw new IllegalArgumentException(root + " does not exist");
         }
         if (archive) {
-            return new ArchivePathTree(root, getPathFilter());
+            return new ArchivePathTree(root, getPathFilter(), manifestEnabled == null ? true : manifestEnabled);
         }
         if (Files.isDirectory(root)) {
-            return new DirectoryPathTree(root, getPathFilter());
+            return new DirectoryPathTree(root, getPathFilter(), manifestEnabled == null ? false : manifestEnabled);
         }
         return new FilePathTree(root, getPathFilter());
     }

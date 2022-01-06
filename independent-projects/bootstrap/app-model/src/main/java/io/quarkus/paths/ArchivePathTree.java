@@ -25,6 +25,11 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
     }
 
     ArchivePathTree(Path archive, PathFilter pathFilter) {
+        this(archive, pathFilter, true);
+    }
+
+    ArchivePathTree(Path archive, PathFilter pathFilter, boolean manifestEnabled) {
+        super(manifestEnabled);
         this.archive = archive;
         this.pathFilter = pathFilter;
     }
@@ -45,11 +50,11 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
     }
 
     @Override
-    public <T> T apply(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
+    protected <T> T apply(String relativePath, Function<PathVisit, T> func, boolean manifestEnabled) {
         if (!PathFilter.isVisible(pathFilter, relativePath)) {
             return func.apply(null);
         }
-        if (multiReleaseSupport) {
+        if (manifestEnabled) {
             relativePath = toMultiReleaseRelativePath(relativePath);
         }
         try (FileSystem fs = openFs()) {
@@ -67,12 +72,12 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
     }
 
     @Override
-    public void accept(String relativePath, Consumer<PathVisit> consumer, boolean multiReleaseSupport) {
+    public void accept(String relativePath, Consumer<PathVisit> consumer) {
         if (!PathFilter.isVisible(pathFilter, relativePath)) {
             consumer.accept(null);
             return;
         }
-        if (multiReleaseSupport) {
+        if (manifestEnabled) {
             relativePath = toMultiReleaseRelativePath(relativePath);
         }
         try (FileSystem fs = openFs()) {
@@ -91,11 +96,11 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
     }
 
     @Override
-    public boolean contains(String relativePath, boolean multiReleaseSupport) {
+    public boolean contains(String relativePath) {
         if (!PathFilter.isVisible(pathFilter, relativePath)) {
             return false;
         }
-        if (multiReleaseSupport) {
+        if (manifestEnabled) {
             relativePath = toMultiReleaseRelativePath(relativePath);
         }
         try (FileSystem fs = openFs()) {
@@ -126,7 +131,7 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
 
     @Override
     public int hashCode() {
-        return Objects.hash(archive, pathFilter);
+        return Objects.hash(archive, pathFilter, manifestEnabled);
     }
 
     @Override
@@ -138,7 +143,8 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
         if (getClass() != obj.getClass())
             return false;
         ArchivePathTree other = (ArchivePathTree) obj;
-        return Objects.equals(archive, other.archive) && Objects.equals(pathFilter, other.pathFilter);
+        return Objects.equals(archive, other.archive) && Objects.equals(pathFilter, other.pathFilter)
+                && manifestEnabled == other.manifestEnabled;
     }
 
     private class OpenArchivePathTree extends DirectoryPathTree {
@@ -182,22 +188,22 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
         }
 
         @Override
-        public <T> T apply(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
+        protected <T> T apply(String relativePath, Function<PathVisit, T> func, boolean manifestEnabled) {
             lock.readLock().lock();
             try {
                 ensureOpen();
-                return super.apply(relativePath, func, multiReleaseSupport);
+                return super.apply(relativePath, func, manifestEnabled);
             } finally {
                 lock.readLock().unlock();
             }
         }
 
         @Override
-        public void accept(String relativePath, Consumer<PathVisit> consumer, boolean multiReleaseSupport) {
+        public void accept(String relativePath, Consumer<PathVisit> consumer) {
             lock.readLock().lock();
             try {
                 ensureOpen();
-                super.accept(relativePath, consumer, multiReleaseSupport);
+                super.accept(relativePath, consumer);
             } finally {
                 lock.readLock().unlock();
             }
@@ -215,22 +221,22 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
         }
 
         @Override
-        public boolean contains(String relativePath, boolean multiReleaseSupport) {
+        public boolean contains(String relativePath) {
             lock.readLock().lock();
             try {
                 ensureOpen();
-                return super.contains(relativePath, multiReleaseSupport);
+                return super.contains(relativePath);
             } finally {
                 lock.readLock().unlock();
             }
         }
 
         @Override
-        public Path getPath(String relativePath, boolean multiReleaseSupport) {
+        public Path getPath(String relativePath) {
             lock.readLock().lock();
             try {
                 ensureOpen();
-                return super.getPath(relativePath, multiReleaseSupport);
+                return super.getPath(relativePath);
             } finally {
                 lock.readLock().unlock();
             }

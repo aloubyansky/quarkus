@@ -67,7 +67,7 @@ class FilePathTree implements OpenPathTree {
     }
 
     @Override
-    public <T> T apply(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
+    public <T> T apply(String relativePath, Function<PathVisit, T> func) {
         if (relativePath.isEmpty()) {
             return PathTreeVisit.process(file, file, file, pathFilter, func);
         }
@@ -75,7 +75,7 @@ class FilePathTree implements OpenPathTree {
     }
 
     @Override
-    public void accept(String relativePath, Consumer<PathVisit> func, boolean multiReleaseSupport) {
+    public void accept(String relativePath, Consumer<PathVisit> func) {
         if (relativePath.isEmpty()) {
             PathTreeVisit.consume(file, file, file, pathFilter, func);
             return;
@@ -84,12 +84,12 @@ class FilePathTree implements OpenPathTree {
     }
 
     @Override
-    public boolean contains(String relativePath, boolean multiReleaseSupport) {
+    public boolean contains(String relativePath) {
         return false;
     }
 
     @Override
-    public Path getPath(String relativePath, boolean multiReleaseSupport) {
+    public Path getPath(String relativePath) {
         return null;
     }
 

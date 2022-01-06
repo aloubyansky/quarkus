@@ -36,14 +36,6 @@ public interface PathTree {
         return new ArchivePathTree(archive);
     }
 
-    static PathTreeBuilder builder() {
-        return new PathTreeBuilder(false);
-    }
-
-    static PathTreeBuilder archiveBuilder() {
-        return new PathTreeBuilder(true);
-    }
-
     Collection<Path> getRoots();
 
     default boolean isEmpty() {
@@ -54,23 +46,11 @@ public interface PathTree {
 
     void walk(PathVisitor visitor);
 
-    default <T> T apply(String relativePath, Function<PathVisit, T> func) {
-        return apply(relativePath, func, true);
-    }
+    <T> T apply(String relativePath, Function<PathVisit, T> func);
 
-    <T> T apply(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport);
+    void accept(String relativePath, Consumer<PathVisit> consumer);
 
-    default void accept(String relativePath, Consumer<PathVisit> consumer) {
-        accept(relativePath, consumer, true);
-    }
-
-    void accept(String relativePath, Consumer<PathVisit> consumer, boolean multiReleaseSupport);
-
-    default boolean contains(String relativePath) {
-        return contains(relativePath, true);
-    }
-
-    boolean contains(String relativePath, boolean multiReleaseSupport);
+    boolean contains(String relativePath);
 
     OpenPathTree open();
 }

@@ -16,11 +16,23 @@ public class DirectoryPathTree extends PathTreeWithManifest implements OpenPathT
     private Path dir;
     private PathFilter pathFilter;
 
+    /**
+     * For deserialization
+     */
+    public DirectoryPathTree() {
+        super();
+    }
+
     public DirectoryPathTree(Path dir) {
         this(dir, null);
     }
 
     public DirectoryPathTree(Path dir, PathFilter pathFilter) {
+        this(dir, pathFilter, false);
+    }
+
+    public DirectoryPathTree(Path dir, PathFilter pathFilter, boolean manifestEnabled) {
+        super(manifestEnabled);
         this.dir = dir;
         this.pathFilter = pathFilter;
     }
@@ -42,11 +54,11 @@ public class DirectoryPathTree extends PathTreeWithManifest implements OpenPathT
     }
 
     @Override
-    public <T> T apply(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
+    protected <T> T apply(String relativePath, Function<PathVisit, T> func, boolean manifestEnabled) {
         if (!PathFilter.isVisible(pathFilter, relativePath)) {
             return func.apply(null);
         }
-        final Path path = dir.resolve(multiReleaseSupport ? toMultiReleaseRelativePath(relativePath) : relativePath);
+        final Path path = dir.resolve(manifestEnabled ? toMultiReleaseRelativePath(relativePath) : relativePath);
         if (!Files.exists(path)) {
             return func.apply(null);
         }
@@ -54,12 +66,12 @@ public class DirectoryPathTree extends PathTreeWithManifest implements OpenPathT
     }
 
     @Override
-    public void accept(String relativePath, Consumer<PathVisit> consumer, boolean multiReleaseSupport) {
+    public void accept(String relativePath, Consumer<PathVisit> consumer) {
         if (!PathFilter.isVisible(pathFilter, relativePath)) {
             consumer.accept(null);
             return;
         }
-        final Path path = dir.resolve(multiReleaseSupport ? toMultiReleaseRelativePath(relativePath) : relativePath);
+        final Path path = dir.resolve(manifestEnabled ? toMultiReleaseRelativePath(relativePath) : relativePath);
         if (!Files.exists(path)) {
             consumer.accept(null);
             return;
@@ -68,31 +80,33 @@ public class DirectoryPathTree extends PathTreeWithManifest implements OpenPathT
     }
 
     @Override
-    public boolean contains(String relativePath, boolean multiReleaseSupport) {
+    public boolean contains(String relativePath) {
         if (!PathFilter.isVisible(pathFilter, relativePath)) {
             return false;
         }
-        final Path path = dir.resolve(multiReleaseSupport ? toMultiReleaseRelativePath(relativePath) : relativePath);
+        final Path path = dir.resolve(manifestEnabled ? toMultiReleaseRelativePath(relativePath) : relativePath);
         return Files.exists(path);
     }
 
     @Override
-    public Path getPath(String relativePath, boolean multiReleaseSupport) {
+    public Path getPath(String relativePath) {
         if (!PathFilter.isVisible(pathFilter, relativePath)) {
             return null;
         }
-        final Path path = dir.resolve(multiReleaseSupport ? toMultiReleaseRelativePath(relativePath) : relativePath);
+        final Path path = dir.resolve(manifestEnabled ? toMultiReleaseRelativePath(relativePath) : relativePath);
         return Files.exists(path) ? path : null;
     }
 
     private void writeObject(java.io.ObjectOutputStream out) throws IOException {
         out.writeUTF(dir.toAbsolutePath().toString());
         out.writeObject(pathFilter);
+        out.writeBoolean(manifestEnabled);
     }
 
     private void readObject(java.io.ObjectInputStream in) throws IOException, ClassNotFoundException {
         dir = Paths.get(in.readUTF());
         pathFilter = (PathFilter) in.readObject();
+        manifestEnabled = in.readBoolean();
     }
 
     @Override
@@ -116,7 +130,7 @@ public class DirectoryPathTree extends PathTreeWithManifest implements OpenPathT
 
     @Override
     public int hashCode() {
-        return Objects.hash(dir, pathFilter);
+        return Objects.hash(dir, pathFilter, manifestEnabled);
     }
 
     @Override
@@ -128,6 +142,8 @@ public class DirectoryPathTree extends PathTreeWithManifest implements OpenPathT
         if (getClass() != obj.getClass())
             return false;
         DirectoryPathTree other = (DirectoryPathTree) obj;
-        return Objects.equals(dir, other.dir) && Objects.equals(pathFilter, other.pathFilter);
+        return Objects.equals(dir, other.dir) && Objects.equals(pathFilter, other.pathFilter)
+                && manifestEnabled == other.manifestEnabled;
     }
+
 }

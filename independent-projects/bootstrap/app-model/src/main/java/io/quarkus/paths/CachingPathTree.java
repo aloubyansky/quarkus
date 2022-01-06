@@ -69,42 +69,42 @@ public class CachingPathTree implements OpenPathTree {
     }
 
     @Override
-    public <T> T apply(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
+    public <T> T apply(String relativePath, Function<PathVisit, T> func) {
         final LinkedHashMap<String, PathVisitSnapshot> snapshot = walkSnapshot;
         if (snapshot != null) {
             return func.apply((PathVisit) snapshot.get(relativePath));
         }
-        return delegate.apply(relativePath, func, multiReleaseSupport);
+        return delegate.apply(relativePath, func);
     }
 
     @Override
-    public void accept(String relativePath, Consumer<PathVisit> func, boolean multiReleaseSupport) {
+    public void accept(String relativePath, Consumer<PathVisit> func) {
         final LinkedHashMap<String, PathVisitSnapshot> snapshot = walkSnapshot;
         if (snapshot != null) {
             func.accept((PathVisit) snapshot.get(relativePath));
             return;
         }
-        delegate.accept(relativePath, func, multiReleaseSupport);
+        delegate.accept(relativePath, func);
     }
 
     @Override
-    public boolean contains(String relativePath, boolean multiReleaseSupport) {
+    public boolean contains(String relativePath) {
         final LinkedHashMap<String, PathVisitSnapshot> snapshot = walkSnapshot;
         if (snapshot != null) {
             return snapshot.get(relativePath) != null;
         }
-        return delegate.contains(relativePath, multiReleaseSupport);
+        return delegate.contains(relativePath);
     }
 
     @Override
-    public Path getPath(String relativePath, boolean multiReleaseSupport) {
+    public Path getPath(String relativePath) {
         final LinkedHashMap<String, PathVisitSnapshot> snapshot = walkSnapshot;
         if (snapshot != null) {
             final PathVisitSnapshot visit = snapshot.get(relativePath);
             return visit == null ? null : visit.getPath();
         }
         if (delegate instanceof OpenPathTree) {
-            return ((OpenPathTree) delegate).getPath(relativePath, multiReleaseSupport);
+            return ((OpenPathTree) delegate).getPath(relativePath);
         }
         throw new UnsupportedOperationException();
     }

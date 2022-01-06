@@ -9,9 +9,5 @@ public interface OpenPathTree extends PathTree, Closeable {
 
     boolean isOpen();
 
-    default Path getPath(String relativePath) {
-        return getPath(relativePath, true);
-    }
-
-    Path getPath(String relativePath, boolean multiReleaseSupport);
+    Path getPath(String relativePath);
 }

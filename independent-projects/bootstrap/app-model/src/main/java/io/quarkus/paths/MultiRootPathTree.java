@@ -53,9 +53,9 @@ public class MultiRootPathTree implements OpenPathTree {
     }
 
     @Override
-    public <T> T apply(String relativePath, Function<PathVisit, T> func, boolean multiReleaseSupport) {
+    public <T> T apply(String relativePath, Function<PathVisit, T> func) {
         for (PathTree tree : trees) {
-            T result = tree.apply(relativePath, func, multiReleaseSupport);
+            T result = tree.apply(relativePath, func);
             if (result != null) {
                 return result;
             }
@@ -64,7 +64,7 @@ public class MultiRootPathTree implements OpenPathTree {
     }
 
     @Override
-    public void accept(String relativePath, Consumer<PathVisit> func, boolean multiReleaseSupport) {
+    public void accept(String relativePath, Consumer<PathVisit> func) {
         final AtomicBoolean consumed = new AtomicBoolean();
         final Consumer<PathVisit> wrapper = new Consumer<>() {
             @Override
@@ -76,7 +76,7 @@ public class MultiRootPathTree implements OpenPathTree {
             }
         };
         for (PathTree tree : trees) {
-            tree.accept(relativePath, wrapper, multiReleaseSupport);
+            tree.accept(relativePath, wrapper);
             if (consumed.get()) {
                 break;
             }
@@ -87,9 +87,9 @@ public class MultiRootPathTree implements OpenPathTree {
     }
 
     @Override
-    public boolean contains(String relativePath, boolean multiReleaseSupport) {
+    public boolean contains(String relativePath) {
         for (PathTree tree : trees) {
-            if (tree.contains(relativePath, multiReleaseSupport)) {
+            if (tree.contains(relativePath)) {
                 return true;
             }
         }
@@ -97,10 +97,10 @@ public class MultiRootPathTree implements OpenPathTree {
     }
 
     @Override
-    public Path getPath(String relativePath, boolean multiReleaseSupport) {
+    public Path getPath(String relativePath) {
         for (PathTree tree : trees) {
             if (tree instanceof OpenPathTree) {
-                final Path p = ((OpenPathTree) tree).getPath(relativePath, multiReleaseSupport);
+                final Path p = ((OpenPathTree) tree).getPath(relativePath);
                 if (p != null) {
                     return p;
                 }

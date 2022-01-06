@@ -38,12 +38,22 @@ public abstract class PathTreeWithManifest implements PathTree {
         }
     }
 
+    protected boolean manifestEnabled;
     private final ReentrantReadWriteLock manifestInfoLock = new ReentrantReadWriteLock();
     private transient Manifest manifest;
     protected transient boolean manifestInitialized;
     protected volatile Map<String, String> multiReleaseMapping;
 
-    public PathTreeWithManifest() {
+    protected PathTreeWithManifest() {
+        this(true);
+    }
+
+    protected PathTreeWithManifest(boolean manifestEnabled) {
+        this.manifestEnabled = manifestEnabled;
+        if (!manifestEnabled) {
+            manifestInitialized = true;
+            multiReleaseMapping = Collections.emptyMap();
+        }
     }
 
     protected PathTreeWithManifest(PathTreeWithManifest pathTreeWithManifest) {
@@ -55,7 +65,15 @@ public abstract class PathTreeWithManifest implements PathTree {
         } finally {
             pathTreeWithManifest.manifestReadLock().unlock();
         }
+        this.manifestEnabled = pathTreeWithManifest.manifestEnabled;
     }
+
+    @Override
+    public <T> T apply(String relativePath, Function<PathVisit, T> func) {
+        return apply(relativePath, func, manifestEnabled);
+    }
+
+    protected abstract <T> T apply(String relativePath, Function<PathVisit, T> func, boolean manifestEnabled);
 
     @Override
     public Manifest getManifest() {
