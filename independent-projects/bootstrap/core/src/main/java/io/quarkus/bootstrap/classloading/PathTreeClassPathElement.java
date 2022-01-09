@@ -38,6 +38,7 @@ public class PathTreeClassPathElement extends AbstractClassPathElement {
     private final boolean runtime;
     private final ArtifactKey dependencyKey;
     private volatile Set<String> resources;
+    private volatile boolean closed;
 
     public PathTreeClassPathElement(PathTree pathTree, boolean runtime) {
         this(pathTree, runtime, null);
@@ -171,6 +172,7 @@ public class PathTreeClassPathElement extends AbstractClassPathElement {
     public void close() throws IOException {
         lock.writeLock().lock();
         resources = null;
+        closed = true;
         try {
             pathTree.close();
         } finally {
@@ -264,6 +266,8 @@ public class PathTreeClassPathElement extends AbstractClassPathElement {
                         }
                     }
                 }
+                System.out.println("READING FROM URL " + getUrl() + " " + name + " tree open=" + pathTree.isOpen()
+                        + " element closed=" + closed);
                 try {
                     return readUrl(getUrl());
                 } catch (IOException e) {
