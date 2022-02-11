@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.maven.model.Build;
+import org.apache.maven.model.BuildBase;
+import org.apache.maven.model.Profile;
 import org.apache.maven.model.Resource;
 import org.apache.maven.project.MavenProject;
 
@@ -22,7 +24,7 @@ class QuarkusMavenWorkspaceBuilder {
     static void loadModules(MavenProject project, ApplicationModelBuilder modelBuilder) {
     }
 
-    static WorkspaceModule toProjectModule(MavenProject project) {
+    static WorkspaceModule toWorkspaceModule(MavenProject project) {
         final Build build = project.getBuild();
 
         final WorkspaceModule.Mutable moduleBuilder = WorkspaceModule.builder()
@@ -32,13 +34,12 @@ class QuarkusMavenWorkspaceBuilder {
 
         final Path classesDir = Path.of(build.getOutputDirectory());
         final List<SourceDir> sources = new ArrayList<>(project.getCompileSourceRoots().size());
-        project.getCompileSourceRoots().forEach(s -> sources.add(new DefaultSourceDir(Path.of(s), classesDir)));
+        project.getCompileSourceRoots().forEach(s -> sources.add(SourceDir.of(Path.of(s), classesDir)));
         final List<SourceDir> resources = new ArrayList<>(build.getResources().size());
         for (Resource r : build.getResources()) {
-            resources.add(new DefaultSourceDir(Path.of(r.getDirectory()),
+            resources.add(SourceDir.of(Path.of(r.getDirectory()),
                     r.getTargetPath() == null ? classesDir : Path.of(r.getTargetPath())));
         }
-        moduleBuilder.addArtifactSources(new DefaultArtifactSources(ArtifactSources.MAIN, sources, resources));
 
         final Path testClassesDir = Path.of(build.getTestOutputDirectory());
         final List<SourceDir> testSources = new ArrayList<>(project.getCompileSourceRoots().size());
@@ -48,11 +49,26 @@ class QuarkusMavenWorkspaceBuilder {
             testResources.add(new DefaultSourceDir(Path.of(r.getDirectory()),
                     r.getTargetPath() == null ? testClassesDir : Path.of(r.getTargetPath())));
         }
-        moduleBuilder.addArtifactSources(new DefaultArtifactSources(ArtifactSources.TEST, testSources, testResources));
 
-        moduleBuilder.setBuildFile(project.getFile().toPath());
+        final List<Profile> activeProfiles = project.getActiveProfiles();
+        for (Profile profile : activeProfiles) {
+            final BuildBase profileBuild = profile.getBuild();
+            if (profileBuild != null) {
+            	for(Resource r : build.getResources()) {
+                    resources.add(new DefaultSourceDir(Path.of(r.getDirectory()),
+                            r.getTargetPath() == null ? classesDir : Path.of(r.getTargetPath())));            		
+            	}
+            	for(Resource r : build.getTestResources()) {
+                    testResources.add(SourceDir.of(Path.of(r.getDirectory()),
+                            r.getTargetPath() == null ? classesDir : Path.of(r.getTargetPath())));            		
+            	}
+            }
+        }
 
-        return moduleBuilder.build();
+        return moduleBuilder.addArtifactSources(new DefaultArtifactSources(ArtifactSources.MAIN, sources, resources))
+        .addArtifactSources(new DefaultArtifactSources(ArtifactSources.TEST, testSources, testResources))
+        .setBuildFile(project.getFile().toPath())
+        .build();
     }
 
     private static WorkspaceModuleId getId(MavenProject project) {

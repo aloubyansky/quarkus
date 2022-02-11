@@ -48,6 +48,7 @@ import org.junit.jupiter.api.extension.TestInstanceFactory;
 import org.junit.jupiter.api.extension.TestInstanceFactoryContext;
 import org.junit.jupiter.api.extension.TestInstantiationException;
 
+import io.quarkus.bootstrap.workspace.SourceDir;
 import io.quarkus.deployment.dev.CompilationProvider;
 import io.quarkus.deployment.dev.DevModeContext;
 import io.quarkus.deployment.dev.DevModeMain;
@@ -393,11 +394,8 @@ public class QuarkusDevModeTest
             DevModeContext.ModuleInfo.Builder moduleBuilder = new DevModeContext.ModuleInfo.Builder()
                     .setArtifactKey(GACT.fromString("io.quarkus.test:app-under-test"))
                     .setProjectDirectory(deploymentDir.toAbsolutePath().toString())
-                    .setSourcePaths(PathList.of(deploymentSourcePath.toAbsolutePath()))
-                    .setClassesPath(classes.toAbsolutePath().toString())
-                    .setResourcePaths(PathList.of(deploymentResourcePath.toAbsolutePath()))
-                    .setResourcesOutputPath(classes.toAbsolutePath().toString())
-                    .setSourceParents(PathList.of(deploymentSourceParentPath.toAbsolutePath()))
+                    .setSources(Collections.singletonList(SourceDir.of(deploymentSourcePath, classes)))
+                    .setResources(Collections.singletonList(SourceDir.of(deploymentResourcePath, classes)))                    
                     .setPreBuildOutputDir(targetDir.resolve("generated-sources").toAbsolutePath().toString())
                     .setTargetDir(targetDir.toAbsolutePath().toString());
 
@@ -442,15 +440,11 @@ public class QuarkusDevModeTest
                     });
                 }
                 moduleBuilder
-                        .setTestSourcePaths(PathList.of(deploymentTestSourcePath.toAbsolutePath()))
-                        .setTestClassesPath(testClasses.toAbsolutePath().toString())
-                        .setTestResourcePaths(PathList.of(deploymentTestResourcePath.toAbsolutePath()))
-                        .setTestResourcesOutputPath(testClasses.toAbsolutePath().toString());
+                .setTestSources(Collections.singletonList(SourceDir.of(deploymentTestSourcePath, testClasses)))
+                .setTestResources(Collections.singletonList(SourceDir.of(deploymentTestResourcePath, testClasses)));
             }
 
-            context.setApplicationRoot(
-                    moduleBuilder
-                            .build());
+            context.setApplicationRoot(moduleBuilder.build());
 
             setDevModeRunnerJarFile(context);
             return context;

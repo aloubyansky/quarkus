@@ -89,6 +89,7 @@ import io.quarkus.bootstrap.resolver.maven.options.BootstrapMavenOptions;
 import io.quarkus.bootstrap.util.BootstrapUtils;
 import io.quarkus.bootstrap.workspace.ArtifactSources;
 import io.quarkus.bootstrap.workspace.SourceDir;
+import io.quarkus.bootstrap.workspace.WorkspaceModule;
 import io.quarkus.deployment.dev.DevModeContext;
 import io.quarkus.deployment.dev.DevModeMain;
 import io.quarkus.deployment.dev.QuarkusDevModeLauncher;
@@ -717,126 +718,62 @@ public class DevMojo extends AbstractMojo {
 
     private void addProject(MavenDevModeLauncher.Builder builder, ResolvedDependency module, boolean root) throws Exception {
 
-        String projectDirectory;
-        Set<Path> sourcePaths;
-        String classesPath = null;
-        Set<Path> resourcePaths;
-        Set<Path> testSourcePaths;
-        String testClassesPath;
-        Set<Path> testResourcePaths;
-        List<Profile> activeProfiles = Collections.emptyList();
-
         final MavenProject mavenProject = module.getClassifier().isEmpty()
                 ? session.getProjectMap()
                         .get(String.format("%s:%s:%s", module.getGroupId(), module.getArtifactId(), module.getVersion()))
                 : null;
-        final ArtifactSources sources = module.getSources();
+        
+        final ArtifactSources sources;
+        final ArtifactSources testSources;
+        final String projectDirectory;
         if (mavenProject == null) {
-            projectDirectory = module.getWorkspaceModule().getModuleDir().getAbsolutePath();
-            sourcePaths = new LinkedHashSet<>();
-            for (SourceDir src : sources.getSourceDirs()) {
-                for (Path p : src.getSourceTree().getRoots()) {
-                    sourcePaths.add(p.toAbsolutePath());
-                }
-            }
-            testSourcePaths = new LinkedHashSet<>();
-            ArtifactSources testSources = module.getWorkspaceModule().getTestSources();
-            if (testSources != null) {
-                for (SourceDir src : testSources.getSourceDirs()) {
-                    for (Path p : src.getSourceTree().getRoots()) {
-                        testSourcePaths.add(p.toAbsolutePath());
-                    }
-                }
-            }
+        	sources = module.getSources();
+            testSources = module.getWorkspaceModule().getTestSources();
+            projectDirectory= module.getWorkspaceModule().getModuleDir().getAbsolutePath();
         } else {
-            projectDirectory = mavenProject.getBasedir().getPath();
-            sourcePaths = mavenProject.getCompileSourceRoots().stream()
-                    .map(Paths::get)
-                    .map(Path::toAbsolutePath)
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
-            testSourcePaths = mavenProject.getTestCompileSourceRoots().stream()
-                    .map(Paths::get)
-                    .map(Path::toAbsolutePath)
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
-            activeProfiles = mavenProject.getActiveProfiles();
+        	final WorkspaceModule workspaceModule = QuarkusMavenWorkspaceBuilder.toWorkspaceModule(mavenProject);
+        	sources = workspaceModule.getMainSources();
+            testSources = workspaceModule.getTestSources();
+            projectDirectory= workspaceModule.getModuleDir().getAbsolutePath();
         }
 
-        final Path sourceParent;
-        if (sources.getSourceDirs() == null) {
-            if (sources.getResourceDirs() == null) {
-                throw new MojoExecutionException("The project does not appear to contain any sources or resources");
-            }
-            sourceParent = sources.getResourceDirs().iterator().next().getDir().toAbsolutePath().getParent();
-        } else {
-            sourceParent = sources.getSourceDirs().iterator().next().getDir().toAbsolutePath().getParent();
-        }
-
-        Path classesDir = sources.getSourceDirs().iterator().next().getOutputDir().toAbsolutePath();
-        if (Files.isDirectory(classesDir)) {
-            classesPath = classesDir.toString();
-        }
-        Path testClassesDir = module.getWorkspaceModule().getTestSources().getSourceDirs().iterator().next().getOutputDir()
-                .toAbsolutePath();
-        testClassesPath = testClassesDir.toString();
-
-        resourcePaths = new LinkedHashSet<>();
-        for (SourceDir src : sources.getResourceDirs()) {
-            for (Path p : src.getSourceTree().getRoots()) {
-                resourcePaths.add(p.toAbsolutePath());
-            }
-        }
-
-        testResourcePaths = new LinkedHashSet<>();
-        ArtifactSources testSources = module.getWorkspaceModule().getTestSources();
-        if (testSources != null) {
-            for (SourceDir src : testSources.getResourceDirs()) {
-                for (Path p : src.getSourceTree().getRoots()) {
-                    testResourcePaths.add(p.toAbsolutePath());
-                }
-            }
-        }
-
-        // Add the resources and test resources from the profiles
-        for (Profile profile : activeProfiles) {
-            final BuildBase build = profile.getBuild();
-            if (build != null) {
-                resourcePaths.addAll(
-                        build.getResources().stream()
-                                .map(Resource::getDirectory)
-                                .map(Paths::get)
-                                .map(Path::toAbsolutePath)
-                                .collect(Collectors.toList()));
-                testResourcePaths.addAll(
-                        build.getTestResources().stream()
-                                .map(Resource::getDirectory)
-                                .map(Paths::get)
-                                .map(Path::toAbsolutePath)
-                                .collect(Collectors.toList()));
-            }
-        }
-
-        if (classesPath == null && (!sourcePaths.isEmpty() || !resourcePaths.isEmpty())) {
-            throw new MojoExecutionException("Hot reloadable dependency " + module.getWorkspaceModule().getId()
-                    + " has not been compiled yet (the classes directory " + classesDir + " does not exist)");
+        if (!sources.isOutputAvailable() && (!sources.getSourceDirs().isEmpty() || !sources.getResourceDirs().isEmpty())) {
+        	final StringBuilder sb = new StringBuilder();
+        	sb.append("Hot reloadable dependency ").append(module.getWorkspaceModule().getId()).append(" has not been compiled yet");
+        	final List<Path> outputDirs = new ArrayList<>();
+        	sources.getSourceDirs().forEach(src -> {
+        		if(src.getOutputDir() != null && !Files.exists(src.getOutputDir()) && !outputDirs.contains(src.getOutputDir())) {
+        			outputDirs.add(src.getOutputDir());
+        		}
+        	});
+        	sources.getResourceDirs().forEach(src -> {
+        		if(src.getOutputDir() != null && !Files.exists(src.getOutputDir()) && !outputDirs.contains(src.getOutputDir())) {
+        			outputDirs.add(src.getOutputDir());
+        		}
+        	});
+        	if(!outputDirs.isEmpty()) {
+        		sb.append(" (the classes directory ").append(outputDirs.get(0));
+        		for(int i = 1; i < outputDirs.size(); ++i) {
+        			sb.append(',').append(outputDirs.get(i));
+        		}
+      			sb.append(outputDirs.size() > 1 ? " do " : " does ").append("not exist");
+        	}
+            throw new MojoExecutionException(sb.toString());
         }
 
         Path targetDir = Paths.get(project.getBuild().getDirectory());
 
-        DevModeContext.ModuleInfo moduleInfo = new DevModeContext.ModuleInfo.Builder()
+        final DevModeContext.ModuleInfo.Builder moduleBuilder = new DevModeContext.ModuleInfo.Builder()
                 .setArtifactKey(module.getKey())
                 .setProjectDirectory(projectDirectory)
-                .setSourcePaths(PathList.from(sourcePaths))
-                .setClassesPath(classesPath)
-                .setResourcesOutputPath(classesPath)
-                .setResourcePaths(PathList.from(resourcePaths))
-                .setSourceParents(PathList.of(sourceParent.toAbsolutePath()))
+                .setSources(sources.getSourceDirs())
+                .setResources(sources.getResourceDirs())
                 .setPreBuildOutputDir(targetDir.resolve("generated-sources").toAbsolutePath().toString())
-                .setTargetDir(targetDir.toAbsolutePath().toString())
-                .setTestSourcePaths(PathList.from(testSourcePaths))
-                .setTestClassesPath(testClassesPath)
-                .setTestResourcesOutputPath(testClassesPath)
-                .setTestResourcePaths(PathList.from(testResourcePaths))
-                .build();
+                .setTargetDir(targetDir.toAbsolutePath().toString());
+        if(testSources != null) {
+        	moduleBuilder.setSources(testSources.getSourceDirs()).setResources(testSources.getResourceDirs());        	
+        }
+        final DevModeContext.ModuleInfo moduleInfo = moduleBuilder.build();
 
         if (root) {
             builder.mainModule(moduleInfo);

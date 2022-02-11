@@ -3,9 +3,7 @@ package io.quarkus.deployment.dev;
 import java.io.Closeable;
 import java.nio.file.Path;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.BiConsumer;
 
 import org.jboss.logging.Logger;
@@ -18,12 +16,9 @@ import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
 import io.quarkus.bootstrap.util.BootstrapUtils;
 import io.quarkus.bootstrap.utils.BuildToolHelper;
-import io.quarkus.bootstrap.workspace.ArtifactSources;
-import io.quarkus.bootstrap.workspace.SourceDir;
 import io.quarkus.deployment.dev.DevModeContext.ModuleInfo;
 import io.quarkus.dev.spi.DevModeType;
 import io.quarkus.maven.dependency.ResolvedDependency;
-import io.quarkus.paths.PathList;
 
 public class IDEDevModeMain implements BiConsumer<CuratedApplication, Map<String, Object>>, Closeable {
 
@@ -84,45 +79,9 @@ public class IDEDevModeMain implements BiConsumer<CuratedApplication, Map<String
     }
 
     private DevModeContext.ModuleInfo toModule(ResolvedDependency module) throws BootstrapGradleException {
-
-        String classesDir = null;
-        final Set<Path> sourceParents = new LinkedHashSet<>();
-        final PathList.Builder srcPaths = PathList.builder();
-        final ArtifactSources sources = module.getSources();
-        for (SourceDir src : sources.getSourceDirs()) {
-            for (Path p : src.getSourceTree().getRoots()) {
-                sourceParents.add(p.getParent());
-                if (!srcPaths.contains(p)) {
-                    srcPaths.add(p);
-                }
-            }
-            if (classesDir == null) {
-                classesDir = src.getOutputDir().toString();
-            }
-        }
-
-        String resourceDirectory = null;
-        final PathList.Builder resourcesPaths = PathList.builder();
-        for (SourceDir src : sources.getResourceDirs()) {
-            for (Path p : src.getSourceTree().getRoots()) {
-                if (!resourcesPaths.contains(p)) {
-                    resourcesPaths.add(p);
-                }
-            }
-            if (resourceDirectory == null) {
-                // Peek the first one as we assume that it is the primary
-                resourceDirectory = src.getOutputDir().toString();
-            }
-        }
-
         return new DevModeContext.ModuleInfo.Builder()
                 .setArtifactKey(module.getKey())
                 .setProjectDirectory(module.getWorkspaceModule().getModuleDir().getPath())
-                .setSourcePaths(srcPaths.build())
-                .setClassesPath(classesDir)
-                .setResourcePaths(resourcesPaths.build())
-                .setResourcesOutputPath(resourceDirectory)
-                .setSourceParents(PathList.from(sourceParents))
                 .setPreBuildOutputDir(module.getWorkspaceModule().getBuildDir().toPath().resolve("generated-sources")
                         .toAbsolutePath().toString())
                 .setTargetDir(module.getWorkspaceModule().getBuildDir().toString()).build();

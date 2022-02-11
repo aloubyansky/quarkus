@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -15,6 +16,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import io.quarkus.bootstrap.app.QuarkusBootstrap;
+import io.quarkus.bootstrap.workspace.SourceDir;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.paths.PathCollection;
 import io.quarkus.paths.PathList;
@@ -323,19 +325,14 @@ public class DevModeContext implements Serializable {
             private ArtifactKey appArtifactKey;
             private String name;
             private String projectDirectory;
-            private PathCollection sourcePaths = PathList.of();
-            private String classesPath;
-            private PathCollection resourcePaths = PathList.of();
-            private String resourcesOutputPath;
+            private Collection<SourceDir> sources = Collections.emptyList();
+            private Collection<SourceDir> resources = Collections.emptyList();
 
             private String preBuildOutputDir;
-            private PathCollection sourceParents = PathList.of();
             private String targetDir;
 
-            private PathCollection testSourcePaths = PathList.of();
-            private String testClassesPath;
-            private PathCollection testResourcePaths = PathList.of();
-            private String testResourcesOutputPath;
+            private Collection<SourceDir> testSources = Collections.emptyList();
+            private Collection<SourceDir> testResources = Collections.emptyList();
 
             public Builder setArtifactKey(ArtifactKey appArtifactKey) {
                 this.appArtifactKey = appArtifactKey;
@@ -349,6 +346,26 @@ public class DevModeContext implements Serializable {
 
             public Builder setProjectDirectory(String projectDirectory) {
                 this.projectDirectory = projectDirectory;
+                return this;
+            }
+
+            public Builder setSources(Collection<SourceDir> sources) {
+                this.sources = sources;
+                return this;
+            }
+
+            public Builder setResources(Collection<SourceDir> resources) {
+                this.resources = resources;
+                return this;
+            }
+
+            public Builder setTestSources(Collection<SourceDir> sources) {
+                this.testSources = sources;
+                return this;
+            }
+
+            public Builder setTestResources(Collection<SourceDir> resources) {
+                this.testResources = resources;
                 return this;
             }
 
