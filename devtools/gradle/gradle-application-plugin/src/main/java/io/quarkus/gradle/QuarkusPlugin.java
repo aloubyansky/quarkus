@@ -39,11 +39,16 @@ import io.quarkus.gradle.dependency.ConditionalDependenciesEnabler;
 import io.quarkus.gradle.extension.QuarkusPluginExtension;
 import io.quarkus.gradle.extension.SourceSetExtension;
 import io.quarkus.gradle.tasks.QuarkusAddExtension;
+import io.quarkus.gradle.tasks.QuarkusBootstrapTask;
 import io.quarkus.gradle.tasks.QuarkusBuild;
 import io.quarkus.gradle.tasks.QuarkusDev;
+import io.quarkus.gradle.tasks.QuarkusDocker;
+import io.quarkus.gradle.tasks.QuarkusDockerForcedDependenciesTask;
 import io.quarkus.gradle.tasks.QuarkusGenerateCode;
 import io.quarkus.gradle.tasks.QuarkusGoOffline;
 import io.quarkus.gradle.tasks.QuarkusInfo;
+import io.quarkus.gradle.tasks.QuarkusJib;
+import io.quarkus.gradle.tasks.QuarkusJibForcedDependenciesTask;
 import io.quarkus.gradle.tasks.QuarkusListCategories;
 import io.quarkus.gradle.tasks.QuarkusListExtensions;
 import io.quarkus.gradle.tasks.QuarkusListPlatforms;
@@ -110,6 +115,16 @@ public class QuarkusPlugin implements Plugin<Project> {
 
     private void registerTasks(Project project, QuarkusPluginExtension quarkusExt) {
         TaskContainer tasks = project.getTasks();
+
+        final TaskProvider<QuarkusBootstrapTask> quarkusBootstrap = tasks.register("quarkusBootstrap",
+                QuarkusBootstrapTask.class);
+        final TaskProvider<QuarkusJib> quarkusJib = tasks.register("quarkusJib", QuarkusJib.class);
+        final TaskProvider<QuarkusJibForcedDependenciesTask> jibForcedDeps = tasks.register("quarkusJibForcedDependencies",
+                QuarkusJibForcedDependenciesTask.class);
+        final TaskProvider<QuarkusDocker> quarkusDocker = tasks.register("quarkusDocker", QuarkusDocker.class);
+        final TaskProvider<QuarkusDockerForcedDependenciesTask> dockerForcedDeps = tasks.register(
+                "quarkusDockerForcedDependencies",
+                QuarkusDockerForcedDependenciesTask.class);
 
         tasks.register(LIST_EXTENSIONS_TASK_NAME, QuarkusListExtensions.class);
         tasks.register(LIST_CATEGORIES_TASK_NAME, QuarkusListCategories.class);
@@ -191,6 +206,29 @@ public class QuarkusPlugin implements Plugin<Project> {
                                     compileTestJava.getOptions().setFailOnError(false);
                                 }
                             });
+
+                    quarkusJib.configure(task -> {
+                        task.dependsOn(jibForcedDeps);
+                    });
+                    jibForcedDeps.configure(task -> {
+                        System.out.println("CONFIGURED " + task.getName());
+                        task.finalizedBy(quarkusBootstrap);
+                    });
+                    quarkusDocker.configure(task -> {
+                        task.dependsOn(dockerForcedDeps);
+                    });
+                    dockerForcedDeps.configure(task -> {
+                        System.out.println("CONFIGURED " + task.getName());
+                        task.finalizedBy(quarkusBootstrap);
+                    });
+
+                    //                    final Consumer<QuarkusForcedDependenciesProvider> c = new Consumer<QuarkusForcedDependenciesProvider>() {
+                    //                        @Override
+                    //                        public void accept(QuarkusForcedDependenciesProvider t) {
+                    //                            System.out.println("ACCEPT " + t.getName());
+                    //                        }
+                    //                    };
+                    //                    tasks.withType(QuarkusForcedDependenciesProvider.class).forEach(c);
 
                     TaskProvider<Task> classesTask = tasks.named(JavaPlugin.CLASSES_TASK_NAME);
                     TaskProvider<Task> resourcesTask = tasks.named(JavaPlugin.PROCESS_RESOURCES_TASK_NAME);
