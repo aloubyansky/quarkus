@@ -41,6 +41,7 @@ import io.quarkus.gradle.tasks.QuarkusDev;
 import io.quarkus.gradle.tasks.QuarkusGenerateCode;
 import io.quarkus.gradle.tasks.QuarkusGoOffline;
 import io.quarkus.gradle.tasks.QuarkusInfo;
+import io.quarkus.gradle.tasks.QuarkusJibContainerImageTask;
 import io.quarkus.gradle.tasks.QuarkusListCategories;
 import io.quarkus.gradle.tasks.QuarkusListExtensions;
 import io.quarkus.gradle.tasks.QuarkusListPlatforms;
@@ -173,6 +174,8 @@ public class QuarkusPlugin implements Plugin<Project> {
                     createConfigurations(project);
 
                     project.afterEvaluate(this::afterEvaluate);
+
+                    tasks.register("quarkusJib", QuarkusJibContainerImageTask.class, t -> t.finalizedBy(quarkusBuild));
 
                     tasks.named(JavaPlugin.COMPILE_JAVA_TASK_NAME, JavaCompile.class,
                             compileJava -> {
