@@ -194,6 +194,7 @@ public class BootstrapAppModelFactory {
     }
 
     public CurationResult resolveAppModel() throws BootstrapException {
+
         // gradle tests and dev encode the result on the class path
         final String serializedModel;
         if (test) {
@@ -279,6 +280,7 @@ public class BootstrapAppModelFactory {
                     }
                 }
             }
+
             CurationResult curationResult = new CurationResult(getAppModelResolver()
                     .resolveManagedModel(appArtifact, forcedDependencies, managingProject, reloadableModules));
             if (cachedCpPath != null) {

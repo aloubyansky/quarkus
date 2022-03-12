@@ -6,7 +6,9 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
+import org.apache.maven.model.Model;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.impl.RemoteRepositoryManager;
@@ -30,6 +32,7 @@ public class BootstrapMavenContextConfig<T extends BootstrapMavenContextConfig<?
     protected Path rootProjectDir;
     protected boolean preferPomsFromWorkspace;
     protected Boolean effectiveModelBuilder;
+    protected List<Model[]> workspaceModels = List.of();
 
     /**
      * Local repository location
@@ -242,6 +245,15 @@ public class BootstrapMavenContextConfig<T extends BootstrapMavenContextConfig<?
     @SuppressWarnings("unchecked")
     public T setEffectiveModelBuilder(boolean effectiveModelBuilder) {
         this.effectiveModelBuilder = effectiveModelBuilder;
+        return (T) this;
+    }
+
+    @SuppressWarnings("unchecked")
+    public T addWorkspaceModule(Model raw, Model effective) {
+        if (workspaceModels.isEmpty()) {
+            workspaceModels = new ArrayList<>();
+        }
+        workspaceModels.add(new Model[] { raw, effective });
         return (T) this;
     }
 

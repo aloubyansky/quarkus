@@ -6,7 +6,6 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.workspace.WorkspaceModule;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
-import io.quarkus.maven.dependency.GACT;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -32,30 +31,34 @@ public class LocalWorkspace implements WorkspaceModelResolver, WorkspaceReader, 
 
     private final Map<ArtifactKey, LocalProject> projects = new HashMap<>();
 
-    private final WorkspaceRepository wsRepo = new WorkspaceRepository();
+    private transient volatile WorkspaceRepository wsRepo;
     private ArtifactKey lastFindVersionsKey;
     private List<String> lastFindVersions;
-    private long lastModified;
-    private int id = 1;
+    private transient volatile long lastModified;
+    private transient volatile int id = 1;
 
     // value of the resolved version in case the raw version contains a property like ${revision} (see "Maven CI Friendly Versions")
     private String resolvedVersion;
 
     // added specifically to check whether empty JAR artifacts are available in the local repository
     // before creating an empty dir to represent them on the filesystem
-    private BootstrapMavenContext mvnCtx;
-    private LocalProject currentProject;
+    private transient BootstrapMavenContext mvnCtx;
+    private transient LocalProject currentProject;
 
-    protected void addProject(LocalProject project, long lastModified) {
+    public LocalWorkspace() {
+        mvnCtx = null;
+    }
+
+    public LocalWorkspace(BootstrapMavenContext ctx) {
+        this.mvnCtx = ctx;
+    }
+
+    protected void addProject(LocalProject project) {
         projects.put(project.getKey(), project);
-        if (lastModified > this.lastModified) {
-            this.lastModified = lastModified;
-        }
-        id = 31 * id + (int) (lastModified ^ (lastModified >>> 32));
     }
 
     public LocalProject getProject(String groupId, String artifactId) {
-        return getProject(new GACT(groupId, artifactId));
+        return getProject(ArtifactKey.ga(groupId, artifactId));
     }
 
     public LocalProject getProject(ArtifactKey key) {
@@ -63,17 +66,37 @@ public class LocalWorkspace implements WorkspaceModelResolver, WorkspaceReader, 
     }
 
     public long getLastModified() {
+        if (lastModified == 0) {
+            initId();
+        }
         return lastModified;
     }
 
     public int getId() {
+        if (id == 1) {
+            initId();
+        }
         return id;
+    }
+
+    private void initId() {
+        long lastModified = 0;
+        int id = 1;
+        for (LocalProject project : projects.values()) {
+            final long projectLm = project.getRawModel().getPomFile().lastModified();
+            if (projectLm > lastModified) {
+                lastModified = projectLm;
+            }
+            id = 31 * id + (int) (projectLm ^ (projectLm >>> 32));
+        }
+        this.lastModified = lastModified;
+        this.id = id;
     }
 
     @Override
     public Model resolveRawModel(String groupId, String artifactId, String versionConstraint)
             throws UnresolvableModelException {
-        if (findArtifact(new DefaultArtifact(groupId, artifactId, null, "pom", versionConstraint)) != null) {
+        if (findArtifact(new DefaultArtifact(groupId, artifactId, null, ArtifactCoords.TYPE_POM, versionConstraint)) != null) {
             return getProject(groupId, artifactId).getRawModel();
         }
         return null;
@@ -91,7 +114,7 @@ public class LocalWorkspace implements WorkspaceModelResolver, WorkspaceReader, 
 
     @Override
     public WorkspaceRepository getRepository() {
-        return wsRepo;
+        return wsRepo == null ? wsRepo = new WorkspaceRepository() : wsRepo;
     }
 
     @Override
@@ -109,7 +132,7 @@ public class LocalWorkspace implements WorkspaceModelResolver, WorkspaceReader, 
         if (ArtifactCoords.TYPE_POM.equals(artifact.getExtension())) {
             final File pom = lp.getRawModel().getPomFile();
             // if the pom exists we should also check whether the main artifact can also be resolved from the workspace
-            if (pom.exists() && ("pom".equals(lp.getRawModel().getPackaging())
+            if (pom.exists() && (ArtifactCoords.TYPE_POM.equals(lp.getRawModel().getPackaging())
                     || mvnCtx != null && mvnCtx.isPreferPomsFromWorkspace()
                     || Files.exists(lp.getOutputDir())
                     || emptyJarOutput(lp, artifact) != null)) {
@@ -230,21 +253,13 @@ public class LocalWorkspace implements WorkspaceModelResolver, WorkspaceReader, 
         this.resolvedVersion = resolvedVersion;
     }
 
-    LocalProject getCurrentProject() {
-        return currentProject;
-    }
-
     void setCurrentProject(LocalProject currentProject) {
         this.currentProject = currentProject;
     }
 
-    void setBootstrapMavenContext(BootstrapMavenContext mvnCtx) {
-        this.mvnCtx = mvnCtx;
-    }
-
     @Override
-    public WorkspaceModule getProjectModule(String groupId, String artifactId) {
-        final LocalProject project = getProject(groupId, artifactId);
+    public WorkspaceModule getProjectModule(ArtifactKey key) {
+        final LocalProject project = getProject(key);
         return project == null ? null : project.toWorkspaceModule();
     }
 }

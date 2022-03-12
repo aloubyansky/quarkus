@@ -4,6 +4,7 @@ import io.quarkus.bootstrap.resolver.maven.options.BootstrapMavenOptions;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
+import io.quarkus.bootstrap.resolver.maven.workspace.WorkspaceLoader;
 import io.quarkus.bootstrap.util.PropertyUtils;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.GACTV;
@@ -166,14 +167,24 @@ public class BootstrapMavenContext {
             this.currentPom = currentProject.getRawModel().getPomFile().toPath();
             this.workspace = config.currentProject.getWorkspace();
         } else if (config.workspaceDiscovery) {
-            currentProject = resolveCurrentProject();
-            this.workspace = currentProject == null ? null : currentProject.getWorkspace();
-            if (workspace != null) {
-                if (config.repoSession == null && repoSession != null && repoSession.getWorkspaceReader() == null) {
-                    repoSession = new DefaultRepositorySystemSession(repoSession).setWorkspaceReader(workspace);
-                    if (config.remoteRepos == null && remoteRepos != null) {
-                        remoteRepos = resolveCurrentProjectRepos(remoteRepos);
+            final Path currentProjectPom = getCurrentProjectPomOrNull();
+            if (currentProjectPom != null) {
+                try {
+                    final Path rootProjectBaseDir = getRootProjectBaseDir();
+                    workspace = new LocalWorkspace(this);
+                    final WorkspaceLoader wsLoader = new WorkspaceLoader(this, currentProjectPom, config.workspaceModels);
+                    if (rootProjectBaseDir != null && !rootProjectBaseDir.equals(currentProjectPom.getParent())) {
+                        wsLoader.setWorkspaceRootPom(rootProjectBaseDir.resolve(WorkspaceLoader.POM_XML));
                     }
+                    currentProject = wsLoader.load();
+                    if (config.repoSession == null && repoSession != null && repoSession.getWorkspaceReader() == null) {
+                        repoSession = new DefaultRepositorySystemSession(repoSession).setWorkspaceReader(workspace);
+                        if (config.remoteRepos == null && remoteRepos != null) {
+                            remoteRepos = resolveCurrentProjectRepos(remoteRepos);
+                        }
+                    }
+                } catch (Exception e) {
+                    throw new BootstrapMavenException("Failed to load current project at " + getCurrentProjectPomOrNull(), e);
                 }
             }
         }
@@ -308,14 +319,6 @@ public class BootstrapMavenContext {
 
     public String getLocalRepo() throws BootstrapMavenException {
         return localRepo == null ? localRepo = resolveLocalRepo(getEffectiveSettings()) : localRepo;
-    }
-
-    private LocalProject resolveCurrentProject() throws BootstrapMavenException {
-        try {
-            return LocalProject.loadWorkspace(this);
-        } catch (Exception e) {
-            throw new BootstrapMavenException("Failed to load current project at " + getCurrentProjectPomOrNull(), e);
-        }
     }
 
     private String resolveLocalRepo(Settings settings) {

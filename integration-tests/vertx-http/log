@@ -1,0 +1,34 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] -----------< io.quarkus:quarkus-integration-test-vertx-http >-----------
+[INFO] Building Quarkus - Integration Tests - Vert.x HTTP 999-SNAPSHOT
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- maven-clean-plugin:3.1.0:clean (default-clean) @ quarkus-integration-test-vertx-http ---
+[INFO] Deleting /home/aloubyansky/git/quarkus/integration-tests/vertx-http/target
+[INFO] 
+[INFO] --- quarkus-maven-plugin:999-SNAPSHOT:dev (default-cli) @ quarkus-integration-test-vertx-http ---
+[INFO] Invoking org.apache.maven.plugins:maven-resources-plugin:3.1.0:resources) @ quarkus-integration-test-vertx-http
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 3 resources
+[INFO] Invoking org.apache.maven.plugins:maven-compiler-plugin:3.8.1:compile) @ quarkus-integration-test-vertx-http
+[INFO] Changes detected - recompiling the module!
+[INFO] Compiling 5 source files to /home/aloubyansky/git/quarkus/integration-tests/vertx-http/target/classes
+[INFO] Invoking org.apache.maven.plugins:maven-resources-plugin:3.1.0:testResources) @ quarkus-integration-test-vertx-http
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 3 resources
+[INFO] Invoking org.apache.maven.plugins:maven-compiler-plugin:3.8.1:testCompile) @ quarkus-integration-test-vertx-http
+[INFO] Changes detected - recompiling the module!
+[INFO] Compiling 10 source files to /home/aloubyansky/git/quarkus/integration-tests/vertx-http/target/test-classes
+WorkspaceLoader.load 462 783
+ - /home/aloubyansky/git/quarkus
+ - /home/aloubyansky/git/quarkus/build-parent
+ - /home/aloubyansky/git/quarkus/integration-tests/vertx-http
+ - /home/aloubyansky/git/quarkus/integration-tests
+Listening for transport dt_socket at address: 5005
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  14.537 s
+[INFO] Finished at: 2022-03-25T13:33:31+01:00
+[INFO] ------------------------------------------------------------------------

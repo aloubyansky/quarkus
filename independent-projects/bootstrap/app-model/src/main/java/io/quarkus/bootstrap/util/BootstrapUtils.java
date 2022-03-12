@@ -132,4 +132,12 @@ public class BootstrapUtils {
     public static Path resolveSerializedAppModelPath(Path projectBuildDir) {
         return projectBuildDir.resolve("quarkus").resolve("bootstrap").resolve("dev-app-model.dat");
     }
+
+    public static Path resolveSerializedAppModelPath(Path projectBuildDir, boolean test) {
+        final Path bootstrap = projectBuildDir.resolve("quarkus").resolve("bootstrap");
+        if (test) {
+            return bootstrap.resolve("test-app-model.dat");
+        }
+        return bootstrap.resolve("dev-app-model.dat");
+    }
 }

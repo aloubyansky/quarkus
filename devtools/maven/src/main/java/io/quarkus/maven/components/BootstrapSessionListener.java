@@ -10,7 +10,7 @@ import org.codehaus.plexus.component.annotations.Requirement;
 
 import io.quarkus.maven.QuarkusBootstrapProvider;
 
-@Component(role = AbstractMavenLifecycleParticipant.class, hint = "quarkus-bootstrap")
+@Component(role = AbstractMavenLifecycleParticipant.class, hint = "quarkus-bootstrap", instantiationStrategy = "singleton")
 public class BootstrapSessionListener extends AbstractMavenLifecycleParticipant {
 
     @Requirement(optional = false)

@@ -1,6 +1,5 @@
 package io.quarkus.bootstrap.resolver.maven;
 
-import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -28,6 +27,7 @@ import org.eclipse.aether.impl.ArtifactResolver;
 import org.eclipse.aether.impl.RemoteRepositoryManager;
 import org.eclipse.aether.impl.VersionRangeResolver;
 import org.eclipse.aether.repository.RemoteRepository;
+import org.eclipse.aether.repository.WorkspaceReader;
 import org.eclipse.aether.resolution.ArtifactRequest;
 import org.eclipse.aether.resolution.ArtifactResolutionException;
 import org.eclipse.aether.resolution.ArtifactResult;
@@ -37,7 +37,7 @@ import org.eclipse.aether.resolution.VersionRangeResult;
 
 public class BootstrapModelResolver implements ModelResolver {
 
-    public static ModelResolver newInstance(BootstrapMavenContext ctx, LocalWorkspace workspace)
+    public static ModelResolver newInstance(BootstrapMavenContext ctx, WorkspaceReader workspace)
             throws BootstrapMavenException {
         final RepositorySystem repoSystem = ctx.getRepositorySystem();
         return new BootstrapModelResolver(

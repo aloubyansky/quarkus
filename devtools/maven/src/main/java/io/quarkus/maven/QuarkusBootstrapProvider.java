@@ -6,6 +6,7 @@ import static io.smallrye.common.expression.Expression.Flag.NO_TRIM;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -30,13 +31,15 @@ import io.quarkus.bootstrap.app.QuarkusBootstrap;
 import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
 import io.quarkus.bootstrap.resolver.BootstrapAppModelResolver;
+import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
+import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContextConfig;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
+import io.quarkus.bootstrap.util.BootstrapUtils;
 import io.quarkus.maven.components.ManifestSection;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.maven.dependency.Dependency;
-import io.quarkus.maven.dependency.GACT;
 import io.quarkus.maven.dependency.GACTV;
 import io.quarkus.maven.dependency.ResolvedArtifactDependency;
 import io.quarkus.runtime.LaunchMode;
@@ -58,7 +61,7 @@ public class QuarkusBootstrapProvider implements Closeable {
             .concurrencyLevel(4).softValues().initialCapacity(10).build();
 
     static ArtifactKey getProjectId(MavenProject project) {
-        return new GACT(project.getGroupId(), project.getArtifactId());
+        return ArtifactKey.ga(project.getGroupId(), project.getArtifactId());
     }
 
     public RepositorySystem repositorySystem() {
@@ -71,7 +74,7 @@ public class QuarkusBootstrapProvider implements Closeable {
 
     public QuarkusMavenAppBootstrap bootstrapper(QuarkusBootstrapMojo mojo) {
         try {
-            return appBootstrapProviders.get(String.format("%s-%s", mojo.projectId(), mojo.executionId()),
+            return appBootstrapProviders.get(getBootstrapperKey(mojo),
                     QuarkusMavenAppBootstrap::new);
         } catch (ExecutionException e) {
             throw new IllegalStateException("Failed to cache a new instance of " + QuarkusMavenAppBootstrap.class.getName(),
@@ -79,16 +82,24 @@ public class QuarkusBootstrapProvider implements Closeable {
         }
     }
 
+    private static String getBootstrapperKey(QuarkusBootstrapMojo mojo) {
+        return mojo.projectId() + "-" + mojo.executionId();
+    }
+
+    public static String getBootstrapperKey(MavenProject project, String executionId) {
+        return getProjectId(project) + "-" + executionId;
+    }
+
     public CuratedApplication bootstrapApplication(QuarkusBootstrapMojo mojo, LaunchMode mode)
             throws MojoExecutionException {
         return bootstrapper(mojo).bootstrapApplication(mojo, mode);
     }
 
-    public ApplicationModel getResolvedApplicationModel(ArtifactKey projectId, LaunchMode mode) {
+    public ApplicationModel getResolvedApplicationModel(MavenProject project, String executionId, LaunchMode mode) {
         if (appBootstrapProviders.size() == 0) {
             return null;
         }
-        final QuarkusMavenAppBootstrap provider = appBootstrapProviders.getIfPresent(projectId + "-null");
+        final QuarkusMavenAppBootstrap provider = appBootstrapProviders.getIfPresent(getBootstrapperKey(project, executionId));
         if (provider == null) {
             return null;
         }
@@ -99,6 +110,10 @@ public class QuarkusBootstrapProvider implements Closeable {
             return provider.testApp == null ? null : provider.testApp.getApplicationModel();
         }
         return provider.prodApp == null ? null : provider.prodApp.getApplicationModel();
+    }
+
+    public ApplicationModel resolveApplicationModel(QuarkusBootstrapMojo mojo, LaunchMode mode) throws MojoExecutionException {
+        return bootstrapper(mojo).resolveAppModel(mojo, mode, List.of());
     }
 
     @Override
@@ -121,18 +136,26 @@ public class QuarkusBootstrapProvider implements Closeable {
         private CuratedApplication devApp;
         private CuratedApplication testApp;
 
-        private MavenArtifactResolver artifactResolver(QuarkusBootstrapMojo mojo, LaunchMode mode)
+        public MavenArtifactResolver artifactResolver(QuarkusBootstrapMojo mojo, LaunchMode mode)
                 throws MojoExecutionException {
             try {
-                return MavenArtifactResolver.builder()
-                        .setWorkspaceDiscovery(mode == LaunchMode.DEVELOPMENT || mode == LaunchMode.TEST)
+                BootstrapMavenContextConfig<?> config = BootstrapMavenContext.config()
                         .setCurrentProject(mojo.mavenProject().getFile().toString())
-                        .setPreferPomsFromWorkspace(mode == LaunchMode.DEVELOPMENT || mode == LaunchMode.TEST)
                         .setRepositorySystem(repoSystem)
                         .setRepositorySystemSession(mojo.repositorySystemSession())
                         .setRemoteRepositories(mojo.remoteRepositories())
-                        .setRemoteRepositoryManager(remoteRepoManager)
-                        .build();
+                        .setRemoteRepositoryManager(remoteRepoManager);
+                if (mode == LaunchMode.NORMAL) {
+                    config.setWorkspaceDiscovery(false);
+                    config.setPreferPomsFromWorkspace(false);
+                } else {
+                    config.setWorkspaceDiscovery(true);
+                    config.setPreferPomsFromWorkspace(true);
+                    for (MavenProject project : mojo.mavenSession().getAllProjects()) {
+                        config.addWorkspaceModule(project.getOriginalModel(), project.getModel());
+                    }
+                }
+                return new MavenArtifactResolver(new BootstrapMavenContext(config));
             } catch (BootstrapMavenException e) {
                 throw new MojoExecutionException("Failed to initialize Quarkus bootstrap Maven artifact resolver", e);
             }
@@ -186,33 +209,8 @@ public class QuarkusBootstrapProvider implements Closeable {
                 }
             }
 
-            final BootstrapAppModelResolver modelResolver = new BootstrapAppModelResolver(artifactResolver(mojo, mode))
-                    .setDevMode(mode == LaunchMode.DEVELOPMENT)
-                    .setTest(mode == LaunchMode.TEST);
-
-            final ArtifactCoords artifactCoords = appArtifact(mojo);
-            final List<MavenProject> localProjects = mojo.mavenProject().getCollectedProjects();
-            final Set<ArtifactKey> localProjectKeys = new HashSet<>(localProjects.size());
-            for (MavenProject p : localProjects) {
-                localProjectKeys.add(new GACT(p.getGroupId(), p.getArtifactId()));
-            }
-            final Set<ArtifactKey> reloadableModules = new HashSet<>(localProjects.size() + 1);
-            for (Artifact a : mojo.mavenProject().getArtifacts()) {
-                if (localProjectKeys.contains(new GACT(a.getGroupId(), a.getArtifactId()))) {
-                    reloadableModules.add(new GACT(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getType()));
-                }
-            }
-            reloadableModules.add(artifactCoords.getKey());
-
             final List<Dependency> forcedDependencies = mojo.forcedDependencies(mode);
-            final ApplicationModel appModel;
-            try {
-                appModel = modelResolver.resolveManagedModel(artifactCoords, forcedDependencies, managingProject(mojo),
-                        reloadableModules);
-            } catch (AppModelResolverException e) {
-                throw new MojoExecutionException("Failed to bootstrap application in " + mode + " mode", e);
-            }
-
+            final ApplicationModel appModel = resolveAppModel(mojo, mode, forcedDependencies);
             QuarkusBootstrap.Builder builder = QuarkusBootstrap.builder()
                     .setAppArtifact(appModel.getAppArtifact())
                     .setExistingModel(appModel)
@@ -229,6 +227,46 @@ public class QuarkusBootstrapProvider implements Closeable {
             } catch (BootstrapException e) {
                 throw new MojoExecutionException("Failed to bootstrap the application", e);
             }
+        }
+
+        private ApplicationModel resolveAppModel(QuarkusBootstrapMojo mojo, LaunchMode mode,
+                final List<Dependency> forcedDependencies) throws MojoExecutionException {
+            final BootstrapAppModelResolver modelResolver = new BootstrapAppModelResolver(artifactResolver(mojo, mode))
+                    .setDevMode(mode == LaunchMode.DEVELOPMENT)
+                    .setTest(mode == LaunchMode.TEST);
+
+            final ArtifactCoords artifactCoords = appArtifact(mojo);
+            final List<MavenProject> localProjects = mojo.mavenProject().getCollectedProjects();
+            final Set<ArtifactKey> localProjectKeys = new HashSet<>(localProjects.size());
+            for (MavenProject p : localProjects) {
+                localProjectKeys.add(ArtifactKey.ga(p.getGroupId(), p.getArtifactId()));
+            }
+            final Set<ArtifactKey> reloadableModules = new HashSet<>(localProjects.size() + 1);
+            for (Artifact a : mojo.mavenProject().getArtifacts()) {
+                if (localProjectKeys.contains(ArtifactKey.ga(a.getGroupId(), a.getArtifactId()))) {
+                    reloadableModules.add(ArtifactKey.gact(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getType()));
+                }
+            }
+            reloadableModules.add(artifactCoords.getKey());
+
+            final ApplicationModel appModel;
+            try {
+                appModel = modelResolver.resolveManagedModel(artifactCoords, forcedDependencies, managingProject(mojo),
+                        reloadableModules);
+            } catch (AppModelResolverException e) {
+                throw new MojoExecutionException("Failed to bootstrap application in " + mode + " mode", e);
+            }
+
+            if (LaunchMode.NORMAL != mode) {
+                final Path serializedModelPath = BootstrapUtils.resolveSerializedAppModelPath(
+                        Path.of(mojo.mavenProject().getBuild().getDirectory()), mode == LaunchMode.TEST);
+                try {
+                    BootstrapUtils.serializeAppModel(appModel, serializedModelPath);
+                } catch (IOException e) {
+                    throw new MojoExecutionException("Failed to serialize application model to " + serializedModelPath, e);
+                }
+            }
+            return appModel;
         }
 
         private String toManifestAttributeKey(String key) throws MojoExecutionException {

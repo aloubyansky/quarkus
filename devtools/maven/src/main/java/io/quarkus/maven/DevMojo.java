@@ -985,7 +985,7 @@ public class DevMojo extends AbstractMojo {
         final Path appModelLocation = resolveSerializedModelLocation();
 
         ApplicationModel appModel = bootstrapProvider
-                .getResolvedApplicationModel(QuarkusBootstrapProvider.getProjectId(project), LaunchMode.DEVELOPMENT);
+                .getResolvedApplicationModel(project, null, LaunchMode.DEVELOPMENT);
         if (appModel != null) {
             bootstrapProvider.close();
         } else {
@@ -1006,6 +1006,8 @@ public class DevMojo extends AbstractMojo {
                 // we can re-use the original Maven session
                 resolverBuilder.setRepositorySystemSession(repoSession);
             }
+
+            session.getAllProjects().forEach(p -> resolverBuilder.addWorkspaceModule(p.getOriginalModel(), p.getModel()));
 
             appModel = new BootstrapAppModelResolver(resolverBuilder.build())
                     .setDevMode(true)

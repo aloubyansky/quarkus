@@ -20,7 +20,6 @@ import io.quarkus.paths.PathList;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -62,7 +61,7 @@ public class LocalProject {
             return null;
         }
         try {
-            return new LocalProject(readModel(pom), null);
+            return new LocalProject(readModel(pom), null, null);
         } catch (UnresolvedVersionException e) {
             // if a property in the version couldn't be resolved, we are trying to resolve it from the workspace
             return loadWorkspace(pom);
@@ -75,7 +74,7 @@ public class LocalProject {
 
     public static LocalProject loadWorkspace(Path path, boolean required) throws BootstrapMavenException {
         try {
-            return new WorkspaceLoader(null, path.normalize().toAbsolutePath()).load();
+            return new WorkspaceLoader(null, path.normalize().toAbsolutePath(), List.of()).load();
         } catch (Exception e) {
             if (required) {
                 throw e;
@@ -92,13 +91,14 @@ public class LocalProject {
      * @return current project with the workspace or null in case the current project could not be resolved
      * @throws BootstrapMavenException in case of an error
      */
-    public static LocalProject loadWorkspace(BootstrapMavenContext ctx) throws BootstrapMavenException {
+    public static LocalProject loadWorkspace(BootstrapMavenContext ctx, Collection<Model[]> workspaceModules)
+            throws BootstrapMavenException {
         final Path currentProjectPom = ctx.getCurrentProjectPomOrNull();
         if (currentProjectPom == null) {
             return null;
         }
         final Path rootProjectBaseDir = ctx.getRootProjectBaseDir();
-        final WorkspaceLoader wsLoader = new WorkspaceLoader(ctx, currentProjectPom);
+        final WorkspaceLoader wsLoader = new WorkspaceLoader(ctx, currentProjectPom, workspaceModules);
 
         if (rootProjectBaseDir != null && !rootProjectBaseDir.equals(currentProjectPom.getParent())) {
             wsLoader.setWorkspaceRootPom(rootProjectBaseDir.resolve(POM_XML));
@@ -132,16 +132,17 @@ public class LocalProject {
     }
 
     private final Model rawModel;
+    private final Model effectiveModel;
     private final ArtifactKey key;
     private String version;
     private final Path dir;
     private final LocalWorkspace workspace;
-    final List<LocalProject> modules = new ArrayList<>(0);
     private final ModelBuildingResult modelBuildingResult;
     private WorkspaceModule module;
 
     LocalProject(ModelBuildingResult modelBuildingResult, LocalWorkspace workspace) {
         this.rawModel = modelBuildingResult.getRawModel();
+        this.effectiveModel = modelBuildingResult.getEffectiveModel();
         final Model effectiveModel = modelBuildingResult.getEffectiveModel();
         this.key = ArtifactKey.ga(effectiveModel.getGroupId(), effectiveModel.getArtifactId());
         this.version = effectiveModel.getVersion();
@@ -149,13 +150,18 @@ public class LocalProject {
         this.modelBuildingResult = modelBuildingResult;
         this.workspace = workspace;
         if (workspace != null) {
-            workspace.addProject(this, rawModel.getPomFile().lastModified());
+            workspace.addProject(this);
         }
     }
 
     LocalProject(Model rawModel, LocalWorkspace workspace) throws BootstrapMavenException {
+        this(rawModel, null, workspace);
+    }
+
+    LocalProject(Model rawModel, Model effectiveModel, LocalWorkspace workspace) throws BootstrapMavenException {
         this.modelBuildingResult = null;
         this.rawModel = rawModel;
+        this.effectiveModel = effectiveModel;
         this.dir = rawModel.getProjectDirectory().toPath();
         this.workspace = workspace;
         this.key = ArtifactKey.ga(ModelUtils.getGroupId(rawModel), rawModel.getArtifactId());
@@ -165,7 +171,7 @@ public class LocalProject {
         version = rawVersionIsUnresolved ? ModelUtils.resolveVersion(rawVersion, rawModel) : rawVersion;
 
         if (workspace != null) {
-            workspace.addProject(this, rawModel.getPomFile().lastModified());
+            workspace.addProject(this);
             if (rawVersionIsUnresolved && version != null) {
                 workspace.setResolvedVersion(version);
             }
@@ -211,9 +217,9 @@ public class LocalProject {
     }
 
     public Path getOutputDir() {
-        return modelBuildingResult == null
+        return effectiveModel == null
                 ? resolveRelativeToBaseDir(configuredBuildDir(this, build -> build.getDirectory()), "target")
-                : Paths.get(modelBuildingResult.getEffectiveModel().getBuild().getDirectory());
+                : Path.of(effectiveModel.getBuild().getDirectory());
     }
 
     public Path getCodeGenOutputDir() {
@@ -221,21 +227,21 @@ public class LocalProject {
     }
 
     public Path getClassesDir() {
-        return modelBuildingResult == null
+        return effectiveModel == null
                 ? resolveRelativeToBuildDir(configuredBuildDir(this, build -> build.getOutputDirectory()), "classes")
-                : Paths.get(modelBuildingResult.getEffectiveModel().getBuild().getOutputDirectory());
+                : Path.of(effectiveModel.getBuild().getOutputDirectory());
     }
 
     public Path getTestClassesDir() {
-        return modelBuildingResult == null
+        return effectiveModel == null
                 ? resolveRelativeToBuildDir(configuredBuildDir(this, build -> build.getTestOutputDirectory()), "test-classes")
-                : Paths.get(modelBuildingResult.getEffectiveModel().getBuild().getTestOutputDirectory());
+                : Path.of(effectiveModel.getBuild().getTestOutputDirectory());
     }
 
     public Path getSourcesSourcesDir() {
-        return modelBuildingResult == null
+        return effectiveModel == null
                 ? resolveRelativeToBaseDir(configuredBuildDir(this, build -> build.getSourceDirectory()), "src/main/java")
-                : Paths.get(modelBuildingResult.getEffectiveModel().getBuild().getSourceDirectory());
+                : Path.of(effectiveModel.getBuild().getSourceDirectory());
     }
 
     public Path getTestSourcesSourcesDir() {
@@ -287,7 +293,7 @@ public class LocalProject {
     }
 
     public String getPackaging() {
-        return modelBuildingResult == null ? rawModel.getPackaging() : modelBuildingResult.getEffectiveModel().getPackaging();
+        return effectiveModel == null ? rawModel.getPackaging() : effectiveModel.getPackaging();
     }
 
     public ResolvedDependency getAppArtifact() {
@@ -338,7 +344,11 @@ public class LocalProject {
                 .setModuleDir(dir)
                 .setBuildDir(getOutputDir());
 
-        final Build build = (modelBuildingResult == null ? getRawModel() : modelBuildingResult.getEffectiveModel()).getBuild();
+        System.out.println(
+                "LocalProject.toWorkspaceModule " + moduleBuilder.getId() + " " + moduleBuilder.getBuildDir() + " " + dir);
+
+        final Model model = effectiveModel == null ? rawModel : effectiveModel;
+        final Build build = model.getBuild();
         if (build != null && !build.getPlugins().isEmpty()) {
             for (Plugin plugin : build.getPlugins()) {
                 if (!plugin.getArtifactId().equals("maven-jar-plugin")) {
@@ -381,7 +391,6 @@ public class LocalProject {
         moduleBuilder.setDependencyConstraints(getRawModel().getDependencyManagement() == null ? Collections.emptyList()
                 : toArtifactDependencies(getRawModel().getDependencyManagement().getDependencies()));
 
-        final Model model = modelBuildingResult == null ? rawModel : modelBuildingResult.getEffectiveModel();
         moduleBuilder.setDependencies(toArtifactDependencies(model.getDependencies()));
 
         return this.module = moduleBuilder.build();
