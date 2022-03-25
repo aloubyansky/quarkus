@@ -40,7 +40,7 @@
         <microprofile-lra.version>1.0</microprofile-lra.version>
         <smallrye-common.version>1.10.0</smallrye-common.version>
         <smallrye-config.version>2.9.2</smallrye-config.version>
-        <smallrye-health.version>3.2.0</smallrye-health.version>
+        <smallrye-health.version>3.2.1</smallrye-health.version>
         <smallrye-metrics.version>3.0.4</smallrye-metrics.version>
         <smallrye-open-api.version>2.1.22</smallrye-open-api.version>
         <smallrye-graphql.version>1.4.3</smallrye-graphql.version>
@@ -176,7 +176,7 @@
         <checker-qual.version>3.21.3</checker-qual.version>
         <error-prone-annotations.version>2.11.0</error-prone-annotations.version>
         <jib-core.version>0.20.0</jib-core.version>
-        <google-http-client.version>1.41.4</google-http-client.version>
+        <google-http-client.version>1.41.5</google-http-client.version>
         <scram-client.version>2.1</scram-client.version>
         <picocli.version>4.6.3</picocli.version>
         <google-cloud-functions.version>1.0.4</google-cloud-functions.version>
