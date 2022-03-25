@@ -5,6 +5,8 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.BootstrapModelBuilderFactory;
 import io.quarkus.bootstrap.resolver.maven.BootstrapModelResolver;
 import io.quarkus.bootstrap.resolver.maven.options.BootstrapMavenOptions;
+import io.quarkus.bootstrap.util.PropertyUtils;
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
@@ -214,6 +216,7 @@ public class WorkspaceLoader implements WorkspaceModelResolver {
     }
 
     LocalProject load() throws BootstrapMavenException {
+        double time = System.currentTimeMillis();
         if (workspaceRootPom != null) {
             loadProject(workspaceRootPom, null);
         }
@@ -224,6 +227,23 @@ public class WorkspaceLoader implements WorkspaceModelResolver {
         if (workspace != null) {
             workspace.setCurrentProject(currentProject);
         }
+        time = (System.currentTimeMillis() - time) / 1000;
+        final Path f = Path.of(PropertyUtils.getUserHome())
+                .resolve("quarkus-build-" + System.getProperty("java.version") + ".txt");
+        if (Files.exists(f)) {
+            try {
+                time += Double.parseDouble(Files.readString(f));
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        try (BufferedWriter writer = Files.newBufferedWriter(f)) {
+            writer.write(String.valueOf(time));
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+        System.out.println("WORKSPACE LOADED IN " + time);
         return currentProject;
     }
 
