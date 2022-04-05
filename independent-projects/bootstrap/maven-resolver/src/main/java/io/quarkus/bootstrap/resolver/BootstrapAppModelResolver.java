@@ -269,9 +269,9 @@ public class BootstrapAppModelResolver implements AppModelResolver {
 
         final List<String> excludedScopes;
         if (test) {
-            excludedScopes = Collections.emptyList();
+            excludedScopes = List.of();
         } else if (devmode) {
-            excludedScopes = Collections.singletonList("test");
+            excludedScopes = List.of("test");
         } else {
             excludedScopes = List.of("provided", "test");
         }
@@ -279,7 +279,7 @@ public class BootstrapAppModelResolver implements AppModelResolver {
         DependencyNode resolvedDeps = mvn.resolveManagedDependencies(mvnArtifact,
                 directMvnDeps, managedDeps, managedRepos, excludedScopes.toArray(new String[0])).getRoot();
 
-        ArtifactDescriptorResult appArtifactDescr = mvn.resolveDescriptor(toAetherArtifact(appArtifact));
+        ArtifactDescriptorResult appArtifactDescr = mvn.resolveDescriptor(mvnArtifact);
         if (managingProject == null) {
             managedDeps = appArtifactDescr.getManagedDependencies();
         } else {

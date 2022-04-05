@@ -218,8 +218,8 @@ public class WorkspaceLoader implements WorkspaceModelResolver {
     }
 
     private void loadProjectModules(LocalProject project, String skipModule) throws BootstrapMavenException {
-        final List<String> modules = project.getModelBuildingResult() == null ? project.getRawModel().getModules()
-                : project.getModelBuildingResult().getEffectiveModel().getModules();
+        final List<String> modules = project.getEffectiveModel() == null ? project.getRawModel().getModules()
+                : project.getEffectiveModel().getModules();
         if (!modules.isEmpty()) {
             for (String module : modules) {
                 if (module.equals(skipModule)) {
@@ -277,7 +277,7 @@ public class WorkspaceLoader implements WorkspaceModelResolver {
             throws UnresolvableModelException {
         final LocalProject project = workspace.getProject(groupId, artifactId);
         return project != null && project.getVersion().equals(versionConstraint)
-                ? project.getModelBuildingResult().getEffectiveModel()
+                ? project.getEffectiveModel()
                 : null;
     }
 }

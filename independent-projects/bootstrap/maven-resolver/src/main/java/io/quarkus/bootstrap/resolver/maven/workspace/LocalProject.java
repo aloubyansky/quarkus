@@ -284,6 +284,10 @@ public class LocalProject {
         return rawModel;
     }
 
+    public Model getEffectiveModel() {
+        return effectiveModel;
+    }
+
     public LocalWorkspace getWorkspace() {
         return workspace;
     }
