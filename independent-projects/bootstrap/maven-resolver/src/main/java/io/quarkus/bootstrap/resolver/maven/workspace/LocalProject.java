@@ -348,8 +348,7 @@ public class LocalProject {
                 .setModuleDir(dir)
                 .setBuildDir(getOutputDir());
 
-        System.out.println(
-                "LocalProject.toWorkspaceModule " + moduleBuilder.getId() + " " + moduleBuilder.getBuildDir() + " " + dir);
+        System.out.println("LocalProject.toWorkspaceModule " + moduleBuilder.getId());
 
         final Model model = effectiveModel == null ? rawModel : effectiveModel;
         final Build build = model.getBuild();

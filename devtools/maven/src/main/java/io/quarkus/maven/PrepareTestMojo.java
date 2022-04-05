@@ -16,6 +16,34 @@ public class PrepareTestMojo extends QuarkusBootstrapMojo {
 
     @Override
     protected void doExecute() throws MojoExecutionException, MojoFailureException {
+
+        /* @formatter:off
+        final LocalWorkspace workspace = bootstrapProvider.bootstrapper(this).artifactResolver(this, LaunchMode.TEST)
+                .getMavenContext().getWorkspace();
+        if (workspace != null) {
+
+            Path bootstrapDir = Path.of(mavenProject().getBuild().getDirectory())
+                    .resolve("quarkus").resolve("bootstrap");
+            try {
+                Files.createDirectories(bootstrapDir);
+            } catch (IOException e1) {
+                // TODO Auto-generated catch block
+                e1.printStackTrace();
+            }
+            try (BufferedWriter writer = Files.newBufferedWriter(bootstrapDir.resolve("modules.txt"))) {
+                final Iterator<LocalProject> i = workspace.getProjects().values().iterator();
+                writer.write(i.next().getRawModel().getPomFile().getAbsolutePath());
+                while (i.hasNext()) {
+                    writer.newLine();
+                    writer.write(i.next().getRawModel().getPomFile().getAbsolutePath());
+                }
+            } catch (IOException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+        }
+        @formatter:on */
+
         /* @formatter:off
         final LocalWorkspace workspace = bootstrapProvider.bootstrapper(this).artifactResolver(this, LaunchMode.TEST)
                 .getMavenContext().getWorkspace();

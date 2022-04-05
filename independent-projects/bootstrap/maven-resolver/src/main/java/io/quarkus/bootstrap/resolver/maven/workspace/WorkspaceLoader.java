@@ -234,11 +234,39 @@ public class WorkspaceLoader implements WorkspaceModelResolver {
     }
 
     public LocalProject load() throws BootstrapMavenException {
+
+        Path modulesTxt = currentProjectPom.getParent().resolve("target").resolve("quarkus").resolve("bootstrap")
+                .resolve("modules.txt");
         if (workspace != null) {
             System.out.println("WorkspaceLoader.load");
             System.out.println("  " + currentProjectPom);
+            System.out.println("  " + modulesTxt + " " + Files.exists(modulesTxt));
         }
         long time = System.currentTimeMillis();
+
+        if (Files.exists(modulesTxt)) {
+            try {
+                LocalProject currentProject = null;
+                for (String pomPath : Files.readAllLines(modulesTxt)) {
+                    final Path pom = Path.of(pomPath);
+                    if (!Files.exists(pom)) {
+                        throw new BootstrapMavenException("Cached POM " + pom + " does not exist");
+                    }
+                    final LocalProject lp = new LocalProject(readModel(pom), workspace);
+                    if (currentProject == null && currentProjectPom.equals(pom)) {
+                        currentProject = lp;
+                    }
+                }
+                if (currentProject == null) {
+                    throw new BootstrapMavenException("Failed to locate " + currentProjectPom + " among the cached projects");
+                }
+                System.out.println("  loaded " + workspace.getProjects().size() + " modules in "
+                        + (System.currentTimeMillis() - time) + " ms");
+                return currentProject;
+            } catch (IOException e) {
+                log.warn("Failed to read " + modulesTxt, e);
+            }
+        }
 
         if (workspaceRootPom != null) {
             loadProject(workspaceRootPom, null);
