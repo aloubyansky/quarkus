@@ -103,6 +103,11 @@ public interface ExtensionCatalog extends ExtensionOrigin {
         default void persist(Path p) throws IOException {
             CatalogMapperHelper.serialize(this.build(), p);
         }
+
+        @Override
+        default ExtensionCatalog.Mutable mutable() {
+            return this;
+        }
     }
 
     /**

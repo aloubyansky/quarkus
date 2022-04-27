@@ -1,6 +1,7 @@
 package io.quarkus.registry.config;
 
 import io.quarkus.maven.dependency.ArtifactCoords;
+import java.util.Map;
 
 /**
  * Configuration related to the resolution of catalogs of available platforms.
@@ -17,6 +18,13 @@ public interface RegistryPlatformsConfig extends RegistryArtifactConfig {
      */
     Boolean getExtensionCatalogsIncluded();
 
+    /**
+     * Custom registry client configuration.
+     *
+     * @return custom registry client configuration
+     */
+    Map<String, Object> getExtra();
+
     default Mutable mutable() {
         return new RegistryPlatformsConfigImpl.Builder(this);
     }
@@ -30,6 +38,15 @@ public interface RegistryPlatformsConfig extends RegistryArtifactConfig {
         RegistryPlatformsConfig.Mutable setDisabled(boolean disabled);
 
         RegistryPlatformsConfig.Mutable setExtensionCatalogsIncluded(Boolean extensionCatalogsIncluded);
+
+        default RegistryPlatformsConfig.Mutable setAny(String name, Object value) {
+            setExtra(name, value);
+            return this;
+        }
+
+        RegistryPlatformsConfig.Mutable setExtra(Map<String, Object> extra);
+
+        RegistryPlatformsConfig.Mutable setExtra(String name, Object value);
 
         /** @return an immutable copy of this config */
         @Override

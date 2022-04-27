@@ -803,13 +803,11 @@ public class ExtensionCatalogResolver {
 
                 for (ArtifactCoords bom : r.getMemberBoms()) {
                     final ExtensionCatalog.Mutable catalog = registry.resolvePlatformExtensions(bom);
-
                     if (catalog != null) {
                         final OriginPreference originPreference = new OriginPreference(registry.getIndex(),
                                 platformIndex,
                                 releaseIndex, ++memberIndex, compatibilityCode);
                         addOriginPreference(catalog, originPreference);
-
                         catalogBuilder.addCatalog(catalog);
                     }
                 }

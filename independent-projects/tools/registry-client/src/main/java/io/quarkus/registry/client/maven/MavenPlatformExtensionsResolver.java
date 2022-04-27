@@ -18,7 +18,7 @@ import org.eclipse.aether.transfer.ArtifactNotFoundException;
 public class MavenPlatformExtensionsResolver implements RegistryPlatformExtensionsResolver {
 
     private final MavenRegistryArtifactResolver artifactResolver;
-    private final MessageWriter log;
+    protected final MessageWriter log;
 
     public MavenPlatformExtensionsResolver(MavenRegistryArtifactResolver artifactResolver,
             MessageWriter log) {
@@ -29,22 +29,36 @@ public class MavenPlatformExtensionsResolver implements RegistryPlatformExtensio
     @Override
     public ExtensionCatalog.Mutable resolvePlatformExtensions(ArtifactCoords platformCoords)
             throws RegistryResolutionException {
-        final String version;
         if (platformCoords.getVersion() == null) {
-            version = resolveLatestBomVersion(platformCoords, "[0-alpha,)");
+            platformCoords = ArtifactCoords.of(platformCoords.getGroupId(), platformCoords.getArtifactId(),
+                    platformCoords.getClassifier(), platformCoords.getType(),
+                    resolveLatestBomVersion(platformCoords, "[0-alpha,)"));
         } else if (isVersionRange(platformCoords.getVersion())) {
-            version = resolveLatestBomVersion(platformCoords, platformCoords.getVersion());
-        } else {
-            version = platformCoords.getVersion();
+            platformCoords = ArtifactCoords.of(platformCoords.getGroupId(), platformCoords.getArtifactId(),
+                    platformCoords.getClassifier(), platformCoords.getType(),
+                    resolveLatestBomVersion(platformCoords, platformCoords.getVersion()));
         }
-        final String groupId = platformCoords.getGroupId();
-        final String artifactId = PlatformArtifacts.ensureCatalogArtifactId(platformCoords.getArtifactId());
-        final String classifier = version;
-        final Artifact catalogArtifact = new DefaultArtifact(groupId, artifactId, classifier, "json", version);
-        log.debug("Resolving platform extension catalog %s", catalogArtifact);
-        final Path jsonPath;
+        final Path jsonPath = resolveCatalog(PlatformArtifacts.ensureCatalogArtifact(platformCoords));
         try {
-            jsonPath = artifactResolver.resolve(catalogArtifact);
+            return ExtensionCatalog.mutableFromFile(jsonPath);
+        } catch (IOException e) {
+            throw new RegistryResolutionException("Failed to parse Quarkus extension catalog " + jsonPath, e);
+        }
+    }
+
+    protected Path resolveCatalog(ArtifactCoords catalogCoords) throws RegistryResolutionException {
+        return resolveCatalogArtifact(catalogCoords,
+                new DefaultArtifact(catalogCoords.getGroupId(), catalogCoords.getArtifactId(),
+                        catalogCoords.getClassifier(), catalogCoords.getType(), catalogCoords.getVersion()),
+                artifactResolver);
+    }
+
+    protected Path resolveCatalogArtifact(ArtifactCoords catalogCoords, Artifact catalogArtifact,
+            MavenRegistryArtifactResolver artifactResolver)
+            throws RegistryResolutionException {
+        log.debug("Resolving platform extension catalog %s", catalogArtifact);
+        try {
+            return artifactResolver.resolve(catalogArtifact);
         } catch (Exception e) {
             RemoteRepository repo = null;
             Throwable t = e;
@@ -57,7 +71,7 @@ public class MavenPlatformExtensionsResolver implements RegistryPlatformExtensio
             }
             final StringBuilder buf = new StringBuilder();
             buf.append("Failed to resolve extension catalog of ")
-                    .append(PlatformArtifacts.ensureBomArtifact(platformCoords).toCompactCoords());
+                    .append(PlatformArtifacts.ensureBomArtifact(catalogCoords).toCompactCoords());
             if (repo != null) {
                 buf.append(" from Maven repository ").append(repo.getId()).append(" (").append(repo.getUrl()).append(")");
                 final List<RemoteRepository> mirrored = repo.getMirroredRepositories();
@@ -73,18 +87,13 @@ public class MavenPlatformExtensionsResolver implements RegistryPlatformExtensio
             }
             throw new RegistryResolutionException(buf.toString(), e);
         }
-        try {
-            return ExtensionCatalog.mutableFromFile(jsonPath);
-        } catch (IOException e) {
-            throw new RegistryResolutionException("Failed to parse Quarkus extension catalog " + jsonPath, e);
-        }
     }
 
     private String resolveLatestBomVersion(ArtifactCoords bom, String versionRange)
             throws RegistryResolutionException {
         final Artifact bomArtifact = new DefaultArtifact(bom.getGroupId(),
                 PlatformArtifacts.ensureBomArtifactId(bom.getArtifactId()),
-                "", "pom", bom.getVersion());
+                "", ArtifactCoords.TYPE_POM, bom.getVersion());
         log.debug("Resolving the latest version of %s:%s:%s:%s in the range %s", bom.getGroupId(), bom.getArtifactId(),
                 bom.getClassifier(), bom.getType(), versionRange);
         try {

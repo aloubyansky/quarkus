@@ -1,9 +1,14 @@
 package io.quarkus.registry.config;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.registry.json.JsonBuilder;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -19,15 +24,23 @@ import java.util.Objects;
 public class RegistryPlatformsConfigImpl extends RegistryArtifactConfigImpl implements RegistryPlatformsConfig {
 
     protected final Boolean extensionCatalogsIncluded;
+    protected final Map<String, Object> extra;
 
     private RegistryPlatformsConfigImpl(Builder builder) {
         super(builder.disabled, builder.artifact);
         this.extensionCatalogsIncluded = builder.extensionCatalogsIncluded;
+        this.extra = JsonBuilder.toUnmodifiableMap(builder.extra);
     }
 
     @Override
     public Boolean getExtensionCatalogsIncluded() {
         return extensionCatalogsIncluded;
+    }
+
+    @Override
+    @JsonAnyGetter
+    public Map<String, Object> getExtra() {
+        return extra;
     }
 
     @Override
@@ -39,12 +52,13 @@ public class RegistryPlatformsConfigImpl extends RegistryArtifactConfigImpl impl
         if (!super.equals(o))
             return false;
         RegistryPlatformsConfigImpl that = (RegistryPlatformsConfigImpl) o;
-        return Objects.equals(extensionCatalogsIncluded, that.extensionCatalogsIncluded);
+        return Objects.equals(extensionCatalogsIncluded, that.extensionCatalogsIncluded)
+                && Objects.equals(extra, that.extra);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), extensionCatalogsIncluded);
+        return Objects.hash(super.hashCode(), extensionCatalogsIncluded, extra);
     }
 
     @Override
@@ -53,6 +67,7 @@ public class RegistryPlatformsConfigImpl extends RegistryArtifactConfigImpl impl
                 "{disabled=" + disabled +
                 ", artifact=" + artifact +
                 ", extensionCatalogsIncluded=" + extensionCatalogsIncluded +
+                ", extra=" + extra +
                 '}';
     }
 
@@ -65,6 +80,7 @@ public class RegistryPlatformsConfigImpl extends RegistryArtifactConfigImpl impl
      */
     public static class Builder extends RegistryArtifactConfigImpl.Builder implements RegistryPlatformsConfig.Mutable {
         protected Boolean extensionCatalogsIncluded;
+        protected Map<String, Object> extra;
 
         public Builder() {
         }
@@ -73,6 +89,9 @@ public class RegistryPlatformsConfigImpl extends RegistryArtifactConfigImpl impl
         Builder(RegistryPlatformsConfig config) {
             super(config);
             this.extensionCatalogsIncluded = config.getExtensionCatalogsIncluded();
+            this.extra = config.getExtra() == null
+                    ? null
+                    : new HashMap<>(config.getExtra());
         }
 
         @Override
@@ -95,6 +114,28 @@ public class RegistryPlatformsConfigImpl extends RegistryArtifactConfigImpl impl
         @Override
         public RegistryPlatformsConfig.Mutable setExtensionCatalogsIncluded(Boolean extensionCatalogsIncluded) {
             this.extensionCatalogsIncluded = extensionCatalogsIncluded;
+            return this;
+        }
+
+        @Override
+        public Map<String, Object> getExtra() {
+            return extra == null ? Collections.emptyMap() : extra;
+        }
+
+        @Override
+        public RegistryPlatformsConfig.Mutable setExtra(Map<String, Object> newValues) {
+            if (newValues != Collections.EMPTY_MAP) {
+                this.extra = newValues;
+            }
+            return this;
+        }
+
+        @JsonAnySetter
+        public Builder setExtra(String name, Object value) {
+            if (extra == null) {
+                extra = new HashMap<>();
+            }
+            extra.put(name, value);
             return this;
         }
 

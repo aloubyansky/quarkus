@@ -26,17 +26,21 @@ public class CatalogMergeUtility {
 
     // TODO: should be Package private
     public static ExtensionCatalog merge(List<? extends ExtensionCatalog> catalogs) {
+        if (catalogs.size() == 1) {
+            return JsonBuilder.buildIfBuilder(catalogs.get(0));
+        }
+        return mergeIntoMutable(catalogs).build();
+    }
+
+    public static ExtensionCatalog.Mutable mergeIntoMutable(List<? extends ExtensionCatalog> catalogs) {
 
         if (catalogs.isEmpty()) {
             throw new IllegalArgumentException("No catalogs provided");
         }
-        if (catalogs.size() == 1) {
-            return JsonBuilder.buildIfBuilder(catalogs.get(0));
-        }
 
         final List<ExtensionCatalog> roots = detectRoots(catalogs);
         if (roots.size() == 1) {
-            return JsonBuilder.buildIfBuilder(roots.get(0));
+            return roots.get(0).mutable();
         }
 
         final ExtensionCatalog.Mutable combined = ExtensionCatalog.builder();
@@ -48,8 +52,7 @@ public class CatalogMergeUtility {
 
         final Map<String, ExtensionCatalog> originCatalogs = new HashMap<>();
         catalogs.forEach(c -> {
-            ExtensionCatalog catalog = JsonBuilder.buildIfBuilder(c);
-            originCatalogs.put(catalog.getId(), catalog);
+            originCatalogs.put(c.getId(), JsonBuilder.buildIfBuilder(c));
         });
 
         for (ExtensionCatalog catalog : roots) {
@@ -89,7 +92,7 @@ public class CatalogMergeUtility {
                 .setExtensions(new ArrayList<>(extensions.values()))
                 .setMetadata(metadata);
 
-        return combined.build();
+        return combined;
     }
 
     // Package private.

@@ -24,7 +24,9 @@ import java.io.StringWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.eclipse.aether.DefaultRepositorySystemSession;
 import org.eclipse.aether.RepositorySystemSession;
@@ -40,6 +42,7 @@ import org.eclipse.aether.transfer.TransferListener;
 public class MavenRegistryClientFactory implements RegistryClientFactory {
 
     private static final String CLEANUP_TIMESTAMPED_ARTIFACTS = "cleanup-timestamped-artifacts";
+    private static final String EXTENSION_CATALOG_SNAPSHOT_VERSION = "extension-catalog-snapshot-version";
 
     private final MessageWriter log;
     private final MavenArtifactResolver originalResolver;
@@ -159,11 +162,22 @@ public class MavenRegistryClientFactory implements RegistryClientFactory {
         } else {
             platformsResolver = new MavenPlatformsResolver(platformsConfig, defaultResolver, log);
         }
+
+        final MavenPlatformExtensionsResolver platformExtensionsResolver;
+        final boolean extensionCatalogsIncluded = Boolean.TRUE
+                .equals(platformsConfig == null ? Boolean.FALSE : platformsConfig.getExtensionCatalogsIncluded());
+        if (extensionCatalogsIncluded) {
+            final String snapshotVersion = (String) platformsConfig.getExtra().get(EXTENSION_CATALOG_SNAPSHOT_VERSION);
+            platformExtensionsResolver = snapshotVersion == null
+                    ? new MavenPlatformExtensionsResolver(defaultResolver, log)
+                    : new MavenPlatformExtensionsSnapshotResolver(defaultResolver,
+                            defaultResolver(originalResolver, cleanupTimestampedArtifacts), snapshotVersion, log);
+        } else {
+            platformExtensionsResolver = new MavenPlatformExtensionsResolver(
+                    defaultResolver(originalResolver, cleanupTimestampedArtifacts), log);
+        }
         return new RegistryClientDispatcher(config, platformsResolver,
-                Boolean.TRUE.equals(platformsConfig == null ? Boolean.FALSE : platformsConfig.getExtensionCatalogsIncluded())
-                        ? new MavenPlatformExtensionsResolver(defaultResolver, log)
-                        : new MavenPlatformExtensionsResolver(defaultResolver(originalResolver, cleanupTimestampedArtifacts),
-                                log),
+                platformExtensionsResolver,
                 nonPlatformExtensionsResolver,
                 new MavenRegistryCache(config, defaultResolver, log));
     }
@@ -229,13 +243,26 @@ public class MavenRegistryClientFactory implements RegistryClientFactory {
             return client;
         }
 
+        final Map<String, Object> extra;
+        if (!descriptor.getExtra().isEmpty()) {
+            if (client.getExtra().isEmpty()) {
+                extra = descriptor.getExtra();
+            } else {
+                extra = new HashMap<>(client.getExtra().size() + descriptor.getExtra().size());
+                extra.putAll(descriptor.getExtra());
+                extra.putAll(client.getExtra());
+            }
+        } else {
+            extra = client.getExtra();
+        }
         return RegistryPlatformsConfig.builder()
                 .setArtifact(client.getArtifact() == null ? descriptor.getArtifact() : client.getArtifact())
                 .setDisabled(client.isDisabled())
                 .setExtensionCatalogsIncluded(
                         client.getExtensionCatalogsIncluded() == null
                                 ? descriptor.getExtensionCatalogsIncluded()
-                                : client.getExtensionCatalogsIncluded());
+                                : client.getExtensionCatalogsIncluded())
+                .setExtra(extra);
     }
 
     private static RegistryMavenRepoConfig completeMavenRepoConfig(RegistryMavenConfig original,
@@ -294,6 +321,9 @@ public class MavenRegistryClientFactory implements RegistryClientFactory {
         }
         if (descriptor != null && Boolean.TRUE.equals(descriptor.getExtensionCatalogsIncluded())
                 && client.getExtensionCatalogsIncluded() == null) {
+            return false;
+        }
+        if (descriptor != null && !descriptor.getExtra().isEmpty() && !descriptor.getExtra().equals(client.getExtra())) {
             return false;
         }
         return true;
