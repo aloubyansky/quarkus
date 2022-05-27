@@ -123,7 +123,11 @@ public class DeploymentInjectingDependencyVisitor {
     }
 
     public void injectDeploymentDependencies(DependencyNode root) throws BootstrapDependencyProcessingException {
-        visitRuntimeDependencies(root.getChildren());
+        final Deque<DependencyNode> nodes = new ArrayDeque<>();
+        for (int i = root.getChildren().size() - 1; i >= 0; --i) {
+            nodes.add(root.getChildren().get(i));
+        }
+        visitRuntimeDependencies(nodes);
 
         List<ConditionalDependency> activatedConditionalDeps = Collections.emptyList();
 
@@ -172,78 +176,75 @@ public class DeploymentInjectingDependencyVisitor {
         return allRuntimeDeps.contains(key);
     }
 
-    private void visitRuntimeDependencies(List<DependencyNode> list) {
-        int i = 0;
-        while (i < list.size()) {
-            visitRuntimeDependency(list.get(i++));
-        }
-    }
+    private void visitRuntimeDependencies(Deque<DependencyNode> nodes) {
+        while (!nodes.isEmpty()) {
+            final DependencyNode node = nodes.pollLast();
+            final byte prevWalkingFlags = walkingFlags;
+            final ExtensionDependency prevLastVisitedRtExtNode = lastVisitedRuntimeExtNode;
 
-    private void visitRuntimeDependency(DependencyNode node) {
+            final boolean popExclusions;
+            if (popExclusions = !node.getDependency().getExclusions().isEmpty()) {
+                exclusionStack.addLast(node.getDependency().getExclusions());
+            }
 
-        final byte prevWalkingFlags = walkingFlags;
-        final ExtensionDependency prevLastVisitedRtExtNode = lastVisitedRuntimeExtNode;
-
-        final boolean popExclusions;
-        if (popExclusions = !node.getDependency().getExclusions().isEmpty()) {
-            exclusionStack.addLast(node.getDependency().getExclusions());
-        }
-
-        Artifact artifact = node.getArtifact();
-        final boolean add = allRuntimeDeps.add(getKey(artifact));
-        if (add) {
-            artifact = resolve(artifact);
-        }
-
-        try {
-            final ExtensionDependency extDep = getExtensionDependencyOrNull(node, artifact);
-
+            Artifact artifact = node.getArtifact();
+            final boolean add = allRuntimeDeps.add(getKey(artifact));
             if (add) {
-                WorkspaceModule module = null;
-                if (resolver.getProjectModuleResolver() != null) {
-                    module = resolver.getProjectModuleResolver().getProjectModule(artifact.getGroupId(),
-                            artifact.getArtifactId());
-                }
-                final ResolvedDependencyBuilder newRtDep = toAppArtifact(artifact, module)
-                        .setRuntimeCp()
-                        .setDeploymentCp()
-                        .setOptional(node.getDependency().isOptional())
-                        .setScope(node.getDependency().getScope())
-                        .setDirect(isWalkingFlagOn(COLLECT_DIRECT_DEPS));
-                if (module != null) {
-                    newRtDep.setWorkspaceModule().setReloadable();
-                    if (isWalkingFlagOn(COLLECT_RELOADABLE_MODULES)) {
-                        appBuilder.addReloadableWorkspaceModule(new GACT(artifact.getGroupId(), artifact.getArtifactId(),
-                                artifact.getClassifier(), artifact.getExtension()));
+                artifact = resolve(artifact);
+            }
+
+            try {
+                final ExtensionDependency extDep = getExtensionDependencyOrNull(node, artifact);
+
+                if (add) {
+                    WorkspaceModule module = null;
+                    if (resolver.getProjectModuleResolver() != null) {
+                        module = resolver.getProjectModuleResolver().getProjectModule(artifact.getGroupId(),
+                                artifact.getArtifactId());
                     }
+                    final ResolvedDependencyBuilder newRtDep = toAppArtifact(artifact, module)
+                            .setRuntimeCp()
+                            .setDeploymentCp()
+                            .setOptional(node.getDependency().isOptional())
+                            .setScope(node.getDependency().getScope())
+                            .setDirect(isWalkingFlagOn(COLLECT_DIRECT_DEPS));
+                    if (module != null) {
+                        newRtDep.setWorkspaceModule().setReloadable();
+                        if (isWalkingFlagOn(COLLECT_RELOADABLE_MODULES)) {
+                            appBuilder.addReloadableWorkspaceModule(new GACT(artifact.getGroupId(), artifact.getArtifactId(),
+                                    artifact.getClassifier(), artifact.getExtension()));
+                        }
+                    }
+                    if (extDep != null) {
+                        newRtDep.setRuntimeExtensionArtifact();
+                        if (isWalkingFlagOn(COLLECT_TOP_EXTENSION_RUNTIME_NODES)) {
+                            newRtDep.setFlags(DependencyFlags.TOP_LEVEL_RUNTIME_EXTENSION_ARTIFACT);
+                        }
+                    }
+                    appBuilder.addDependency(newRtDep.build());
                 }
+
+                clearWalkingFlag(COLLECT_DIRECT_DEPS);
+
                 if (extDep != null) {
-                    newRtDep.setRuntimeExtensionArtifact();
-                    if (isWalkingFlagOn(COLLECT_TOP_EXTENSION_RUNTIME_NODES)) {
-                        newRtDep.setFlags(DependencyFlags.TOP_LEVEL_RUNTIME_EXTENSION_ARTIFACT);
-                    }
+                    extDep.info.ensureActivated();
+                    visitExtensionDependency(extDep);
                 }
-                appBuilder.addDependency(newRtDep.build());
+                for (int i = node.getChildren().size() - 1; i >= 0; --i) {
+                    nodes.add(node.getChildren().get(i));
+                }
+            } catch (DeploymentInjectionException e) {
+                throw e;
+            } catch (Exception t) {
+                throw new DeploymentInjectionException("Failed to inject extension deployment dependencies", t);
             }
 
-            clearWalkingFlag(COLLECT_DIRECT_DEPS);
-
-            if (extDep != null) {
-                extDep.info.ensureActivated();
-                visitExtensionDependency(extDep);
+            if (popExclusions) {
+                exclusionStack.pollLast();
             }
-            visitRuntimeDependencies(node.getChildren());
-        } catch (DeploymentInjectionException e) {
-            throw e;
-        } catch (Exception t) {
-            throw new DeploymentInjectionException("Failed to inject extension deployment dependencies", t);
+            walkingFlags = prevWalkingFlags;
+            lastVisitedRuntimeExtNode = prevLastVisitedRtExtNode;
         }
-
-        if (popExclusions) {
-            exclusionStack.pollLast();
-        }
-        walkingFlags = prevWalkingFlags;
-        lastVisitedRuntimeExtNode = prevLastVisitedRtExtNode;
     }
 
     private ExtensionDependency getExtensionDependencyOrNull(DependencyNode node, Artifact artifact)
@@ -628,7 +629,9 @@ public class DeploymentInjectingDependencyVisitor {
             } else {
                 currentChildren.addAll(originalNode.getChildren());
             }
-            visitRuntimeDependency(rtNode);
+            final Deque<DependencyNode> nodes = new ArrayDeque<>();
+            nodes.add(rtNode);
+            visitRuntimeDependencies(nodes);
             dependent.runtimeNode.getChildren().add(rtNode);
         }
 

@@ -22,7 +22,7 @@ import org.eclipse.aether.repository.RemoteRepository;
 import io.quarkus.bootstrap.resolver.BootstrapAppModelResolver;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
-import io.quarkus.maven.dependency.GACTV;
+import io.quarkus.maven.dependency.ArtifactCoords;
 
 /**
  * Displays Quarkus application build dependency tree including the deployment ones.
@@ -102,7 +102,8 @@ public class DependencyTreeMojo extends AbstractMojo {
     private void logTree(final Consumer<String> log) throws MojoExecutionException {
         log.accept("Quarkus application " + mode.toUpperCase() + " mode build dependency tree:");
 
-        final GACTV appArtifact = new GACTV(project.getGroupId(), project.getArtifactId(), null, "pom", project.getVersion());
+        final ArtifactCoords appArtifact = ArtifactCoords.pom(project.getGroupId(), project.getArtifactId(),
+                project.getVersion());
         final BootstrapAppModelResolver modelResolver;
         try {
             modelResolver = new BootstrapAppModelResolver(resolver());
