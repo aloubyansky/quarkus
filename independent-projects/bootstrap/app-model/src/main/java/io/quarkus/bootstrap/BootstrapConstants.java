@@ -32,6 +32,7 @@ public interface BootstrapConstants {
     String EXTENSION_METADATA_PATH = META_INF + '/' + QUARKUS_EXTENSION_FILE_NAME;
 
     String PROP_DEPLOYMENT_ARTIFACT = "deployment-artifact";
+    String PROP_DEVMODE_DEPLOYMENT_DEPENDENCIES = "devmode-deployment-dependencies";
     String PROP_PROVIDES_CAPABILITIES = "provides-capabilities";
     String PROP_REQUIRES_CAPABILITIES = "requires-capabilities";
     String PARENT_FIRST_ARTIFACTS = "parent-first-artifacts";

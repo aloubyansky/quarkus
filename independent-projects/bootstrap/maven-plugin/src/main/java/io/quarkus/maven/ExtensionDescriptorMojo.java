@@ -186,10 +186,13 @@ public class ExtensionDescriptorMojo extends AbstractMojo {
     boolean ignoreNotDetectedQuarkusCoreVersion;
 
     @Parameter
-    private List<String> conditionalDependencies = new ArrayList<>(0);
+    List<String> conditionalDependencies = new ArrayList<>(0);
 
     @Parameter
-    private List<String> dependencyCondition = new ArrayList<>(0);
+    List<String> dependencyCondition = new ArrayList<>(0);
+
+    @Parameter
+    List<String> devmodeDeploymentDependencies = new ArrayList<>(0);
 
     @Parameter(property = "skipCodestartValidation")
     boolean skipCodestartValidation;
@@ -301,6 +304,18 @@ public class ExtensionDescriptorMojo extends AbstractMojo {
         if (lesserPriorityArtifacts != null && !lesserPriorityArtifacts.isEmpty()) {
             String val = String.join(",", lesserPriorityArtifacts);
             props.put(ApplicationModel.LESSER_PRIORITY_ARTIFACTS, val);
+        }
+
+        if (devmodeDeploymentDependencies != null && !devmodeDeploymentDependencies.isEmpty()) {
+            // make sure they are parseable Maven artifact coords
+            for (String s : devmodeDeploymentDependencies) {
+                try {
+                    ArtifactCoords.fromString(s);
+                } catch (IllegalArgumentException e) {
+                    throw new MojoExecutionException("Failed to parse dev mode dependency '" + s + "'", e);
+                }
+            }
+            props.put(BootstrapConstants.PROP_DEVMODE_DEPLOYMENT_DEPENDENCIES, String.join(",", devmodeDeploymentDependencies));
         }
 
         final Path output = outputDirectory.toPath().resolve(BootstrapConstants.META_INF);
