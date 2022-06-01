@@ -2,9 +2,9 @@ package io.quarkus.bootstrap.workspace;
 
 import io.quarkus.paths.DirectoryPathTree;
 import io.quarkus.paths.PathTree;
+import io.quarkus.paths.SingleRootPathTree;
 import java.io.Serializable;
 import java.nio.file.Path;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
@@ -12,19 +12,19 @@ import java.util.Objects;
 public class DefaultSourceDir implements SourceDir, Serializable {
 
     private static final long serialVersionUID = 6544177650615687691L;
-    private final PathTree srcTree;
-    private final PathTree outputTree;
+    private final SingleRootPathTree srcTree;
+    private final SingleRootPathTree outputTree;
     private final Map<Object, Object> data;
 
     public DefaultSourceDir(Path srcDir, Path destinationDir) {
-        this(srcDir, destinationDir, Collections.emptyMap());
+        this(srcDir, destinationDir, Map.of());
     }
 
     public DefaultSourceDir(Path srcDir, Path destinationDir, Map<Object, Object> data) {
         this(new DirectoryPathTree(srcDir), new DirectoryPathTree(destinationDir), data);
     }
 
-    public DefaultSourceDir(PathTree srcTree, PathTree outputTree, Map<Object, Object> data) {
+    public DefaultSourceDir(SingleRootPathTree srcTree, SingleRootPathTree outputTree, Map<Object, Object> data) {
         this.srcTree = srcTree;
         this.outputTree = outputTree;
         this.data = data;
@@ -32,7 +32,7 @@ public class DefaultSourceDir implements SourceDir, Serializable {
 
     @Override
     public Path getDir() {
-        return srcTree.getRoots().iterator().next();
+        return srcTree.getRoot();
     }
 
     @Override
@@ -42,7 +42,7 @@ public class DefaultSourceDir implements SourceDir, Serializable {
 
     @Override
     public Path getOutputDir() {
-        return outputTree.getRoots().iterator().next();
+        return outputTree.getRoot();
     }
 
     @Override
@@ -76,7 +76,7 @@ public class DefaultSourceDir implements SourceDir, Serializable {
     @Override
     public String toString() {
         final StringBuilder buf = new StringBuilder();
-        buf.append(srcTree.getRoots()).append(" -> ").append(outputTree.getRoots());
+        buf.append(srcTree.getRoot()).append(" -> ").append(outputTree.getRoot());
         if (!data.isEmpty()) {
             final Iterator<Map.Entry<Object, Object>> i = data.entrySet().iterator();
             Map.Entry<Object, Object> e = i.next();

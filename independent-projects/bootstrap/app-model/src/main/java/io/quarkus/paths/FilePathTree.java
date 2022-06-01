@@ -2,14 +2,12 @@ package io.quarkus.paths;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.jar.Manifest;
 
-class FilePathTree implements OpenPathTree {
+class FilePathTree implements SingleRootPathTree, OpenPathTree {
 
     private final Path file;
     private final PathFilter pathFilter;
@@ -24,8 +22,8 @@ class FilePathTree implements OpenPathTree {
     }
 
     @Override
-    public Collection<Path> getRoots() {
-        return Collections.singletonList(file);
+    public Path getRoot() {
+        return file;
     }
 
     @Override

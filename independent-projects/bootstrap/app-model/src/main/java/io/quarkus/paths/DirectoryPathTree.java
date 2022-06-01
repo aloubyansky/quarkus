@@ -7,14 +7,12 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
-public class DirectoryPathTree extends PathTreeWithManifest implements OpenPathTree, Serializable {
+public class DirectoryPathTree extends PathTreeWithManifest implements SingleRootPathTree, OpenPathTree, Serializable {
 
     private static final long serialVersionUID = 2255956884896445059L;
 
@@ -80,8 +78,8 @@ public class DirectoryPathTree extends PathTreeWithManifest implements OpenPathT
     }
 
     @Override
-    public Collection<Path> getRoots() {
-        return Collections.singletonList(dir);
+    public Path getRoot() {
+        return dir;
     }
 
     @Override

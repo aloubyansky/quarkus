@@ -216,10 +216,6 @@ public class LocalProject {
                 : Paths.get(modelBuildingResult.getEffectiveModel().getBuild().getDirectory());
     }
 
-    public Path getCodeGenOutputDir() {
-        return getOutputDir().resolve("generated-sources");
-    }
-
     public Path getClassesDir() {
         return modelBuildingResult == null
                 ? resolveRelativeToBuildDir(configuredBuildDir(this, build -> build.getOutputDirectory()), "classes")
@@ -238,12 +234,8 @@ public class LocalProject {
                 : Paths.get(modelBuildingResult.getEffectiveModel().getBuild().getSourceDirectory());
     }
 
-    public Path getTestSourcesSourcesDir() {
+    private Path getTestSourcesSourcesDir() {
         return resolveRelativeToBaseDir(configuredBuildDir(this, build -> build.getTestSourceDirectory()), "src/test/java");
-    }
-
-    public Path getSourcesDir() {
-        return getSourcesSourcesDir().getParent();
     }
 
     public PathCollection getResourcesSourcesDirs() {
@@ -255,18 +247,6 @@ public class LocalProject {
         return PathList.from(resources.stream()
                 .map(Resource::getDirectory)
                 .map(resourcesDir -> resolveRelativeToBaseDir(resourcesDir, "src/main/resources"))
-                .collect(Collectors.toCollection(LinkedHashSet::new)));
-    }
-
-    public PathCollection getTestResourcesSourcesDirs() {
-        final List<Resource> resources = rawModel.getBuild() == null ? Collections.emptyList()
-                : rawModel.getBuild().getTestResources();
-        if (resources.isEmpty()) {
-            return PathList.of(resolveRelativeToBaseDir(null, "src/test/resources"));
-        }
-        return PathList.from(resources.stream()
-                .map(Resource::getDirectory)
-                .map(resourcesDir -> resolveRelativeToBaseDir(resourcesDir, "src/test/resources"))
                 .collect(Collectors.toCollection(LinkedHashSet::new)));
     }
 
@@ -299,11 +279,7 @@ public class LocalProject {
                 (PathCollection) null);
     }
 
-    public Path resolveRelativeToBaseDir(String path) {
-        return resolveRelativeToBaseDir(path, null);
-    }
-
-    Path resolveRelativeToBaseDir(String path, String defaultPath) {
+    private Path resolveRelativeToBaseDir(String path, String defaultPath) {
         return dir.resolve(path == null ? defaultPath : stripProjectBasedirPrefix(path, PROJECT_BASEDIR));
     }
 
@@ -311,7 +287,7 @@ public class LocalProject {
         return getOutputDir().resolve(path == null ? defaultPath : stripProjectBasedirPrefix(path, PROJECT_BUILD_DIR));
     }
 
-    static String stripProjectBasedirPrefix(String path, String expr) {
+    private static String stripProjectBasedirPrefix(String path, String expr) {
         return path.startsWith(expr) ? path.substring(expr.length() + 1) : path;
     }
 

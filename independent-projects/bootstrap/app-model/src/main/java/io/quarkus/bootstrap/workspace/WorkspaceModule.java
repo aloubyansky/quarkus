@@ -47,8 +47,7 @@ public interface WorkspaceModule {
 
     default PathTree getContentTree(String classifier) {
         final ArtifactSources artifactSources = getSources(classifier);
-        return artifactSources == null || !artifactSources.isOutputAvailable() ? EmptyPathTree.getInstance()
-                : artifactSources.getOutputTree();
+        return artifactSources == null ? EmptyPathTree.getInstance() : artifactSources.getOutputTree();
     }
 
     Collection<Dependency> getDirectDependencyConstraints();

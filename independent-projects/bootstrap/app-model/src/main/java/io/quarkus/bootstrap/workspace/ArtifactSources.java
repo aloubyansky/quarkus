@@ -5,6 +5,7 @@ import io.quarkus.paths.MultiRootPathTree;
 import io.quarkus.paths.PathTree;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 
 public interface ArtifactSources {
@@ -43,25 +44,62 @@ public interface ArtifactSources {
     default PathTree getOutputTree() {
         final Collection<SourceDir> sourceDirs = getSourceDirs();
         final Collection<SourceDir> resourceDirs = getResourceDirs();
-        final List<PathTree> trees = new ArrayList<>(sourceDirs.size() + resourceDirs.size());
-        for (SourceDir src : sourceDirs) {
+
+        final Iterator<SourceDir> i;
+        if (sourceDirs.isEmpty()) {
+            i = resourceDirs.iterator();
+        } else if (resourceDirs.isEmpty()) {
+            i = sourceDirs.iterator();
+        } else {
+            i = new Iterator<SourceDir>() {
+                Iterator<SourceDir> i = sourceDirs.iterator();
+                int c = 0;
+
+                @Override
+                public boolean hasNext() {
+                    if (c < sourceDirs.size() + resourceDirs.size()) {
+                        return true;
+                    }
+                    if (i.hasNext()) {
+                        return true;
+                    }
+                    return false;
+                }
+
+                @Override
+                public SourceDir next() {
+                    if (c++ == sourceDirs.size()) {
+                        i = resourceDirs.iterator();
+                    }
+                    return i.next();
+                }
+            };
+        }
+
+        PathTree firstTree = null;
+        List<PathTree> trees = null;
+        while (i.hasNext()) {
+            final SourceDir src = i.next();
+            if (!src.isOutputAvailable()) {
+                continue;
+            }
             final PathTree outputTree = src.getOutputTree();
-            if (outputTree != null && !outputTree.isEmpty() && !trees.contains(outputTree)) {
+            if (trees != null) {
+                if (!trees.contains(outputTree)) {
+                    trees.add(outputTree);
+                }
+            } else if (firstTree == null) {
+                firstTree = outputTree;
+            } else if (!firstTree.equals(outputTree)) {
+                trees = new ArrayList<>(sourceDirs.size() + resourceDirs.size());
+                trees.add(firstTree);
                 trees.add(outputTree);
             }
         }
-        for (SourceDir src : resourceDirs) {
-            final PathTree outputTree = src.getOutputTree();
-            if (outputTree != null && !outputTree.isEmpty() && !trees.contains(outputTree)) {
-                trees.add(outputTree);
-            }
-        }
-        if (trees.isEmpty()) {
+
+        if (firstTree == null) {
             return EmptyPathTree.getInstance();
         }
-        if (trees.size() == 1) {
-            return trees.get(0);
-        }
-        return new MultiRootPathTree(trees.toArray(new PathTree[0]));
+        return trees == null ? firstTree : new MultiRootPathTree(trees.toArray(new PathTree[0]));
     }
 }

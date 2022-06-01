@@ -6,8 +6,6 @@ import java.io.UncheckedIOException;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -15,7 +13,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.jar.Manifest;
 
-public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
+public class ArchivePathTree extends PathTreeWithManifest implements SingleRootPathTree {
 
     private final Path archive;
     private final PathFilter pathFilter;
@@ -35,8 +33,8 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
     }
 
     @Override
-    public Collection<Path> getRoots() {
-        return Collections.singletonList(archive);
+    public Path getRoot() {
+        return archive;
     }
 
     @Override
