@@ -1,5 +1,6 @@
 package io.quarkus.bootstrap.resolver;
 
+import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
 import io.quarkus.bootstrap.util.IoUtils;
@@ -25,9 +26,10 @@ public class ResolverSetupCleanup {
 
     @BeforeEach
     public void setup() throws Exception {
+        setSystemProperties();
         workDir = initWorkDir();
         repoHome = IoUtils.mkdirs(workDir.resolve("repo"));
-        resolver = initResolver(null);
+        resolver = newAppModelResolver(null);
         repo = TsRepoBuilder.getInstance(resolver, workDir);
     }
 
@@ -39,6 +41,9 @@ public class ResolverSetupCleanup {
         if (originalProps != null) {
             System.setProperties(originalProps);
         }
+    }
+
+    protected void setSystemProperties() {
     }
 
     protected void setSystemProperty(String name, String value) {
@@ -60,17 +65,21 @@ public class ResolverSetupCleanup {
         return false;
     }
 
-    protected BootstrapAppModelResolver initResolver(LocalProject currentProject) throws Exception {
-        final BootstrapAppModelResolver appModelResolver = new BootstrapAppModelResolver(MavenArtifactResolver.builder()
-                .setLocalRepository(repoHome.toString())
-                .setOffline(true)
-                .setWorkspaceDiscovery(false)
-                .setCurrentProject(currentProject)
-                .build());
+    protected BootstrapAppModelResolver newAppModelResolver(LocalProject currentProject) throws Exception {
+        final BootstrapAppModelResolver appModelResolver = new BootstrapAppModelResolver(newArtifactResolver(currentProject));
         if (isBootstrapForTestMode()) {
             appModelResolver.setTest(true);
         }
         return appModelResolver;
+    }
+
+    protected MavenArtifactResolver newArtifactResolver(LocalProject currentProject) throws BootstrapMavenException {
+        return MavenArtifactResolver.builder()
+                .setLocalRepository(repoHome.toString())
+                .setOffline(true)
+                .setWorkspaceDiscovery(false)
+                .setCurrentProject(currentProject)
+                .build();
     }
 
     protected TsJar newJar() throws IOException {
