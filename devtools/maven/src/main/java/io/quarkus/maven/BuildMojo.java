@@ -10,10 +10,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Stream;
 
 import org.apache.maven.artifact.Artifact;
+import org.apache.maven.model.Model;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.plugins.annotations.Component;
@@ -28,6 +30,7 @@ import org.eclipse.aether.repository.RemoteRepository;
 import io.quarkus.bootstrap.app.AugmentAction;
 import io.quarkus.bootstrap.app.AugmentResult;
 import io.quarkus.bootstrap.app.CuratedApplication;
+import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.bootstrap.util.IoUtils;
 
 /**
@@ -64,6 +67,16 @@ public class BuildMojo extends QuarkusBootstrapMojo {
     @Deprecated
     @Parameter(property = "skipOriginalJarRename")
     boolean skipOriginalJarRename;
+
+    /**
+     * In case an application is packaged as an Uber JAR with no (runner) classifier,
+     * the Uber JAR will become the main artifact of the module. In this case,
+     * the modules pom.xml could be adjusted to indicate that the main JAR does not
+     * require any dependencies, given that they are already included in the main JAR
+     * and don't have to be resolved again by the tools consuming the main JAR artifact.
+     */
+    @Parameter(property = "keepPomDependenciesForUberJar")
+    boolean keepPomDependenciesForUberJar;
 
     /**
      * The list of system properties defined for the plugin.
@@ -107,9 +120,10 @@ public class BuildMojo extends QuarkusBootstrapMojo {
             // Essentially what this does is to enable the native package type even if a different package type is set
             // in application properties. This is done to preserve what users expect to happen when
             // they execute "mvn package -Dnative" even if quarkus.package.type has been set in application.properties
+            final MavenProject project = mavenProject();
             if (!System.getProperties().containsKey(PACKAGE_TYPE_PROP)
-                    && isNativeProfileEnabled(mavenProject())) {
-                Object packageTypeProp = mavenProject().getProperties().get(PACKAGE_TYPE_PROP);
+                    && isNativeProfileEnabled(project)) {
+                Object packageTypeProp = project.getProperties().get(PACKAGE_TYPE_PROP);
                 String packageType = NATIVE_PACKAGE_TYPE;
                 if (packageTypeProp != null) {
                     packageType = packageTypeProp.toString();
@@ -131,7 +145,7 @@ public class BuildMojo extends QuarkusBootstrapMojo {
                 AugmentAction action = curatedApplication.createAugmentor();
                 AugmentResult result = action.createProductionApplication();
 
-                Artifact original = mavenProject().getArtifact();
+                Artifact original = project.getArtifact();
                 if (result.getJar() != null) {
 
                     final boolean uberJarWithSuffix = result.getJar().isUberJar()
@@ -153,8 +167,29 @@ public class BuildMojo extends QuarkusBootstrapMojo {
                         }
                     }
                     if (uberJarWithSuffix) {
-                        projectHelper.attachArtifact(mavenProject(), result.getJar().getPath().toFile(),
+                        projectHelper.attachArtifact(project, result.getJar().getPath().toFile(),
                                 result.getJar().getClassifier());
+                    } else if (result.getJar().isUberJar() && !keepPomDependenciesForUberJar) {
+                        Path pomOutput = Path.of(project.getBuild().getDirectory())
+                                .resolve("flattened-" + project.getArtifactId() + "-" + project.getVersion() + ".pom");
+                        Model model = project.getModel().clone();
+                        model.setBuild(null);
+                        model.setDependencies(List.of());
+                        model.setDependencyManagement(null);
+                        model.setPluginRepositories(List.of());
+                        model.setProfiles(List.of());
+                        model.setProperties(new Properties());
+                        model.setRepositories(List.of());
+                        model.setReporting(null);
+                        model.setReports(null);
+
+                        try {
+                            Files.createDirectories(pomOutput.getParent());
+                            ModelUtils.persistModel(pomOutput, model);
+                        } catch (IOException e) {
+                            throw new MojoExecutionException("Failed to persist flattened Uber JAR POM to " + pomOutput, e);
+                        }
+                        project.setPomFile(pomOutput.toFile());
                     }
                 }
             } finally {
