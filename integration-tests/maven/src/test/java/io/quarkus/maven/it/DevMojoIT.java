@@ -57,6 +57,54 @@ import io.restassured.RestAssured;
 public class DevMojoIT extends RunAndCheckMojoTestBase {
 
     @Test
+    public void testExternalReloadableArtifacts() throws Exception {
+
+        final File libDir = initProject("projects/external-reloadable-artifacts/acme-lib");
+        final RunningInvoker libInvoker = new RunningInvoker(libDir, false);
+        install(libInvoker);
+
+        testDir = initProject("projects/external-reloadable-artifacts/app");
+        run(true);
+        assertThat(DevModeTestUtils.getHttpResponse("/hello")).isEqualTo("hello");
+
+        // add a new method AcmeLib.getBonjourGreeting()
+        final File acmeLibJava = libDir.toPath().resolve("src").resolve("main").resolve("java").resolve("org").resolve("acme")
+                .resolve("AcmeLib.java").toFile();
+        assertThat(acmeLibJava).exists();
+        filter(acmeLibJava, Map.of("/*", "", "*/", ""));
+        install(libInvoker);
+
+        // update the HelloResource to call AmceLib.getBonjourGreeting()
+        final File helloResourceJava = testDir.toPath().resolve("src").resolve("main").resolve("java").resolve("org")
+                .resolve("acme")
+                .resolve("HelloResource.java").toFile();
+        assertThat(helloResourceJava).exists();
+        filter(helloResourceJava, Map.of("AcmeLib.getHelloGreeting()", "AcmeLib.getBonjourGreeting()"));
+        assertThat(DevModeTestUtils.getHttpResponse("/hello")).isEqualTo("bonjour");
+
+        // change the AcmeLib.getBonjourGreeting() impl
+        filter(acmeLibJava, Map.of("bonjour", "bonjour!"));
+        install(libInvoker);
+
+        // change the HelloResource
+        filter(helloResourceJava, Map.of("AcmeLib.getBonjourGreeting()", "AcmeLib.getBonjourGreeting().toUpperCase()"));
+        assertThat(DevModeTestUtils.getHttpResponse("/hello")).isEqualTo("BONJOUR!");
+    }
+
+    private static void install(final RunningInvoker libInvoker)
+            throws Exception {
+        final MavenProcessInvocationResult libResult = libInvoker.execute(List.of("install"), Map.of());
+        final Process libBuildProcess = libResult.getProcess();
+        if (libBuildProcess == null) {
+            if (libResult.getExecutionException() == null) {
+                throw new IllegalStateException("Failed to build the external lib project");
+            }
+            throw libResult.getExecutionException();
+        }
+        libBuildProcess.waitFor();
+    }
+
+    @Test
     public void testSystemPropertiesConfig() throws MavenInvocationException, IOException {
         testDir = initProject("projects/dev-mode-sys-props-config");
         run(true);
