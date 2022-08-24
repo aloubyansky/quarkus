@@ -27,20 +27,22 @@ import io.quarkus.paths.PathCollection;
 public class JavaCompilationProvider implements CompilationProvider {
 
     private static final Logger log = Logger.getLogger(JavaCompilationProvider.class);
+    static final String PROVIDER_KEY = "java";
 
     // -g is used to make the java compiler generate all debugging info
     // -parameters is used to generate metadata for reflection on method parameters
     // this is useful when people using debuggers against their hot-reloaded app
-    private static final Set<String> COMPILER_OPTIONS = Set.of("-g", "-parameters");
+    static final Set<String> COMPILER_OPTIONS = Set.of("-g", "-parameters");
     private static final Set<String> IGNORE_NAMESPACES = Set.of("org.osgi");
 
     JavaCompiler compiler;
     StandardJavaFileManager fileManager;
     DiagnosticCollector<JavaFileObject> fileManagerDiagnostics;
+    List<String> compilerFlags;
 
     @Override
     public String getProviderKey() {
-        return "java";
+        return PROVIDER_KEY;
     }
 
     @Override
@@ -57,22 +59,15 @@ public class JavaCompilationProvider implements CompilationProvider {
         if (compiler == null) {
             throw new RuntimeException("No system java compiler provided");
         }
+
+        final long start = System.currentTimeMillis();
         try {
-            if (fileManager == null) {
-                fileManager = compiler.getStandardFileManager(fileManagerDiagnostics = new DiagnosticCollector<>(), null,
-                        context.getSourceEncoding());
-            }
+            StandardJavaFileManager fileManager = getJavaFileManager(context);
 
             DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
-            fileManager.setLocation(StandardLocation.CLASS_PATH, context.getClasspath());
-            fileManager.setLocation(StandardLocation.CLASS_OUTPUT, List.of(context.getOutputDirectory()));
-
-            CompilerFlags compilerFlags = new CompilerFlags(COMPILER_OPTIONS, context.getCompilerOptions(getProviderKey()),
-                    context.getReleaseJavaVersion(), context.getSourceJavaVersion(), context.getTargetJvmVersion());
 
             Iterable<? extends JavaFileObject> sources = fileManager.getJavaFileObjectsFromFiles(filesToCompile);
-            JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager, diagnostics,
-                    compilerFlags.toList(), null, sources);
+            JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager, diagnostics, compilerFlags, null, sources);
 
             if (!task.call()) {
                 StringBuilder sb = new StringBuilder("\u001B[91mCompilation Failed:");
@@ -89,12 +84,42 @@ public class JavaCompilationProvider implements CompilationProvider {
             if (!fileManagerDiagnostics.getDiagnostics().isEmpty()) {
                 logDiagnostics(fileManagerDiagnostics);
                 fileManager.close();
-                fileManagerDiagnostics = null;
                 fileManager = null;
             }
         } catch (IOException e) {
             throw new RuntimeException("Cannot close file manager", e);
+        } finally {
+            System.out.println("COMPILATION TOOK " + (System.currentTimeMillis() - start));
         }
+    }
+
+    private StandardJavaFileManager getJavaFileManager(Context context) throws IOException {
+
+        if (fileManager == null) {
+            fileManagerDiagnostics = new DiagnosticCollector<>();
+            compilerFlags = new CompilerFlags(JavaCompilationProvider.COMPILER_OPTIONS,
+                    context.getCompilerOptions(JavaCompilationProvider.PROVIDER_KEY),
+                    context.getReleaseJavaVersion(), context.getSourceJavaVersion(), context.getTargetJvmVersion()).toList();
+            if (context.getReloadableClasspath().isEmpty()) {
+                fileManager = compiler.getStandardFileManager(fileManagerDiagnostics, null, context.getSourceEncoding());
+            } else {
+                final ReloadableJavaFileManager reloadableFM = new ReloadableJavaFileManager(compiler, fileManagerDiagnostics,
+                        context);
+                reloadableFM.setStaticClassPath(context.getClasspath());
+                fileManager = reloadableFM;
+            }
+        }
+
+        if (context.getReloadableClasspath().isEmpty()) {
+            fileManager.setLocation(StandardLocation.CLASS_PATH, context.getClasspath());
+            fileManager.setLocation(StandardLocation.CLASS_OUTPUT, List.of(context.getOutputDirectory()));
+        } else {
+            final ReloadableJavaFileManager reloadableFM = (ReloadableJavaFileManager) fileManager;
+            reloadableFM.setClassOutput(List.of(context.getOutputDirectory()));
+            reloadableFM.setReloadableClassPath(context.getReloadableClasspath());
+        }
+
+        return fileManager;
     }
 
     @Override
@@ -116,7 +141,6 @@ public class JavaCompilationProvider implements CompilationProvider {
         if (fileManager != null) {
             fileManager.close();
             fileManager = null;
-            fileManagerDiagnostics = null;
         }
     }
 

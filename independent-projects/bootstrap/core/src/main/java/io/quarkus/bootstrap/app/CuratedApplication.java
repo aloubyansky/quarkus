@@ -91,6 +91,10 @@ public class CuratedApplication implements Serializable, AutoCloseable {
         return configuredClassLoading.isFlatTestClassPath();
     }
 
+    public ConfiguredClassLoading getConfiguredClassLoading() {
+        return configuredClassLoading;
+    }
+
     public ApplicationModel getApplicationModel() {
         return appModel;
     }

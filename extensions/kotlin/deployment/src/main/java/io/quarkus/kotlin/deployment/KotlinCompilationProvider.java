@@ -7,6 +7,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.StringJoiner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -71,8 +72,10 @@ public class KotlinCompilationProvider implements CompilationProvider {
                 compilerArguments.setPluginOptions(sanitizedOptions.toArray(new String[0]));
             }
         }
-        compilerArguments.setClasspath(
-                context.getClasspath().stream().map(File::getAbsolutePath).collect(Collectors.joining(File.pathSeparator)));
+        final StringJoiner sj = new StringJoiner(File.pathSeparator);
+        context.getClasspath().forEach(f -> sj.add(f.getAbsolutePath()));
+        context.getReloadableClasspath().forEach(f -> sj.add(f.getAbsolutePath()));
+        compilerArguments.setClasspath(sj.toString());
         compilerArguments.setDestination(context.getOutputDirectory().getAbsolutePath());
         compilerArguments.setFreeArgs(filesToCompile.stream().map(File::getAbsolutePath).collect(Collectors.toList()));
 

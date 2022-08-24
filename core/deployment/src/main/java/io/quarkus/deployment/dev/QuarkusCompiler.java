@@ -66,17 +66,46 @@ public class QuarkusCompiler implements Closeable {
             }
         }
         Set<Path> paths = new HashSet<>();
+        Set<Path> reloadablePaths = new HashSet<>(0);
         for (ResolvedDependency i : application.getApplicationModel().getRuntimeDependencies()) {
-            for (Path p : i.getContentTree().getRoots()) {
-                paths.add(p);
+            if (application.getConfiguredClassLoading().isReloadableArtifact(i.getKey())) {
+                reloadablePaths.addAll(i.getContentTree().getRoots());
+            } else {
+                paths.addAll(i.getContentTree().getRoots());
             }
         }
 
-        Deque<Path> toParse = new ArrayDeque<>(paths);
-        Set<String> parsedFiles = new HashSet<>();
         final String devModeRunnerJarCanonicalPath = context.getDevModeRunnerJarFile() == null
                 ? null
                 : context.getDevModeRunnerJarFile().getCanonicalPath();
+
+        Set<String> parsedFiles = new HashSet<>();
+        parseClassPath(devModeRunnerJarCanonicalPath, classPathElements, new ArrayDeque<>(paths), parsedFiles);
+        final Set<File> reloadableClassPathElements;
+        if (reloadablePaths.isEmpty()) {
+            reloadableClassPathElements = Set.of();
+        } else {
+            reloadableClassPathElements = new HashSet<>(reloadablePaths.size());
+            parseClassPath(devModeRunnerJarCanonicalPath, reloadableClassPathElements, new ArrayDeque<>(reloadablePaths),
+                    parsedFiles);
+        }
+
+        for (DevModeContext.ModuleInfo i : context.getAllModules()) {
+            setupSourceCompilationContext(context, classPathElements, reloadableClassPathElements, i, i.getMain(),
+                    "classes");
+            if (application.getQuarkusBootstrap().getMode() == QuarkusBootstrap.Mode.TEST && i.getTest().isPresent()) {
+                setupSourceCompilationContext(context, classPathElements, reloadableClassPathElements, i, i.getTest().get(),
+                        "test classes");
+            }
+        }
+        this.allHandledExtensions = new HashSet<>();
+        for (CompilationProvider compilationProvider : compilationProviders) {
+            allHandledExtensions.addAll(compilationProvider.handledExtensions());
+        }
+    }
+
+    private void parseClassPath(String devModeRunnerJarCanonicalPath, Set<File> classPathElements, Deque<Path> toParse,
+            Set<String> parsedFiles) throws IOException {
         while (!toParse.isEmpty()) {
             Path path = toParse.poll();
             File file = path.toFile();
@@ -139,21 +168,11 @@ public class QuarkusCompiler implements Closeable {
                 }
             }
         }
-        for (DevModeContext.ModuleInfo i : context.getAllModules()) {
-            setupSourceCompilationContext(context, classPathElements, i, i.getMain(),
-                    "classes");
-            if (application.getQuarkusBootstrap().getMode() == QuarkusBootstrap.Mode.TEST && i.getTest().isPresent()) {
-                setupSourceCompilationContext(context, classPathElements, i, i.getTest().get(), "test classes");
-            }
-        }
-        this.allHandledExtensions = new HashSet<>();
-        for (CompilationProvider compilationProvider : compilationProviders) {
-            allHandledExtensions.addAll(compilationProvider.handledExtensions());
-        }
     }
 
-    public void setupSourceCompilationContext(DevModeContext context, Set<File> classPathElements, DevModeContext.ModuleInfo i,
-            DevModeContext.CompilationUnit compilationUnit, String name) {
+    public void setupSourceCompilationContext(DevModeContext context, Set<File> classPathElements,
+            Set<File> reloadableClassPathElements,
+            DevModeContext.ModuleInfo i, DevModeContext.CompilationUnit compilationUnit, String name) {
         if (!compilationUnit.getSourcePaths().isEmpty()) {
             if (compilationUnit.getClassesPath() == null) {
                 log.warn("No " + name + " directory found for module '" + i.getName()
@@ -169,7 +188,7 @@ public class QuarkusCompiler implements Closeable {
                 this.compilationContexts.put(srcPathStr,
                         new CompilationProvider.Context(
                                 i.getName(),
-                                classPathElements,
+                                classPathElements, reloadableClassPathElements,
                                 i.getProjectDirectory() == null ? null : new File(i.getProjectDirectory()),
                                 sourcePath.toFile(),
                                 new File(compilationUnit.getClassesPath()),
