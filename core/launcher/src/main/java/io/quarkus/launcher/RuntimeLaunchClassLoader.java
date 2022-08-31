@@ -19,6 +19,7 @@ public class RuntimeLaunchClassLoader extends ClassLoader {
     @Override
     protected Class<?> findClass(String name) throws ClassNotFoundException {
         String resourceName = name.replace(".", "/") + ".class";
+        System.out.println("RuntimeLaunchClassLoader.findClass " + resourceName);
         try {
             try (InputStream is = getResourceAsStream(resourceName)) {
                 if (is == null) {

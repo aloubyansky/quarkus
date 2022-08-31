@@ -17,14 +17,27 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-core-deployment</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-bootstrap-core</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-bootstrap-core</artifactId>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-bootstrap-maven-resolver</artifactId>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-bootstrap-gradle-resolver</artifactId>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.jboss</groupId>

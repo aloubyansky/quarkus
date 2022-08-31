@@ -2,7 +2,7 @@ package io.quarkus.test.junit;
 
 import static io.quarkus.test.junit.IntegrationTestUtil.activateLogging;
 import static io.quarkus.test.junit.IntegrationTestUtil.getAdditionalTestResources;
-import static io.quarkus.test.junit.QuarkusTestExtension.IO_QUARKUS_TESTING_TYPE;
+import static io.quarkus.test.junit.QuarkusTestExtensionInternal.IO_QUARKUS_TESTING_TYPE;
 
 import java.io.Closeable;
 import java.util.*;
@@ -77,8 +77,9 @@ public class QuarkusMainTestExtension extends AbstractJvmQuarkusTestExtension
             store.put(IO_QUARKUS_TESTING_TYPE, QuarkusMainTest.class);
         }
 
-        QuarkusTestExtension.ExtensionState state = store.get(QuarkusTestExtension.ExtensionState.class.getName(),
-                QuarkusTestExtension.ExtensionState.class);
+        QuarkusTestExtensionInternal.ExtensionState state = store.get(
+                QuarkusTestExtensionInternal.ExtensionState.class.getName(),
+                QuarkusTestExtensionInternal.ExtensionState.class);
         boolean wrongProfile = !Objects.equals(profile, quarkusTestProfile);
         // we reload the test resources if we changed test class and if we had or will have per-test test resources
         boolean reloadTestResources = !Objects.equals(extensionContext.getRequiredTestClass(), currentJUnitTestClass)

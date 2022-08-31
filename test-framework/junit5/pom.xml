@@ -23,6 +23,7 @@
                     <artifactId>org.eclipse.sisu.inject</artifactId>
                 </exclusion>
             </exclusions>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.eclipse.sisu</groupId>

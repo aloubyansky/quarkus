@@ -75,7 +75,7 @@ public class QuarkusIntegrationTestExtension extends AbstractQuarkusTestWithCont
         if (failedBoot) {
             throwBootFailureException();
         } else {
-            RestAssuredURLManager.setURL(ssl, QuarkusTestExtension.getEndpointPath(context, testHttpEndpointProviders));
+            RestAssuredURLManager.setURL(ssl, QuarkusTestExtensionInternal.getEndpointPath(context, testHttpEndpointProviders));
             TestScopeManager.setup(true);
         }
     }
@@ -98,7 +98,7 @@ public class QuarkusIntegrationTestExtension extends AbstractQuarkusTestWithCont
         boolean wrongProfile = !Objects.equals(selectedProfile, quarkusTestProfile);
         // we reload the test resources if we changed test class and if we had or will have per-test test resources
         boolean reloadTestResources = !Objects.equals(extensionContext.getRequiredTestClass(), currentJUnitTestClass)
-                && (hasPerTestResources || QuarkusTestExtension.hasPerTestResources(extensionContext));
+                && (hasPerTestResources || QuarkusTestExtensionInternal.hasPerTestResources(extensionContext));
         if ((state == null && !failedBoot) || wrongProfile || reloadTestResources) {
             if (wrongProfile || reloadTestResources) {
                 if (state != null) {
