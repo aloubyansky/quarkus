@@ -29,7 +29,15 @@
                     <artifactId>org.eclipse.sisu.inject</artifactId>
                 </exclusion>
             </exclusions>
-            <scope>provided</scope>
+            <!-- scope>provided</scope -->
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-bootstrap-maven-resolver</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-bootstrap-gradle-resolver</artifactId>
         </dependency>
         <dependency>
             <groupId>org.eclipse.sisu</groupId>
