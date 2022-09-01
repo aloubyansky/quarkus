@@ -1,7 +1,5 @@
 package io.quarkus.test.junit;
 
-import java.net.URL;
-
 import org.junit.jupiter.api.extension.ConditionEvaluationResult;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.ParameterContext;
@@ -84,24 +82,5 @@ public class QuarkusTestExtension implements QuarkusTestExtensionInterface {
     public void beforeEach(ExtensionContext context) throws Exception {
         Thread.currentThread().setContextClassLoader(contextCl);
         delegate.beforeEach(context);
-    }
-    
-    private static class DelegatingClassLoader extends ClassLoader {
-    	
-    	private final ClassLoader delegate;
-    	
-    	DelegatingClassLoader(ClassLoader delegate) {
-    		this.delegate = delegate;
-    	}
-    	
-    	@Override
-        protected Class<?> findClass(String name) throws ClassNotFoundException {
-            return delegate.findClass(name);
-        }
-
-        protected URL findResource(String name) {
-            return null;
-        }
-
     }
 }

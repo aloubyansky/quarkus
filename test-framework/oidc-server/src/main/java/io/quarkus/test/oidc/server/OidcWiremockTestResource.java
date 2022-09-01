@@ -26,7 +26,6 @@ import org.jose4j.keys.X509Util;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.extension.responsetemplating.ResponseTemplateTransformer;
-import com.google.common.collect.ImmutableSet;
 
 import io.quarkus.test.common.QuarkusTestResourceLifecycleManager;
 import io.smallrye.jwt.build.Jwt;
@@ -132,8 +131,8 @@ public class OidcWiremockTestResource implements QuarkusTestResourceLifecycleMan
         // define the mock for the introspect endpoint
 
         // Valid
-        defineValidIntrospectionMockTokenStubForUserWithRoles("alice", ImmutableSet.copyOf(getUserRoles()));
-        defineValidIntrospectionMockTokenStubForUserWithRoles("admin", ImmutableSet.copyOf(getAdminRoles()));
+        defineValidIntrospectionMockTokenStubForUserWithRoles("alice", Set.copyOf(getUserRoles()));
+        defineValidIntrospectionMockTokenStubForUserWithRoles("admin", Set.copyOf(getAdminRoles()));
 
         // Invalid
         defineInvalidIntrospectionMockTokenStubForUserWithRoles("expired", emptySet());
