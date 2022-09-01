@@ -10,20 +10,10 @@
         <version>999-SNAPSHOT</version>
     </parent>
 
-    <artifactId>quarkus-junit5</artifactId>
-    <name>Quarkus - Test Framework - JUnit 5</name>
+    <artifactId>quarkus-junit5-api</artifactId>
+    <name>Quarkus - Test Framework - JUnit 5 - API</name>
 
     <dependencies>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-junit5-api</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-junit5-impl</artifactId>
-            <version>${project.version}</version>
-        </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-bootstrap-core</artifactId>

@@ -10,19 +10,15 @@
         <version>999-SNAPSHOT</version>
     </parent>
 
-    <artifactId>quarkus-junit5</artifactId>
-    <name>Quarkus - Test Framework - JUnit 5</name>
+    <artifactId>quarkus-junit5-impl</artifactId>
+    <name>Quarkus - Test Framework - JUnit 5 - Implementation</name>
 
     <dependencies>
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-junit5-api</artifactId>
             <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-junit5-impl</artifactId>
-            <version>${project.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -71,11 +67,11 @@
             <artifactId>mockito-junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
-		<dependency>
-		    <groupId>org.assertj</groupId>
-		    <artifactId>assertj-core</artifactId>
-		    <scope>test</scope>
-		</dependency>
+        <dependency>
+           <groupId>org.assertj</groupId>
+           <artifactId>assertj-core</artifactId>
+           <scope>test</scope>
+        </dependency>
     </dependencies>
 
 </project>

@@ -24,6 +24,8 @@
         <module>derby</module>
         <module>kubernetes-client</module>
         <module>openshift-client</module>
+        <module>junit5-api</module>
+        <module>junit5-impl</module>
         <module>junit5-internal</module>
         <module>junit5-properties</module>
         <module>junit5</module>
