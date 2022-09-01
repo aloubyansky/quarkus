@@ -107,7 +107,7 @@ import io.quarkus.test.junit.internal.SerializationWithXStreamFallbackDeepClone;
 public class QuarkusTestExtensionInternal extends AbstractJvmQuarkusTestExtension
         implements QuarkusTestExtensionInterface {
 
-    private static final Logger log = Logger.getLogger(QuarkusTestExtension.class);
+    private static final Logger log = Logger.getLogger(QuarkusTestExtensionInternal.class);
 
     public static final String QUARKUS_TEST_HANG_DETECTION_TIMEOUT = "quarkus.test.hang-detection-timeout";
     public static final String IO_QUARKUS_TESTING_TYPE = "io.quarkus.testing.type";
@@ -177,7 +177,7 @@ public class QuarkusTestExtensionInternal extends AbstractJvmQuarkusTestExtensio
     };
 
     static {
-        ClassLoader classLoader = QuarkusTestExtension.class.getClassLoader();
+        ClassLoader classLoader = QuarkusTestExtensionInternal.class.getClassLoader();
         if (classLoader instanceof QuarkusClassLoader) {
             ((QuarkusClassLoader) classLoader).addCloseTask(new Runnable() {
                 @Override

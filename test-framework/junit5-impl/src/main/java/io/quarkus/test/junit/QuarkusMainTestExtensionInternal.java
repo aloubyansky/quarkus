@@ -12,14 +12,9 @@ import java.util.logging.Handler;
 import org.jboss.logmanager.LogContext;
 import org.jboss.logmanager.handlers.OutputStreamHandler;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.extension.AfterAllCallback;
-import org.junit.jupiter.api.extension.AfterEachCallback;
-import org.junit.jupiter.api.extension.BeforeAllCallback;
-import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.ParameterContext;
 import org.junit.jupiter.api.extension.ParameterResolutionException;
-import org.junit.jupiter.api.extension.ParameterResolver;
 
 import io.quarkus.bootstrap.app.StartupAction;
 import io.quarkus.bootstrap.logging.InitialConfigurator;
@@ -34,8 +29,8 @@ import io.quarkus.test.junit.main.QuarkusMainIntegrationTest;
 import io.quarkus.test.junit.main.QuarkusMainLauncher;
 import io.quarkus.test.junit.main.QuarkusMainTest;
 
-public class QuarkusMainTestExtension extends AbstractJvmQuarkusTestExtension
-        implements BeforeEachCallback, AfterEachCallback, ParameterResolver, BeforeAllCallback, AfterAllCallback {
+public class QuarkusMainTestExtensionInternal extends AbstractJvmQuarkusTestExtension
+        implements QuarkusMainTestExtensionInterface {
 
     PrepareResult prepareResult;
     private static boolean hasPerTestResources;

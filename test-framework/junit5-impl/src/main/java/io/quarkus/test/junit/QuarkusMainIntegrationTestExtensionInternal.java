@@ -18,12 +18,9 @@ import java.util.Properties;
 import java.util.ServiceLoader;
 
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.extension.AfterEachCallback;
-import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.ParameterContext;
 import org.junit.jupiter.api.extension.ParameterResolutionException;
-import org.junit.jupiter.api.extension.ParameterResolver;
 
 import io.quarkus.test.common.ArtifactLauncher;
 import io.quarkus.test.common.TestResourceManager;
@@ -33,8 +30,8 @@ import io.quarkus.test.junit.main.LaunchResult;
 import io.quarkus.test.junit.main.QuarkusMainLauncher;
 import io.quarkus.test.junit.util.CloseAdaptor;
 
-public class QuarkusMainIntegrationTestExtension extends AbstractQuarkusTestWithContextExtension
-        implements BeforeEachCallback, AfterEachCallback, ParameterResolver {
+public class QuarkusMainIntegrationTestExtensionInternal extends AbstractQuarkusTestWithContextExtension
+        implements QuarkusMainIntegrationTestExtensionInterface {
 
     public static final ExtensionContext.Namespace NAMESPACE = ExtensionContext.Namespace
             .create("io.quarkus.test.main.integration");
@@ -126,7 +123,7 @@ public class QuarkusMainIntegrationTestExtension extends AbstractQuarkusTestWith
                 Map<String, String> additionalProperties = new HashMap<>(testProfileAndProperties.properties);
                 Map<String, String> resourceManagerProps = new HashMap<>(testResourceManager.start());
                 //also make the dev services props accessible from the test
-                resourceManagerProps.putAll(QuarkusMainIntegrationTestExtension.devServicesProps);
+                resourceManagerProps.putAll(QuarkusMainIntegrationTestExtensionInternal.devServicesProps);
                 for (Map.Entry<String, String> i : resourceManagerProps.entrySet()) {
                     old.put(i.getKey(), System.getProperty(i.getKey()));
                     if (i.getValue() == null) {

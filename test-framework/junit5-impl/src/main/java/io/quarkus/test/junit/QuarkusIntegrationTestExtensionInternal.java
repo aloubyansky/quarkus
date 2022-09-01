@@ -27,11 +27,7 @@ import java.util.Properties;
 import java.util.ServiceLoader;
 import java.util.function.Function;
 
-import org.junit.jupiter.api.extension.AfterEachCallback;
-import org.junit.jupiter.api.extension.BeforeAllCallback;
-import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
-import org.junit.jupiter.api.extension.TestInstancePostProcessor;
 import org.opentest4j.TestAbortedException;
 
 import io.quarkus.bootstrap.logging.InitialConfigurator;
@@ -45,8 +41,8 @@ import io.quarkus.test.common.TestResourceManager;
 import io.quarkus.test.common.TestScopeManager;
 import io.quarkus.test.junit.launcher.ArtifactLauncherProvider;
 
-public class QuarkusIntegrationTestExtension extends AbstractQuarkusTestWithContextExtension
-        implements BeforeEachCallback, AfterEachCallback, BeforeAllCallback, TestInstancePostProcessor {
+public class QuarkusIntegrationTestExtensionInternal extends AbstractQuarkusTestWithContextExtension
+        implements QuarkusIntegrationTestExtensionInterface {
 
     private static boolean failedBoot;
 
@@ -168,7 +164,7 @@ public class QuarkusIntegrationTestExtension extends AbstractQuarkusTestWithCont
             Map<String, String> additionalProperties = new HashMap<>(testProfileAndProperties.properties);
             Map<String, String> resourceManagerProps = new HashMap<>(testResourceManager.start());
             //we also make the dev services config accessible from the test itself
-            resourceManagerProps.putAll(QuarkusIntegrationTestExtension.devServicesProps);
+            resourceManagerProps.putAll(QuarkusIntegrationTestExtensionInternal.devServicesProps);
             Map<String, String> old = new HashMap<>();
             for (Map.Entry<String, String> i : resourceManagerProps.entrySet()) {
                 old.put(i.getKey(), System.getProperty(i.getKey()));
