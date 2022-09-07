@@ -1,10 +1,10 @@
 package io.quarkus.it.amazon.lambda;
 
+import java.util.Base64;
 import java.util.HashMap;
 
 import javax.ws.rs.core.MediaType;
 
-import org.apache.commons.codec.binary.Base64;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -51,7 +51,7 @@ public class AmazonLambdaSimpleTestCase {
     private String body(APIGatewayV2HTTPResponse response) {
         if (!response.getIsBase64Encoded())
             return response.getBody();
-        return new String(Base64.decodeBase64(response.getBody()));
+        return new String(Base64.getDecoder().decode(response.getBody()));
     }
 
     private void testGetText(String path) {
@@ -99,7 +99,7 @@ public class AmazonLambdaSimpleTestCase {
     @Test
     public void testPostBinary() throws Exception {
         byte[] bytes = { 0, 1, 2, 3 };
-        String body = Base64.encodeBase64String(bytes);
+        String body = Base64.getEncoder().encodeToString(bytes);
         APIGatewayV2HTTPEvent request = request("/hello");
         request.getRequestContext().getHttp().setMethod("POST");
         request.setHeaders(new HashMap<>());
@@ -111,7 +111,7 @@ public class AmazonLambdaSimpleTestCase {
         Assertions.assertEquals(out.getHeaders().get("Content-Type"),
                 MediaType.APPLICATION_OCTET_STREAM);
         Assertions.assertTrue(out.getIsBase64Encoded());
-        byte[] rtn = Base64.decodeBase64(out.getBody());
+        byte[] rtn = Base64.getDecoder().decode(out.getBody());
         Assertions.assertEquals(rtn[0], 4);
         Assertions.assertEquals(rtn[1], 5);
         Assertions.assertEquals(rtn[2], 6);

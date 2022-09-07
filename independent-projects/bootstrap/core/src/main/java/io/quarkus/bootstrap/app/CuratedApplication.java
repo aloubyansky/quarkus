@@ -125,7 +125,9 @@ public class CuratedApplication implements Serializable, AutoCloseable {
      * which is used to generate a list of build chain customisers to control the build.
      */
     public AugmentAction createAugmentor(String functionName, Map<String, Object> props) {
+        final ClassLoader originalCl = Thread.currentThread().getContextClassLoader();
         try {
+            Thread.currentThread().setContextClassLoader(getAugmentClassLoader());
             Class<?> augmentor = getAugmentClassLoader().loadClass(AUGMENTOR);
             Function<Object, List<?>> function = (Function<Object, List<?>>) getAugmentClassLoader()
                     .loadClass(functionName)
@@ -135,6 +137,8 @@ public class CuratedApplication implements Serializable, AutoCloseable {
             return (AugmentAction) augmentor.getConstructor(CuratedApplication.class, List.class).newInstance(this, res);
         } catch (Exception e) {
             throw new RuntimeException(e);
+        } finally {
+            Thread.currentThread().setContextClassLoader(originalCl);
         }
     }
 

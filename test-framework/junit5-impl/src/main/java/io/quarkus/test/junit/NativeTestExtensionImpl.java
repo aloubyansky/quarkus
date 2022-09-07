@@ -19,11 +19,7 @@ import java.util.OptionalInt;
 import java.util.function.Function;
 
 import org.eclipse.microprofile.config.Config;
-import org.junit.jupiter.api.extension.AfterEachCallback;
-import org.junit.jupiter.api.extension.BeforeAllCallback;
-import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
-import org.junit.jupiter.api.extension.TestInstancePostProcessor;
 import org.opentest4j.TestAbortedException;
 
 import io.quarkus.runtime.test.TestHttpEndpointProvider;
@@ -37,8 +33,7 @@ import io.quarkus.test.common.TestScopeManager;
 import io.quarkus.test.junit.launcher.ConfigUtil;
 import io.quarkus.test.junit.launcher.NativeImageLauncherProvider;
 
-public class NativeTestExtension extends AbstractQuarkusTestWithContextExtension
-        implements BeforeEachCallback, AfterEachCallback, BeforeAllCallback, TestInstancePostProcessor {
+public class NativeTestExtensionImpl extends AbstractQuarkusTestWithContextExtension implements NativeTestExtensionInterface {
 
     private static boolean failedBoot;
 
@@ -65,7 +60,7 @@ public class NativeTestExtension extends AbstractQuarkusTestWithContextExtension
         if (failedBoot) {
             throwBootFailureException();
         } else {
-            RestAssuredURLManager.setURL(ssl, QuarkusTestExtension.getEndpointPath(context, testHttpEndpointProviders));
+            RestAssuredURLManager.setURL(ssl, QuarkusTestExtensionImpl.getEndpointPath(context, testHttpEndpointProviders));
             TestScopeManager.setup(true);
         }
     }
@@ -84,7 +79,7 @@ public class NativeTestExtension extends AbstractQuarkusTestWithContextExtension
         boolean wrongProfile = !Objects.equals(selectedProfile, quarkusTestProfile);
         // we reload the test resources if we changed test class and if we had or will have per-test test resources
         boolean reloadTestResources = !Objects.equals(extensionContext.getRequiredTestClass(), currentJUnitTestClass)
-                && (hasPerTestResources || QuarkusTestExtension.hasPerTestResources(extensionContext));
+                && (hasPerTestResources || QuarkusTestExtensionImpl.hasPerTestResources(extensionContext));
         if ((state == null && !failedBoot) || wrongProfile || reloadTestResources) {
             if (wrongProfile || reloadTestResources) {
                 if (state != null) {

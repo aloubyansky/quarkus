@@ -7,8 +7,8 @@ import static io.quarkus.test.junit.DisabledOnIntegrationTest.ArtifactType.ALL;
 import static io.quarkus.test.junit.DisabledOnIntegrationTest.ArtifactType.CONTAINER;
 import static io.quarkus.test.junit.DisabledOnIntegrationTest.ArtifactType.JAR;
 import static io.quarkus.test.junit.DisabledOnIntegrationTest.ArtifactType.NATIVE_BINARY;
-import static io.quarkus.test.junit.IntegrationTestUtil.getArtifactType;
-import static io.quarkus.test.junit.IntegrationTestUtil.readQuarkusArtifactProperties;
+import static io.quarkus.test.junit.QuarkusPropertiesUtils.getArtifactType;
+import static io.quarkus.test.junit.QuarkusPropertiesUtils.readQuarkusArtifactProperties;
 import static org.junit.platform.commons.util.AnnotationUtils.findAnnotation;
 
 import java.lang.annotation.Annotation;

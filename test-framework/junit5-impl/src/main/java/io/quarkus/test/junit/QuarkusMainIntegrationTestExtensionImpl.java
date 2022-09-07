@@ -1,12 +1,12 @@
 package io.quarkus.test.junit;
 
-import static io.quarkus.test.junit.IntegrationTestUtil.activateLogging;
-import static io.quarkus.test.junit.IntegrationTestUtil.determineBuildOutputDirectory;
 import static io.quarkus.test.junit.IntegrationTestUtil.determineTestProfileAndProperties;
 import static io.quarkus.test.junit.IntegrationTestUtil.getAdditionalTestResources;
 import static io.quarkus.test.junit.IntegrationTestUtil.getSysPropsToRestore;
 import static io.quarkus.test.junit.IntegrationTestUtil.handleDevServices;
-import static io.quarkus.test.junit.IntegrationTestUtil.readQuarkusArtifactProperties;
+import static io.quarkus.test.junit.QuarkusPropertiesUtils.activateLogging;
+import static io.quarkus.test.junit.QuarkusPropertiesUtils.determineBuildOutputDirectory;
+import static io.quarkus.test.junit.QuarkusPropertiesUtils.readQuarkusArtifactProperties;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -18,12 +18,9 @@ import java.util.Properties;
 import java.util.ServiceLoader;
 
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.extension.AfterEachCallback;
-import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.ParameterContext;
 import org.junit.jupiter.api.extension.ParameterResolutionException;
-import org.junit.jupiter.api.extension.ParameterResolver;
 
 import io.quarkus.runtime.logging.JBossVersion;
 import io.quarkus.test.common.ArtifactLauncher;
@@ -34,8 +31,8 @@ import io.quarkus.test.junit.main.LaunchResult;
 import io.quarkus.test.junit.main.QuarkusMainLauncher;
 import io.quarkus.test.junit.util.CloseAdaptor;
 
-public class QuarkusMainIntegrationTestExtension extends AbstractQuarkusTestWithContextExtension
-        implements BeforeEachCallback, AfterEachCallback, ParameterResolver {
+public class QuarkusMainIntegrationTestExtensionImpl extends AbstractQuarkusTestWithContextExtension
+        implements QuarkusMainIntegrationTestExtensionInterface {
 
     public static final ExtensionContext.Namespace NAMESPACE = ExtensionContext.Namespace
             .create("io.quarkus.test.main.integration");
@@ -129,7 +126,7 @@ public class QuarkusMainIntegrationTestExtension extends AbstractQuarkusTestWith
                 Map<String, String> additionalProperties = new HashMap<>(testProfileAndProperties.properties);
                 Map<String, String> resourceManagerProps = new HashMap<>(testResourceManager.start());
                 //also make the dev services props accessible from the test
-                resourceManagerProps.putAll(QuarkusMainIntegrationTestExtension.devServicesProps);
+                resourceManagerProps.putAll(QuarkusMainIntegrationTestExtensionImpl.devServicesProps);
                 for (Map.Entry<String, String> i : resourceManagerProps.entrySet()) {
                     old.put(i.getKey(), System.getProperty(i.getKey()));
                     if (i.getValue() == null) {

@@ -21,6 +21,7 @@ public class CommandLineArgumentsProcessor {
         return SyntheticBeanBuildItem.configure(Object.class).providerType(stringArray).addType(stringArray)
                 .addQualifier(CommandLineArguments.class)
                 .setRuntimeInit().supplier(rawCommandLineArgumentsBuildItem)
+                .forceApplicationClass()
                 .unremovable().done();
     }
 

@@ -26,6 +26,9 @@
         <module>openshift-client</module>
         <module>junit5-internal</module>
         <module>junit5-properties</module>
+        <module>junit5-api</module>
+        <module>junit5-impl</module>
+        <module>junit5-impl-hidden</module>
         <module>junit5</module>
         <module>junit5-mockito</module>
         <module>junit5-mockito-config</module>

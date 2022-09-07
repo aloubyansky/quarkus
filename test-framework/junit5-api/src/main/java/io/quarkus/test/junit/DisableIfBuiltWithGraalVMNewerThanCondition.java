@@ -1,6 +1,6 @@
 package io.quarkus.test.junit;
 
-import static io.quarkus.test.junit.IntegrationTestUtil.readQuarkusArtifactProperties;
+import static io.quarkus.test.junit.QuarkusPropertiesUtils.readQuarkusArtifactProperties;
 import static org.junit.platform.commons.util.AnnotationUtils.findAnnotation;
 
 import java.lang.annotation.Annotation;

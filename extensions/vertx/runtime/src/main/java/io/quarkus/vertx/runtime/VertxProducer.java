@@ -56,7 +56,7 @@ public class VertxProducer {
      * @param event
      * @param beanManager
      */
-    void undeployVerticles(@Observes @BeforeDestroyed(ApplicationScoped.class) Object event, BeanManager beanManager) {
+    public void undeployVerticles(@Observes @BeforeDestroyed(ApplicationScoped.class) Object event, BeanManager beanManager) {
         // Only beans with the AbstractVerticle in the set of bean types are considered - we need a deployment id
         Set<Bean<?>> beans = beanManager.getBeans(AbstractVerticle.class, Any.Literal.INSTANCE);
         Context applicationContext = beanManager.getContext(ApplicationScoped.class);

@@ -1,26 +1,25 @@
 package io.quarkus.test.junit;
 
-import static io.quarkus.test.junit.IntegrationTestUtil.activateLogging;
 import static io.quarkus.test.junit.IntegrationTestUtil.getAdditionalTestResources;
+import static io.quarkus.test.junit.QuarkusPropertiesUtils.activateLogging;
 
 import java.io.Closeable;
 import java.lang.reflect.Method;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.logging.Handler;
 
 import org.jboss.logmanager.LogContext;
 import org.jboss.logmanager.handlers.OutputStreamHandler;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.extension.AfterAllCallback;
-import org.junit.jupiter.api.extension.AfterEachCallback;
-import org.junit.jupiter.api.extension.BeforeAllCallback;
-import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
-import org.junit.jupiter.api.extension.InvocationInterceptor;
 import org.junit.jupiter.api.extension.ParameterContext;
 import org.junit.jupiter.api.extension.ParameterResolutionException;
-import org.junit.jupiter.api.extension.ParameterResolver;
 import org.junit.jupiter.api.extension.ReflectiveInvocationContext;
 
 import io.quarkus.bootstrap.app.StartupAction;
@@ -36,9 +35,7 @@ import io.quarkus.test.junit.main.LaunchResult;
 import io.quarkus.test.junit.main.QuarkusMainIntegrationTest;
 import io.quarkus.test.junit.main.QuarkusMainLauncher;
 
-public class QuarkusMainTestExtension extends AbstractJvmQuarkusTestExtension
-        implements InvocationInterceptor, BeforeEachCallback, AfterEachCallback, ParameterResolver, BeforeAllCallback,
-        AfterAllCallback {
+public class QuarkusMainTestExtensionImpl extends AbstractJvmQuarkusTestExtension implements QuarkusMainTestExtensionInterface {
 
     PrepareResult prepareResult;
     private static boolean hasPerTestResources;

@@ -1,5 +1,7 @@
 package io.quarkus.test.junit;
 
+import static io.quarkus.test.junit.QuarkusPropertiesUtils.activateLogging;
+
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -106,7 +108,7 @@ public class BasicLoggingEnabler implements BeforeAllCallback {
         // activate logging
 
         try {
-            IntegrationTestUtil.activateLogging();
+            activateLogging();
         } catch (RuntimeException e) {
             // don't be too noisy (don't log the stacktrace by default)
             System.err.println("BasicLoggingEnabler failed to enable basic logging: " + e);

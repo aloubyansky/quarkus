@@ -12,7 +12,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 
-import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.runtime.util.ClassPathUtils;
 
 /**
@@ -21,6 +20,8 @@ import io.quarkus.runtime.util.ClassPathUtils;
 public final class PathTestHelper {
     private static final String TARGET = "target";
     private static final Map<String, String> TEST_TO_MAIN_DIR_FRAGMENTS = new HashMap<>();
+
+    private static final String TEST_TO_MAIN_MAPPINGS = "TEST_TO_MAIN_MAPPINGS";
 
     static {
         //region Eclipse
@@ -107,7 +108,7 @@ public final class PathTestHelper {
                 File.separator + "classes");
         //endregion
 
-        String mappings = System.getenv(BootstrapConstants.TEST_TO_MAIN_MAPPINGS);
+        String mappings = System.getenv(TEST_TO_MAIN_MAPPINGS);
         if (mappings != null) {
             Stream.of(mappings.split(","))
                     .filter(s -> !s.isEmpty())

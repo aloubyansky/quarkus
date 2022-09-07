@@ -250,11 +250,9 @@ public class BeanProcessor {
             }
             // Generate beans
             for (BeanInfo bean : beans) {
-
                 primaryTasks.add(executor.submit(new Callable<Collection<Resource>>() {
                     @Override
                     public Collection<Resource> call() throws Exception {
-
                         Collection<Resource> beanResources = beanGenerator.generate(bean);
                         for (Resource resource : beanResources) {
                             if (SpecialType.BEAN == resource.getSpecialType()) {

@@ -43,7 +43,8 @@ public class RestAssuredURLManager {
         Method httpClient;
         Class<?> httpClientConfig;
         try {
-            Class<?> restAssured = Class.forName("io.restassured.RestAssured");
+            Class<?> restAssured = Class.forName("io.restassured.RestAssured", true,
+                    Thread.currentThread().getContextClassLoader());
             p = restAssured.getField("port");
             p.setAccessible(true);
             baseURI = restAssured.getField("baseURI");
@@ -57,11 +58,13 @@ public class RestAssuredURLManager {
             configM = restAssured.getMethod("config");
             configM.setAccessible(true);
 
-            httpClientConfig = Class.forName("io.restassured.config.HttpClientConfig");
+            httpClientConfig = Class.forName("io.restassured.config.HttpClientConfig", true,
+                    Thread.currentThread().getContextClassLoader());
             setParam = httpClientConfig.getMethod("setParam", String.class, Object.class);
             setParam.setAccessible(true);
 
-            Class<?> restAssuredConfigClass = Class.forName("io.restassured.config.RestAssuredConfig");
+            Class<?> restAssuredConfigClass = Class.forName("io.restassured.config.RestAssuredConfig", true,
+                    Thread.currentThread().getContextClassLoader());
             httpClient = restAssuredConfigClass.getMethod("httpClient", httpClientConfig);
             httpClient.setAccessible(true);
 

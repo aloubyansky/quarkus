@@ -133,7 +133,6 @@ public class BuildMojo extends QuarkusBootstrapMojo {
 
                 Artifact original = mavenProject().getArtifact();
                 if (result.getJar() != null) {
-
                     final boolean uberJarWithSuffix = result.getJar().isUberJar()
                             && result.getJar().getOriginalArtifact() != null
                             && !result.getJar().getOriginalArtifact().equals(result.getJar().getPath());

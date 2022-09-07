@@ -39,9 +39,6 @@ import io.quarkus.test.common.TestClassIndexer;
 
 public class AbstractJvmQuarkusTestExtension extends AbstractQuarkusTestWithContextExtension {
 
-    protected static final String TEST_LOCATION = "test-location";
-    protected static final String TEST_CLASS = "test-class";
-
     protected ClassLoader originalCl;
 
     protected static Class<? extends QuarkusTestProfile> quarkusTestProfile;
@@ -142,14 +139,13 @@ public class AbstractJvmQuarkusTestExtension extends AbstractQuarkusTestWithCont
         if (CurrentTestApplication.curatedApplication != null) {
             curatedApplication = CurrentTestApplication.curatedApplication;
         } else {
-            final QuarkusBootstrap.Builder runnerBuilder = QuarkusBootstrap.builder()
+            curatedApplication = QuarkusBootstrap.builder()
+                    .setBaseClassLoader(getClass().getClassLoader())
                     .setIsolateDeployment(true)
-                    .setMode(QuarkusBootstrap.Mode.TEST);
-            runnerBuilder.setTargetDirectory(PathTestHelper.getProjectBuildDir(projectRoot, testClassLocation));
-            runnerBuilder.setProjectRoot(projectRoot);
-            runnerBuilder.setApplicationRoot(rootBuilder.build());
-
-            curatedApplication = runnerBuilder
+                    .setMode(QuarkusBootstrap.Mode.TEST)
+                    .setTargetDirectory(PathTestHelper.getProjectBuildDir(projectRoot, testClassLocation))
+                    .setProjectRoot(projectRoot)
+                    .setApplicationRoot(rootBuilder.build())
                     .setTest(true)
                     .build()
                     .bootstrap();
@@ -168,11 +164,11 @@ public class AbstractJvmQuarkusTestExtension extends AbstractQuarkusTestWithCont
         Timing.staticInitStarted(curatedApplication.getBaseRuntimeClassLoader(),
                 curatedApplication.getQuarkusBootstrap().isAuxiliaryApplication());
         final Map<String, Object> props = new HashMap<>();
-        props.put(TEST_LOCATION, testClassLocation);
-        props.put(TEST_CLASS, requiredTestClass);
+        props.put(Constants.TEST_LOCATION, testClassLocation);
+        props.put(Constants.TEST_CLASS, requiredTestClass);
         quarkusTestProfile = profile;
         return new PrepareResult(curatedApplication
-                .createAugmentor(QuarkusTestExtension.TestBuildChainFunction.class.getName(), props), profileInstance,
+                .createAugmentor("io.quarkus.test.junit.TestBuildChainFunction", props), profileInstance,
                 curatedApplication);
     }
 
