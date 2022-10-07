@@ -11,6 +11,12 @@ import java.util.Properties;
 import java.util.ServiceLoader;
 import java.util.function.Consumer;
 
+import org.eclipse.microprofile.config.Config;
+import org.eclipse.microprofile.config.ConfigProvider;
+
+import io.quarkus.bootstrap.classloading.ClassPathElement;
+import io.quarkus.bootstrap.classloading.FilteredClassPathElement;
+import io.quarkus.bootstrap.classloading.QuarkusClassLoader;
 import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.bootstrap.prebuild.CodeGenException;
 import io.quarkus.deployment.codegen.CodeGenData;
@@ -18,10 +24,6 @@ import io.quarkus.deployment.dev.DevModeContext;
 import io.quarkus.deployment.dev.DevModeContext.ModuleInfo;
 import io.quarkus.paths.PathCollection;
 import io.quarkus.runtime.LaunchMode;
-import io.quarkus.runtime.configuration.ConfigUtils;
-import io.smallrye.config.PropertiesConfigSource;
-import io.smallrye.config.SmallRyeConfig;
-import io.smallrye.config.SysPropConfigSource;
 
 /**
  * A set of methods to initialize and execute {@link CodeGenProvider}s.
@@ -149,23 +151,36 @@ public class CodeGenerator {
             boolean test) throws CodeGenException {
         return callWithClassloader(deploymentClassLoader, () -> {
 
-            final PropertiesConfigSource pcs = new PropertiesConfigSource(properties, "Build system");
-            final SysPropConfigSource spcs = new SysPropConfigSource();
+            List<ClassPathElement> allElements = ((QuarkusClassLoader) deploymentClassLoader).getAllElements(true);
+            // we don't want to load config sources from the current module because they haven't been compiled yet
+            final QuarkusClassLoader.Builder configClBuilder = QuarkusClassLoader
+                    .builder("CodeGenerator Config ClassLoader", QuarkusClassLoader.getSystemClassLoader(), false);
 
-            // Discovered Config classes may cause issues here, because this goal runs before compile
-            final SmallRyeConfig config = ConfigUtils.configBuilder(false, false, launchMode)
-                    .setAddDiscoveredSources(false)
-                    .setAddDiscoveredInterceptors(false)
-                    .setAddDiscoveredConverters(false)
-                    .withProfile(launchMode.getDefaultProfile())
-                    .withSources(pcs, spcs)
-                    .build();
+            final Collection<Path> appRoots = appModel.getAppArtifact().getContentTree().getRoots();
+            for (ClassPathElement e : allElements) {
+                if (appRoots.contains(e.getRoot())) {
+                    configClBuilder.addElement(
+                            new FilteredClassPathElement(e,
+                                    List.of("META-INF/services/org.eclipse.microprofile.config.spi.ConfigSourceProvider")));
+                } else {
+                    configClBuilder.addElement(e);
+                }
+            }
 
-            CodeGenProvider provider = data.provider;
-            return provider.shouldRun(data.sourceDir, config)
-                    && provider.trigger(
-                            new CodeGenContext(appModel, data.outPath, data.buildDir, data.sourceDir, data.redirectIO, config,
-                                    test));
+            final QuarkusClassLoader configCl = configClBuilder.build();
+
+            try {
+                final Config config = ConfigProvider.getConfig(configCl);
+
+                CodeGenProvider provider = data.provider;
+                return provider.shouldRun(data.sourceDir, config)
+                        && provider.trigger(
+                                new CodeGenContext(appModel, data.outPath, data.buildDir, data.sourceDir, data.redirectIO,
+                                        config,
+                                        test));
+            } finally {
+                configCl.close();
+            }
         });
     }
 

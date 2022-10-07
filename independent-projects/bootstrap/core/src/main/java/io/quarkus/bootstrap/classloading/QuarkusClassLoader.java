@@ -555,6 +555,15 @@ public class QuarkusClassLoader extends ClassLoader implements Closeable {
         return ret;
     }
 
+    public List<ClassPathElement> getAllElements(boolean localOnly) {
+        List<ClassPathElement> ret = new ArrayList<>();
+        if (parent instanceof QuarkusClassLoader && !localOnly) {
+            ret.addAll(((QuarkusClassLoader) parent).getAllElements(localOnly));
+        }
+        ret.addAll(elements);
+        return ret;
+    }
+
     public List<String> getLocalClassNames() {
         List<String> ret = new ArrayList<>();
         for (String name : getState().loadableResources.keySet()) {
