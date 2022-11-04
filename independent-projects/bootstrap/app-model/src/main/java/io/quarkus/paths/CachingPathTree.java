@@ -42,7 +42,7 @@ public class CachingPathTree implements OpenPathTree {
             for (PathVisitSnapshot visit : snapshot.values()) {
                 wrapper.target = visit;
                 visitor.visitPath(wrapper);
-                if (wrapper.stopWalking) {
+                if (wrapper.walkingFlag == PathTreeVisit.WALKING_STOP) {
                     break;
                 }
             }
@@ -56,7 +56,7 @@ public class CachingPathTree implements OpenPathTree {
             public void visitPath(PathVisit visit) {
                 final PathVisitSnapshot snapshot = new PathVisitSnapshot(visit);
                 walkSnapshot.put(snapshot.getRelativePath("/"), snapshot);
-                if (wrapper.stopWalking) {
+                if (wrapper.walkingFlag == PathTreeVisit.WALKING_STOP) {
                     return;
                 }
                 wrapper.target = snapshot;
@@ -151,7 +151,7 @@ public class CachingPathTree implements OpenPathTree {
 
     private static class PathVisitWrapper implements PathVisit {
         PathVisit target;
-        boolean stopWalking;
+        byte walkingFlag;
 
         @Override
         public Path getRoot() {
@@ -175,7 +175,17 @@ public class CachingPathTree implements OpenPathTree {
 
         @Override
         public void stopWalking() {
-            stopWalking = true;
+            walkingFlag = PathTreeVisit.WALKING_STOP;
+        }
+
+        @Override
+        public void skipChildren() {
+            walkingFlag = PathTreeVisit.WALKING_SKIP_CHILDREN;
+        }
+
+        @Override
+        public void skipSiblings() {
+            walkingFlag = PathTreeVisit.WALKING_SKIP_SIBLINGS;
         }
     }
 
@@ -224,6 +234,14 @@ public class CachingPathTree implements OpenPathTree {
 
         @Override
         public void stopWalking() {
+        }
+
+        @Override
+        public void skipChildren() {
+        }
+
+        @Override
+        public void skipSiblings() {
         }
     }
 }

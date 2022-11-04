@@ -2,32 +2,50 @@ package io.quarkus.paths;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.stream.Stream;
 
 class PathTreeVisit implements PathVisit {
+
+    static final byte WALKING_STOP = 1;
+    static final byte WALKING_SKIP_CHILDREN = 2;
+    static final byte WALKING_SKIP_SIBLINGS = 3;
 
     static void walk(Path root, Path rootDir, PathFilter pathFilter, Map<String, String> multiReleaseMapping,
             PathVisitor visitor) {
         final PathTreeVisit visit = new PathTreeVisit(root, rootDir, pathFilter, multiReleaseMapping);
-        try (Stream<Path> files = Files.walk(rootDir)) {
-            final Iterator<Path> i = files.iterator();
-            while (i.hasNext()) {
-                if (!visit.setCurrent(i.next())) {
-                    continue;
+        try {
+            Files.walkFileTree(rootDir, new SimpleFileVisitor<Path>() {
+
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                    return visitPath(dir);
                 }
-                visitor.visitPath(visit);
-                if (visit.isStopWalking()) {
-                    break;
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                    return visitPath(file);
                 }
-            }
+
+                private FileVisitResult visitPath(Path path) {
+                    if (!visit.setCurrent(path)) {
+                        return FileVisitResult.CONTINUE;
+                    }
+                    visitor.visitPath(visit);
+                    if (visit.isStopWalking()) {
+                        return FileVisitResult.TERMINATE;
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+            });
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to walk directory " + root, e);
         }
@@ -58,7 +76,7 @@ class PathTreeVisit implements PathVisit {
 
     private Path current;
     private String relativePath;
-    private boolean stopWalking;
+    private byte walkingFlag;
 
     private PathTreeVisit(Path root, Path rootDir, PathFilter pathFilter, Map<String, String> multiReleaseMapping) {
         this.root = root;
@@ -80,11 +98,29 @@ class PathTreeVisit implements PathVisit {
 
     @Override
     public void stopWalking() {
-        stopWalking = true;
+        walkingFlag = WALKING_STOP;
+    }
+
+    @Override
+    public void skipChildren() {
+        walkingFlag = WALKING_SKIP_CHILDREN;
+    }
+
+    @Override
+    public void skipSiblings() {
+        walkingFlag = WALKING_SKIP_SIBLINGS;
     }
 
     boolean isStopWalking() {
-        return stopWalking;
+        return walkingFlag == WALKING_STOP;
+    }
+
+    boolean isSkipChildren() {
+        return walkingFlag == WALKING_SKIP_CHILDREN;
+    }
+
+    boolean isSkipSiblings() {
+        return walkingFlag == WALKING_SKIP_SIBLINGS;
     }
 
     @Override

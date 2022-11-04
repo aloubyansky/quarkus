@@ -21,4 +21,8 @@ public interface PathVisit {
     String getRelativePath(String separator);
 
     void stopWalking();
+
+    void skipChildren();
+
+    void skipSiblings();
 }

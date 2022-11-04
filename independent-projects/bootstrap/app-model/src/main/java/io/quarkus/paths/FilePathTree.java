@@ -56,12 +56,20 @@ class FilePathTree implements OpenPathTree {
             }
 
             @Override
+            public String getRelativePath(String separator) {
+                return "";
+            }
+
+            @Override
             public void stopWalking() {
             }
 
             @Override
-            public String getRelativePath(String separator) {
-                return "";
+            public void skipChildren() {
+            }
+
+            @Override
+            public void skipSiblings() {
             }
         });
     }
