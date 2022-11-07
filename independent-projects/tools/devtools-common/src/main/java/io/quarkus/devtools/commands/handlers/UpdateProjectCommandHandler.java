@@ -9,6 +9,7 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,9 @@ import io.quarkus.devtools.project.BuildTool;
 import io.quarkus.devtools.project.JavaVersion;
 import io.quarkus.devtools.project.QuarkusProject;
 import io.quarkus.devtools.project.QuarkusProjectHelper;
+import io.quarkus.devtools.project.configuration.ConfiguredApplication;
+import io.quarkus.devtools.project.configuration.WorkspaceQuarkusInfo;
+import io.quarkus.devtools.project.configuration.update.UpdateInstructions;
 import io.quarkus.devtools.project.state.ProjectState;
 import io.quarkus.devtools.project.update.ExtensionUpdateInfo;
 import io.quarkus.devtools.project.update.PlatformInfo;
@@ -52,6 +56,10 @@ public class UpdateProjectCommandHandler implements QuarkusCommandHandler {
 
     @Override
     public QuarkusCommandOutcome execute(QuarkusCommandInvocation invocation) throws QuarkusCommandException {
+        Collection<ConfiguredApplication> configuredApps = invocation.getValue(UpdateProject.CONFIGURED_APPS);
+        if (configuredApps != null) {
+            return updateConfiguredApps(invocation, configuredApps);
+        }
         final JavaVersion projectJavaVersion = invocation.getQuarkusProject().getJavaVersion();
         if (projectJavaVersion.isEmpty()) {
             String instruction = invocation.getQuarkusProject().getBuildTool().isAnyGradle() ? "java>targetCompatibility"
@@ -185,6 +193,81 @@ public class UpdateProjectCommandHandler implements QuarkusCommandHandler {
 
             } catch (IOException e) {
                 throw new QuarkusCommandException("Error while generating the project update script", e);
+            }
+        }
+
+        return QuarkusCommandOutcome.success();
+    }
+
+    private QuarkusCommandOutcome updateConfiguredApps(QuarkusCommandInvocation invocation,
+            Collection<ConfiguredApplication> configuredApps) {
+
+        var log = invocation.log();
+        final ExtensionCatalog targetCatalog = invocation.getValue(UpdateProject.TARGET_CATALOG);
+
+        var instructions = new UpdateInstructions();
+        for (var app : configuredApps) {
+            WorkspaceQuarkusInfo.addInstructions(instructions, app, targetCatalog, log);
+        }
+        var instructionList = instructions.asFileInstructions();
+        if (instructionList.isEmpty()) {
+            invocation.log().info("The project is up-to-date!");
+        } else {
+            log.info(MessageFormatter.bold("Recommended updates:"));
+            for (var instruction : instructionList) {
+                log.info("  File " + instruction.getFile());
+                if (instruction.hasPomProperties()) {
+                    log.info("    Properties:");
+                    for (var prop : instruction.getProperties()) {
+                        log.info("      " + prop.getPropertyName() + "=" + prop.getPropertyValue());
+                    }
+                }
+                if (instruction.hasBoms()) {
+                    log.info("    BOM imports:");
+                    for (var bom : instruction.getBoms()) {
+                        if (bom.getNewCoords() == null) {
+                            log.info("      Remove " + bom.getCurrentCoords().toCompactCoords());
+                        } else if (bom.getCurrentCoords() == null) {
+                            log.info("      Add " + bom.getNewCoords().toCompactCoords());
+                        } else {
+                            log.info("      Update " + bom.getCurrentCoords().toCompactCoords() + " -> "
+                                    + bom.getNewCoords().toCompactCoords());
+                        }
+                    }
+                }
+                if (instruction.hasDependencies()) {
+                    log.info("    Dependencies:");
+                    for (var dep : instruction.getDependencies()) {
+                        if (dep.getNewCoords() == null) {
+                            log.info("      Remove " + dep.getCurrentCoords().toCompactCoords());
+                        } else if (dep.getCurrentCoords() == null) {
+                            log.info("      Add " + dep.getNewCoords().toCompactCoords());
+                        } else {
+                            log.info("      Update " + dep.getCurrentCoords().toCompactCoords() + " -> "
+                                    + dep.getNewCoords().toCompactCoords());
+                        }
+                    }
+                }
+                if (instruction.hasMavenPlugins()) {
+                    log.info("    Maven plugin:");
+                    for (var plugin : instruction.getMavenPlugins()) {
+                        if (plugin.getNewCoords() == null) {
+                            log.info("      Remove " + plugin.getCurrentCoords().toCompactCoords());
+                        } else if (plugin.getCurrentCoords() == null) {
+                            log.info("      Add " + plugin.getNewCoords().toCompactCoords());
+                        } else {
+                            log.info("      Update " + plugin.getCurrentCoords().toCompactCoords() + " -> "
+                                    + plugin.getNewCoords().toCompactCoords());
+                        }
+                        log.info("      " + plugin);
+                    }
+                }
+                if (instruction.hasUnsorted()) {
+                    log.info("    Other:");
+                    for (var other : instruction.getUnsorted()) {
+                        log.info("      " + other);
+                    }
+                }
             }
         }
 
