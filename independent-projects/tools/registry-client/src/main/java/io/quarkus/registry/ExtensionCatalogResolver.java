@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
 import org.eclipse.aether.artifact.DefaultArtifact;
@@ -681,7 +682,7 @@ public class ExtensionCatalogResolver {
                             release.setMemberBoms(coords);
                         }
 
-                        collectPlatformExtensions(quarkusVersion, catalogBuilder, registry, platformIndex, p);
+                        collectPlatformExtensions(catalogBuilder, registry, platformIndex, p);
                         continue;
                     }
                 }
@@ -786,12 +787,12 @@ public class ExtensionCatalogResolver {
                     continue;
                 }
                 ++platformIndex;
-                collectPlatformExtensions(quarkusCoreVersion, catalogBuilder, registry, platformIndex, p);
+                collectPlatformExtensions(catalogBuilder, registry, platformIndex, p);
             }
         }
     }
 
-    private void collectPlatformExtensions(String quarkusCoreVersion, ExtensionCatalogBuilder catalogBuilder,
+    private void collectPlatformExtensions(ExtensionCatalogBuilder catalogBuilder,
             RegistryExtensionResolver registry, int platformIndex,
             Platform p) throws RegistryResolutionException {
 
@@ -822,6 +823,27 @@ public class ExtensionCatalogResolver {
                 }
             }
         }
+    }
+
+    private List<ExtensionCatalog.Mutable> resolveCatalogs(RegistryExtensionResolver registry,
+            Collection<ArtifactCoords> platformBoms) {
+        final CompletableFuture<ExtensionCatalog.Mutable>[] futures = new CompletableFuture[platformBoms.size()];
+        int i = 0;
+        for (var platformBom : platformBoms) {
+            futures[i++] = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return registry.resolvePlatformExtensions(platformBom);
+                } catch (RegistryResolutionException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        }
+        CompletableFuture.allOf(futures).join();
+        final List<ExtensionCatalog.Mutable> result = new ArrayList<>(futures.length);
+        for (i = 0; i < futures.length; ++i) {
+            result.add(futures[i++].getNow(null));
+        }
+        return result;
     }
 
     private List<RegistryExtensionResolver> getRegistriesForQuarkusVersion(String quarkusCoreVersion) {
