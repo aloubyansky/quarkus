@@ -362,8 +362,7 @@ public class CreateProjectMojo extends AbstractMojo {
     }
 
     static ExtensionCatalog resolveExtensionsCatalog(AbstractMojo mojo, String groupId, String artifactId, String version,
-            ExtensionCatalogResolver catalogResolver, MavenArtifactResolver artifactResolver, MessageWriter log)
-            throws MojoExecutionException {
+            ExtensionCatalogResolver catalogResolver, MavenArtifactResolver artifactResolver, MessageWriter log) {
 
         if (catalogResolver.hasRegistries()) {
             try {
