@@ -7,7 +7,7 @@ import java.util.concurrent.Phaser;
 
 import org.jboss.logging.Logger;
 
-class ModelResolutionTaskRunner {
+public class ModelResolutionTaskRunner {
 
     private static final Logger log = Logger.getLogger(ModelResolutionTaskRunner.class);
 
@@ -23,7 +23,7 @@ class ModelResolutionTaskRunner {
      *
      * @param task task to run
      */
-    void run(ModelResolutionTask task) {
+    public void run(ModelResolutionTask task) {
         phaser.register();
         CompletableFuture.runAsync(() -> {
             try {
@@ -42,7 +42,7 @@ class ModelResolutionTaskRunner {
      * In case some tasks failed with errors, this method will log each error and throw a {@link RuntimeException}
      * with a corresponding message.
      */
-    void waitForCompletion() {
+    public void waitForCompletion() {
         phaser.arriveAndAwaitAdvance();
         assertNoErrors();
     }
