@@ -192,7 +192,7 @@ public final class ProjectUpdateInfos {
         return stateBuilder.build();
     }
 
-    private static List<ExtensionCatalog> getRecommendedOrigins(List<Extension> extensions)
+    public static List<ExtensionCatalog> getRecommendedOrigins(List<Extension> extensions)
             throws QuarkusCommandException {
         final List<ExtensionOrigins> extOrigins = new ArrayList<>(extensions.size());
         for (Extension e : extensions) {

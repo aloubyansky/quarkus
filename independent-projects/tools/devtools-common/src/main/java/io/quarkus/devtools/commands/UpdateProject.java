@@ -2,6 +2,7 @@ package io.quarkus.devtools.commands;
 
 import static java.util.Objects.requireNonNull;
 
+import java.util.Collection;
 import java.util.HashMap;
 
 import io.quarkus.bootstrap.model.ApplicationModel;
@@ -11,6 +12,7 @@ import io.quarkus.devtools.commands.data.QuarkusCommandOutcome;
 import io.quarkus.devtools.commands.handlers.UpdateProjectCommandHandler;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.devtools.project.QuarkusProject;
+import io.quarkus.devtools.project.configuration.ConfiguredApplication;
 import io.quarkus.registry.catalog.ExtensionCatalog;
 
 /**
@@ -19,6 +21,7 @@ import io.quarkus.registry.catalog.ExtensionCatalog;
 public class UpdateProject {
 
     public static final String APP_MODEL = "quarkus.update-project.app-model";
+    public static final String CONFIGURED_APPS = "quarkus.update-project.configured-apps";
     public static final String TARGET_CATALOG = "quarkus.update-project.target-catalog";
     public static final String REWRITE = "quarkus.update-project.rewrite.yes";
     public static final String TARGET_PLATFORM_VERSION = "quarkus.update-project.target-platform-version";
@@ -40,6 +43,11 @@ public class UpdateProject {
 
     public UpdateProject targetCatalog(ExtensionCatalog latestCatalog) {
         invocation.setValue(TARGET_CATALOG, requireNonNull(latestCatalog, "targetCatalog is required"));
+        return this;
+    }
+
+    public UpdateProject configuredApplications(Collection<ConfiguredApplication> apps) {
+        invocation.setValue(CONFIGURED_APPS, apps);
         return this;
     }
 

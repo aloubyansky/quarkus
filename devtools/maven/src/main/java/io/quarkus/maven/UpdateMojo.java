@@ -1,5 +1,6 @@
 package io.quarkus.maven;
 
+import java.util.Collection;
 import java.util.List;
 
 import org.apache.maven.plugin.MojoExecutionException;
@@ -11,6 +12,8 @@ import io.quarkus.devtools.commands.data.QuarkusCommandException;
 import io.quarkus.devtools.commands.data.QuarkusCommandOutcome;
 import io.quarkus.devtools.project.QuarkusProject;
 import io.quarkus.devtools.project.QuarkusProjectHelper;
+import io.quarkus.devtools.project.configuration.ConfiguredApplication;
+import io.quarkus.devtools.project.configuration.maven.MavenConfiguredApplicationResolver;
 import io.quarkus.devtools.project.update.rewrite.QuarkusUpdateExitErrorException;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.platform.tools.ToolsConstants;
@@ -85,6 +88,12 @@ public class UpdateMojo extends QuarkusProjectStateMojoBase {
     @Parameter(property = "stream", required = false)
     private String stream;
 
+    /**
+     * Option to use the previous ApplicationModel-based approach to collect application data
+     */
+    @Parameter(property = "useAppModel", defaultValue = "true")
+    private boolean useAppModel;
+
     @Override
     protected void validateParameters() throws MojoExecutionException {
         getLog().warn("quarkus:update goal is experimental, its options and output might change in future versions");
@@ -123,7 +132,11 @@ public class UpdateMojo extends QuarkusProjectStateMojoBase {
         final UpdateProject invoker = new UpdateProject(quarkusProject);
         invoker.targetCatalog(targetCatalog);
         invoker.targetPlatformVersion(platformVersion);
-        invoker.appModel(resolveApplicationModel());
+        if (useAppModel) {
+            invoker.appModel(resolveApplicationModel());
+        } else {
+            invoker.configuredApplications(getConfiguredApplications(quarkusProject));
+        }
         if (rewritePluginVersion != null) {
             invoker.rewritePluginVersion(rewritePluginVersion);
         }
@@ -154,6 +167,16 @@ public class UpdateMojo extends QuarkusProjectStateMojoBase {
             throw new MojoExecutionException(e.getMessage());
         } catch (QuarkusCommandException e) {
             throw new MojoExecutionException("Failed to apply the updates", e);
+        }
+    }
+
+    private Collection<ConfiguredApplication> getConfiguredApplications(QuarkusProject quarkusProject)
+            throws MojoExecutionException {
+        try {
+            return MavenConfiguredApplicationResolver.load(project.getBasedir().toPath(), artifactResolver().getMavenContext(),
+                    quarkusProject.log());
+        } catch (Exception e) {
+            throw new MojoExecutionException("Failed to read project configuration", e);
         }
     }
 

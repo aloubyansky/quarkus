@@ -294,7 +294,7 @@ public class CreateProjectCommandHandler implements QuarkusCommandHandler {
         });
     }
 
-    private List<Extension> computeRequiredExtensions(ExtensionCatalog catalog,
+    private static List<Extension> computeRequiredExtensions(ExtensionCatalog catalog,
             final Set<String> extensionsQuery, MessageWriter log) throws QuarkusCommandException {
         final List<Extension> extensionsToAdd = computeExtensionsFromQuery(catalog, extensionsQuery, log);
         if (extensionsToAdd == null) {
@@ -303,8 +303,7 @@ public class CreateProjectCommandHandler implements QuarkusCommandHandler {
         return extensionsToAdd;
     }
 
-    private static List<ExtensionCatalog> getExtensionOrigins(ExtensionCatalog extensionCatalog,
-            List<Extension> extensionsToAdd)
+    static List<ExtensionCatalog> getExtensionOrigins(ExtensionCatalog extensionCatalog, List<Extension> extensionsToAdd)
             throws QuarkusCommandException {
 
         if (extensionsToAdd.isEmpty() && extensionCatalog.isPlatform()) {
