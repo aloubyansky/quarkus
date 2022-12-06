@@ -52,12 +52,7 @@ public class QuarkusPluginExtension {
             final ApplicationModel appModel = getApplicationModel(LaunchMode.TEST);
             final Path serializedModel = ToolingUtils.serializeAppModel(appModel, task, true);
             props.put(BootstrapConstants.SERIALIZED_TEST_APP_MODEL, serializedModel.toString());
-
-            StringJoiner outputSourcesDir = new StringJoiner(",");
-            for (File outputSourceDir : combinedOutputSourceDirs()) {
-                outputSourcesDir.add(outputSourceDir.getAbsolutePath());
-            }
-            props.put(BootstrapConstants.OUTPUT_SOURCES_DIR, outputSourcesDir.toString());
+            props.put(BootstrapConstants.OUTPUT_SOURCES_DIR, collectTestOutputDirs(task));
 
             final SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
             final SourceSet mainSourceSet = sourceSets.getByName(SourceSet.MAIN_SOURCE_SET_NAME);
@@ -112,11 +107,24 @@ public class QuarkusPluginExtension {
         return getSourceSets().getByName(SourceSet.MAIN_SOURCE_SET_NAME).getResources().getSrcDirs();
     }
 
-    public Set<File> combinedOutputSourceDirs() {
-        Set<File> sourcesDirs = new LinkedHashSet<>();
-        sourcesDirs.addAll(getSourceSets().getByName(SourceSet.MAIN_SOURCE_SET_NAME).getOutput().getClassesDirs().getFiles());
-        sourcesDirs.addAll(getSourceSets().getByName(SourceSet.TEST_SOURCE_SET_NAME).getOutput().getClassesDirs().getFiles());
-        return sourcesDirs;
+    private String collectTestOutputDirs(Test task) {
+        final Set<File> dirs = new LinkedHashSet<>();
+        collectExisting(task.getTestClassesDirs(), dirs);
+        collectExisting(getSourceSets().getByName(SourceSet.TEST_SOURCE_SET_NAME).getOutput().getClassesDirs(), dirs);
+        collectExisting(getSourceSets().getByName(SourceSet.MAIN_SOURCE_SET_NAME).getOutput().getClassesDirs(), dirs);
+        final StringJoiner sj = new StringJoiner(",");
+        for (File f : dirs) {
+            sj.add(f.getAbsolutePath());
+        }
+        return sj.toString();
+    }
+
+    private static void collectExisting(FileCollection col, Set<File> existing) {
+        for (File f : col) {
+            if (f.exists()) {
+                existing.add(f);
+            }
+        }
     }
 
     public AppModelResolver getAppModelResolver() {

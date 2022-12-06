@@ -130,14 +130,7 @@ public class QuarkusBootstrap implements Serializable {
         //once we have this it is up to augment to set up the class loader to actually use them
 
         if (existingModel != null) {
-            final ConfiguredClassLoading classLoadingConfig = ConfiguredClassLoading.builder()
-                    .setApplicationRoot(applicationRoot)
-                    .setDefaultFlatTestClassPath(defaultFlatTestClassPath)
-                    .setMode(mode)
-                    .addParentFirstArtifacts(parentFirstArtifacts)
-                    .setApplicationModel(existingModel)
-                    .build();
-            return new CuratedApplication(this, new CurationResult(existingModel), classLoadingConfig);
+            return new CuratedApplication(this, new CurationResult(existingModel), initClassLoadingConfig(existingModel));
         }
 
         BootstrapAppModelFactory appModelFactory = BootstrapAppModelFactory.newInstance()
@@ -162,26 +155,28 @@ public class QuarkusBootstrap implements Serializable {
                 appModelFactory.setEnableClasspathCache(true);
             }
         }
-        CurationResult curationResult = appModelFactory.resolveAppModel();
-        if (curationResult.getApplicationModel().getAppArtifact() != null) {
-            if (curationResult.getApplicationModel().getAppArtifact().getArtifactId() != null) {
+        final CurationResult curationResult = appModelFactory.resolveAppModel();
+        return new CuratedApplication(this, curationResult, initClassLoadingConfig(curationResult.getApplicationModel()));
+    }
+
+    private ConfiguredClassLoading initClassLoadingConfig(ApplicationModel appModel) {
+        if (appModel.getAppArtifact() != null) {
+            if (appModel.getAppArtifact().getArtifactId() != null) {
                 buildSystemProperties.putIfAbsent("quarkus.application.name",
-                        curationResult.getApplicationModel().getAppArtifact().getArtifactId());
+                        appModel.getAppArtifact().getArtifactId());
             }
-            if (curationResult.getApplicationModel().getAppArtifact().getVersion() != null) {
+            if (appModel.getAppArtifact().getVersion() != null) {
                 buildSystemProperties.putIfAbsent("quarkus.application.version",
-                        curationResult.getApplicationModel().getAppArtifact().getVersion());
+                        appModel.getAppArtifact().getVersion());
             }
         }
-
-        final ConfiguredClassLoading classLoadingConfig = ConfiguredClassLoading.builder()
+        return ConfiguredClassLoading.builder()
                 .setApplicationRoot(applicationRoot)
                 .setDefaultFlatTestClassPath(defaultFlatTestClassPath)
                 .setMode(mode)
                 .addParentFirstArtifacts(parentFirstArtifacts)
-                .setApplicationModel(curationResult.getApplicationModel())
+                .setApplicationModel(appModel)
                 .build();
-        return new CuratedApplication(this, curationResult, classLoadingConfig);
     }
 
     public AppModelResolver getAppModelResolver() {
