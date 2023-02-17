@@ -147,7 +147,8 @@ public class BootstrapModelResolver implements ModelResolver {
     @Override
     public ModelSource resolveModel(String groupId, String artifactId, String version)
             throws UnresolvableModelException {
-        Artifact pomArtifact = new DefaultArtifact(groupId, artifactId, "", "pom", version);
+        Artifact pomArtifact = new DefaultArtifact(groupId, artifactId, ArtifactCoords.DEFAULT_CLASSIFIER,
+                ArtifactCoords.TYPE_POM, version);
 
         try {
             ArtifactRequest request = new ArtifactRequest(pomArtifact, repositories, context);
@@ -166,7 +167,8 @@ public class BootstrapModelResolver implements ModelResolver {
     public ModelSource resolveModel(final Parent parent)
             throws UnresolvableModelException {
         try {
-            final Artifact artifact = new DefaultArtifact(parent.getGroupId(), parent.getArtifactId(), "", "pom",
+            final Artifact artifact = new DefaultArtifact(parent.getGroupId(), parent.getArtifactId(),
+                    ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_POM,
                     parent.getVersion());
 
             final VersionRangeRequest versionRangeRequest = new VersionRangeRequest(artifact, repositories, context);
@@ -205,7 +207,8 @@ public class BootstrapModelResolver implements ModelResolver {
     public ModelSource resolveModel(final Dependency dependency)
             throws UnresolvableModelException {
         try {
-            final Artifact artifact = new DefaultArtifact(dependency.getGroupId(), dependency.getArtifactId(), "",
+            final Artifact artifact = new DefaultArtifact(dependency.getGroupId(), dependency.getArtifactId(),
+                    ArtifactCoords.DEFAULT_CLASSIFIER,
                     ArtifactCoords.TYPE_POM, dependency.getVersion());
 
             final VersionRangeRequest versionRangeRequest = new VersionRangeRequest(artifact, repositories, context);

@@ -20,6 +20,7 @@
         <graal-sdk.version-for-documentation>22.3</graal-sdk.version-for-documentation>
         <mandrel.version-for-documentation>22.3</mandrel.version-for-documentation>
 
+        <assembly-maven-plugin.version>3.5.0</assembly-maven-plugin.version>
         <asciidoctor-maven-plugin.version>2.0.0</asciidoctor-maven-plugin.version>
         <asciidoctorj-pdf.version>1.5.0-beta.8</asciidoctorj-pdf.version>
         <asciidoctor.fail-if>WARN</asciidoctor.fail-if>
@@ -38,8 +39,35 @@
 
     <name>Quarkus - Documentation</name>
     <description>The Quarkus documentation</description>
-
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.apache.httpcomponents</groupId>
+                <artifactId>httpclient</artifactId>
+                <version>4.5.13</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>commons-logging</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.httpcomponents</groupId>
+                <artifactId>httpcore</artifactId>
+                <version>4.4.16</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
     <dependencies>
+        <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpclient</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpcore</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
@@ -2979,6 +3007,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
+                <version>${assembly-maven-plugin.version}</version>
                 <executions>
                     <execution>
                         <id>assemble</id>
@@ -3065,6 +3094,7 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-assembly-plugin</artifactId>
+                        <version>${assembly-maven-plugin.version}</version>
                         <executions>
                             <execution>
                                 <id>assemble-pdf</id>
