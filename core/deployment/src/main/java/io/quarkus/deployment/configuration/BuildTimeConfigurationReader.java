@@ -124,6 +124,8 @@ public final class BuildTimeConfigurationReader {
     final Set<String> deprecatedProperties;
     final Set<String> deprecatedRuntimeProperties;
 
+    final BuildTimeConfigurationInterceptor buildConfigRecorder;
+
     /**
      * Initializes a new instance with located configuration root classes on the classpath
      * of a given classloader.
@@ -242,6 +244,8 @@ public final class BuildTimeConfigurationReader {
 
         deprecatedProperties = getDeprecatedProperties(allRoots);
         deprecatedRuntimeProperties = getDeprecatedProperties(runTimeRoots);
+
+        buildConfigRecorder = new BuildTimeConfigurationInterceptor();
     }
 
     private static void processClass(ClassDefinition.Builder builder, Class<?> clazz,
@@ -408,11 +412,15 @@ public final class BuildTimeConfigurationReader {
         for (ConfigClassWithPrefix mapping : getBuildTimeVisibleMappings()) {
             builder.withMapping(mapping.getKlass(), mapping.getPrefix());
         }
-        return builder.build();
+
+        builder.withInterceptors(buildConfigRecorder);
+        var config = builder.build();
+        buildConfigRecorder.configure(config);
+        return config;
     }
 
     public ReadResult readConfiguration(final SmallRyeConfig config) {
-        return SecretKeys.doUnlocked(() -> new ReadOperation(config).run());
+        return SecretKeys.doUnlocked(() -> new ReadOperation(config, buildConfigRecorder).run());
     }
 
     private Set<String> getDeprecatedProperties(Iterable<RootDefinition> rootDefinitions) {
@@ -468,6 +476,7 @@ public final class BuildTimeConfigurationReader {
 
     final class ReadOperation {
         final SmallRyeConfig config;
+        final BuildTimeConfigurationInterceptor configRecorder;
         final Set<String> processedNames = new HashSet<>();
 
         final Map<Class<?>, Object> objectsByClass = new HashMap<>();
@@ -477,8 +486,9 @@ public final class BuildTimeConfigurationReader {
 
         final Map<ConverterType, Converter<?>> convByType = new HashMap<>();
 
-        ReadOperation(final SmallRyeConfig config) {
+        ReadOperation(final SmallRyeConfig config, BuildTimeConfigurationInterceptor configRecorder) {
             this.config = config;
+            this.configRecorder = configRecorder;
         }
 
         ReadResult run() {
@@ -684,6 +694,7 @@ public final class BuildTimeConfigurationReader {
                     .setRunTimeMappings(runTimeMappings)
                     .setUnknownBuildProperties(unknownBuildProperties)
                     .setDeprecatedRuntimeProperties(deprecatedRuntimeProperties)
+                    .setBuildConfigRecorder(configRecorder)
                     .createReadResult();
         }
 
@@ -1151,6 +1162,7 @@ public final class BuildTimeConfigurationReader {
 
         final Set<String> unknownBuildProperties;
         final Set<String> deprecatedRuntimeProperties;
+        final BuildTimeConfigurationInterceptor.ConfigurationWriter configRecorder;
 
         public ReadResult(final Builder builder) {
             this.objectsByClass = builder.getObjectsByClass();
@@ -1176,6 +1188,7 @@ public final class BuildTimeConfigurationReader {
 
             this.unknownBuildProperties = builder.getUnknownBuildProperties();
             this.deprecatedRuntimeProperties = builder.deprecatedRuntimeProperties;
+            this.configRecorder = builder.configRecorder == null ? null : builder.configRecorder.getConfigurationWriter();
         }
 
         private static Map<Class<?>, RootDefinition> rootsToMap(Builder builder) {
@@ -1276,6 +1289,10 @@ public final class BuildTimeConfigurationReader {
             return obj;
         }
 
+        public BuildTimeConfigurationInterceptor.ConfigurationWriter getBuildTimeConfigRecorder() {
+            return configRecorder;
+        }
+
         static class Builder {
             private Map<Class<?>, Object> objectsByClass;
             private Map<String, String> allBuildTimeValues;
@@ -1292,6 +1309,7 @@ public final class BuildTimeConfigurationReader {
             private List<ConfigClassWithPrefix> runTimeMappings;
             private Set<String> unknownBuildProperties;
             private Set<String> deprecatedRuntimeProperties;
+            private BuildTimeConfigurationInterceptor configRecorder;
 
             Map<Class<?>, Object> getObjectsByClass() {
                 return objectsByClass;
@@ -1421,6 +1439,11 @@ public final class BuildTimeConfigurationReader {
 
             Builder setDeprecatedRuntimeProperties(Set<String> deprecatedRuntimeProperties) {
                 this.deprecatedRuntimeProperties = deprecatedRuntimeProperties;
+                return this;
+            }
+
+            Builder setBuildConfigRecorder(BuildTimeConfigurationInterceptor configRecorder) {
+                this.configRecorder = configRecorder;
                 return this;
             }
 
