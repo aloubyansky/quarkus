@@ -176,6 +176,41 @@ public class CodeGenerator {
         });
     }
 
+    /**
+     * Initializes an application build time configuration and returns current values of properties
+     * passed in as {@code originalProperties}.
+     *
+     * @param appModel application model
+     * @param launchMode launch mode
+     * @param buildSystemProps build system (or project) properties
+     * @param deploymentClassLoader build classloader
+     * @param originalProperties properties to read from the initialized configuration
+     * @return current values of the passed in original properties
+     */
+    public static Properties readCurrentValues(ApplicationModel appModel, String launchMode,
+            Properties buildSystemProps,
+            QuarkusClassLoader deploymentClassLoader, Properties originalProperties) {
+        Config config = null;
+        try {
+            config = getConfig(appModel, LaunchMode.valueOf(launchMode), buildSystemProps, deploymentClassLoader);
+        } catch (CodeGenException e) {
+            throw new RuntimeException("Failed to load application configuration", e);
+        }
+        final Properties currentValues = new Properties(originalProperties.size());
+        for (var dumpedProp : originalProperties.entrySet()) {
+            var configValue = config.getConfigValue(dumpedProp.getKey().toString());
+            final String current = configValue == null ? null : configValue.getValue();
+            if (!dumpedProp.getValue().equals(current)) {
+                log.info("CONFIG PROPERTY " + dumpedProp.getKey() + " has changed since the last build from "
+                        + dumpedProp.getValue() + " to " + current);
+            }
+            if (current != null) {
+                currentValues.put(dumpedProp.getKey().toString(), current);
+            }
+        }
+        return currentValues;
+    }
+
     public static Config getConfig(ApplicationModel appModel, LaunchMode launchMode, Properties buildSystemProps,
             QuarkusClassLoader deploymentClassLoader) throws CodeGenException {
         // Config instance that is returned by this method should be as close to the one built in the ExtensionLoader as possible
