@@ -97,6 +97,9 @@ public class LocalWorkspace implements WorkspaceModelResolver, WorkspaceReader, 
     public File findArtifact(Artifact artifact) {
         final LocalProject lp = getProject(artifact.getGroupId(), artifact.getArtifactId());
         final String findVersion = artifact.getVersion();
+        if(findVersion.isEmpty() || ModelUtils.isUnresolvedVersion(findVersion)) {
+            throw new IllegalStateException(artifact.toString());
+        }
         if (lp == null
                 || !findVersion.isEmpty()
                         && !lp.getVersion().equals(findVersion)
