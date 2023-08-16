@@ -5,9 +5,8 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.file.FileSystems;
+import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
@@ -16,7 +15,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.jar.Attributes;
-import java.util.jar.JarFile;
 import java.util.jar.Manifest;
 import java.util.regex.Pattern;
 
@@ -24,9 +22,9 @@ import org.jboss.logging.Logger;
 
 import io.quarkus.bootstrap.app.CuratedApplication;
 import io.quarkus.bootstrap.app.QuarkusBootstrap;
-import io.quarkus.fs.util.FileSystemProviders;
 import io.quarkus.maven.dependency.ResolvedDependency;
 import io.quarkus.paths.PathCollection;
+import io.quarkus.paths.PathTree;
 
 /**
  * Class that handles compilation of source files
@@ -62,19 +60,18 @@ public class QuarkusCompiler implements Closeable {
             }
         }
 
-        final Set<Path> paths = new HashSet<>();
-        final Set<Path> reloadablePaths = new HashSet<>(0);
-
+        final Set<PathTree> paths = new HashSet<>();
         final boolean skipReloadableArtifacts = !application.hasReloadableArtifacts();
+        final Set<PathTree> reloadablePaths = skipReloadableArtifacts ? Set.of() : new HashSet<>();
 
         for (ResolvedDependency i : application.getApplicationModel().getRuntimeDependencies()) {
             if (skipReloadableArtifacts) {
-                paths.addAll(i.getContentTree().getRoots());
+                paths.add(i.getContentTree());
             } else {
                 if (application.isReloadableArtifact(i.getKey())) {
-                    reloadablePaths.addAll(i.getContentTree().getRoots());
+                    reloadablePaths.add(i.getContentTree());
                 } else {
-                    paths.addAll(i.getContentTree().getRoots());
+                    paths.add(i.getContentTree());
                 }
             }
         }
@@ -111,20 +108,14 @@ public class QuarkusCompiler implements Closeable {
 
     private void parseClassPath(final String devModeRunnerJarCanonicalPath,
             final Set<File> classPathElements,
-            final Deque<Path> toParse,
+            final Deque<PathTree> toParse,
             final Set<String> parsedFiles) throws IOException {
         while (!toParse.isEmpty()) {
-            Path path = toParse.poll();
-            File file = path.toFile();
-            String s = file.getAbsolutePath();
-            if (!parsedFiles.contains(s)) {
-                parsedFiles.add(s);
-                if (!file.exists()) {
-                    continue;
-                }
-                if (path.getFileSystem() == FileSystems.getDefault()) {
-                    classPathElements.add(file);
-                } else if (path.getFileSystem().provider() == FileSystemProviders.ZIP_PROVIDER) {
+            final PathTree pathTree = toParse.poll();
+            boolean processManifest = false;
+            for (Path p : pathTree.getRoots()) {
+                if (Files.exists(p) && parsedFiles.add(p.toAbsolutePath().toString())) {
+                    var file = p.toFile();
                     // skip adding the dev mode runner jar to the classpath to prevent
                     // hitting a bug in JDK - https://bugs.openjdk.java.net/browse/JDK-8232170
                     // which causes the programmatic java file compilation to fail.
@@ -140,37 +131,41 @@ public class QuarkusCompiler implements Closeable {
                             && file.getCanonicalPath().equals(devModeRunnerJarCanonicalPath)) {
                         log.debug("Dev mode runner jar " + file + " won't be added to compilation classpath of hot deployment");
                     } else {
+                        processManifest = true;
                         classPathElements.add(file);
                     }
-
-                    try (JarFile jar = new JarFile(file)) {
-                        Manifest mf = jar.getManifest();
-                        if (mf == null || mf.getMainAttributes() == null) {
-                            continue;
-                        }
-                        Object classPath = mf.getMainAttributes().get(Attributes.Name.CLASS_PATH);
-                        if (classPath != null) {
-                            for (String classPathEntry : WHITESPACE_PATTERN.split(classPath.toString())) {
-                                final URI cpEntryURI = new URI(classPathEntry);
-                                File f;
-                                // if it's a "file" scheme URI, then use the path as a file system path
-                                // without the need to resolve it
-                                if (cpEntryURI.isAbsolute() && cpEntryURI.getScheme().equals("file")) {
-                                    f = new File(cpEntryURI.getPath());
-                                } else {
-                                    try {
-                                        f = Paths.get(new URI("file", null, "/", null).resolve(cpEntryURI)).toFile();
-                                    } catch (URISyntaxException e) {
-                                        f = new File(file.getParentFile(), classPathEntry);
-                                    }
-                                }
-                                if (f.exists()) {
-                                    toParse.add(f.toPath());
+                }
+            }
+            if (processManifest) {
+                final Manifest mf = pathTree.getManifest();
+                if (mf != null && mf.getMainAttributes() != null) {
+                    Object classPath = mf.getMainAttributes().get(Attributes.Name.CLASS_PATH);
+                    if (classPath != null) {
+                        for (String classPathEntry : WHITESPACE_PATTERN.split(classPath.toString())) {
+                            final URI cpEntryURI;
+                            try {
+                                cpEntryURI = new URI(classPathEntry);
+                            } catch (URISyntaxException e) {
+                                throw new RuntimeException("Failed to parse URI " + classPathEntry, e);
+                            }
+                            Path f;
+                            // if it's a "file" scheme URI, then use the path as a file system path
+                            // without the need to resolve it
+                            if (cpEntryURI.isAbsolute() && cpEntryURI.getScheme().equals("file")) {
+                                f = Path.of(cpEntryURI.getPath());
+                            } else {
+                                try {
+                                    f = Path.of(new URI("file", null, "/", null).resolve(cpEntryURI));
+                                } catch (URISyntaxException e) {
+                                    f = pathTree.apply("META-INF/MANIFEST.MF", v -> {
+                                        return v.getRoot().getParent().resolve(classPathEntry);
+                                    });
                                 }
                             }
+                            if (Files.exists(f)) {
+                                toParse.add(PathTree.ofDirectoryOrArchive(f));
+                            }
                         }
-                    } catch (Exception e) {
-                        throw new RuntimeException("Failed to open class path file " + file, e);
                     }
                 }
             }
