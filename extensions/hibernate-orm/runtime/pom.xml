@@ -158,6 +158,12 @@
                         <excludedArtifact>javax.persistence:javax.persistence-api</excludedArtifact>
                         <excludedArtifact>javax.persistence:persistence-api</excludedArtifact>
                     </excludedArtifacts>
+                    <integrates>
+                        <library>
+                            <name>Hibernate ORM</name>
+                            <version>6.2.7.Final</version>
+                        </library>
+                    </integrates>
                 </configuration>
             </plugin>
             <plugin>

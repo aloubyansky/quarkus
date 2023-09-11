@@ -90,6 +90,8 @@ import io.quarkus.maven.dependency.GACTV;
 @Mojo(name = "extension-descriptor", defaultPhase = LifecyclePhase.PROCESS_RESOURCES, requiresDependencyResolution = ResolutionScope.COMPILE_PLUS_RUNTIME, threadSafe = true)
 public class ExtensionDescriptorMojo extends AbstractMojo {
 
+    public static final String INTEGRATES = "integrates";
+
     public static class RemovedResources {
         String key;
         String resources;
@@ -133,19 +135,19 @@ public class ExtensionDescriptorMojo extends AbstractMojo {
      * @readonly
      */
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
-    private List<RemoteRepository> repos;
+    List<RemoteRepository> repos;
 
     /**
      * The directory for compiled classes.
      */
     @Parameter(readonly = true, required = true, defaultValue = "${project.build.outputDirectory}")
-    private File outputDirectory;
+    File outputDirectory;
 
     /**
      * Coordinates of the corresponding deployment artifact.
      */
     @Parameter(required = true, defaultValue = "${project.groupId}:${project.artifactId}-deployment:${project.version}")
-    private String deployment;
+    String deployment;
 
     /**
      * Provided and required <a href="https://quarkus.io/guides/capabilities">extension capabilities</a>.
@@ -157,7 +159,7 @@ public class ExtensionDescriptorMojo extends AbstractMojo {
      * Extension metadata template file
      */
     @Parameter(required = true, defaultValue = "${project.build.outputDirectory}/META-INF/quarkus-extension.yaml")
-    private File extensionFile;
+    File extensionFile;
 
     @Parameter(defaultValue = "${project}")
     protected MavenProject project;
@@ -209,7 +211,7 @@ public class ExtensionDescriptorMojo extends AbstractMojo {
      * Whether to skip validation of extension's runtime and deployment dependencies.
      */
     @Parameter(required = false, defaultValue = "${skipExtensionValidation}")
-    private boolean skipExtensionValidation;
+    boolean skipExtensionValidation;
 
     /**
      * Whether to ignore failure detecting the Quarkus core version used to build the extension,
@@ -223,7 +225,7 @@ public class ExtensionDescriptorMojo extends AbstractMojo {
      * enabled in case certain classpath conditions have been satisfied.
      */
     @Parameter
-    private List<String> conditionalDependencies = new ArrayList<>(0);
+    List<String> conditionalDependencies = new ArrayList<>(0);
 
     /**
      * <a href="https://quarkus.io/guides/conditional-extension-dependencies">Extension dependency condition</a> that should be
@@ -231,7 +233,7 @@ public class ExtensionDescriptorMojo extends AbstractMojo {
      * in case it is added as a conditional dependency of another extension.
      */
     @Parameter
-    private List<String> dependencyCondition = new ArrayList<>(0);
+    List<String> dependencyCondition = new ArrayList<>(0);
 
     /**
      * Whether to skip validation of the codestart artifact, in case its configured
@@ -241,6 +243,9 @@ public class ExtensionDescriptorMojo extends AbstractMojo {
 
     @Parameter(defaultValue = "${maven.compiler.release}", readonly = true)
     String minimumJavaVersion;
+
+    @Parameter
+    List<IntegratedLibrary> integrates = List.of();
 
     ArtifactCoords deploymentCoords;
     CollectResult collectedDeploymentDeps;
@@ -464,6 +469,7 @@ public class ExtensionDescriptorMojo extends AbstractMojo {
         addCapabilities(extObject);
         addSource(extObject);
         addExtensionDependencies(extObject);
+        addIntegratedLibrariesMetadata(mapper, extObject);
 
         completeCodestartArtifact(mapper, extObject);
 
@@ -580,6 +586,56 @@ public class ExtensionDescriptorMojo extends AbstractMojo {
         return originalArtifact.replace("${project.version}", projectVersion);
     }
 
+    private void addIntegratedLibrariesMetadata(ObjectMapper mapper, ObjectNode extObject) throws MojoExecutionException {
+        if (integrates.isEmpty()) {
+            return;
+        }
+        JsonNode mvalue = getJsonElement(extObject, METADATA, INTEGRATES);
+        ArrayNode arr = null;
+        Map<String, JsonNode> templateLibs = Map.of();
+        if (mvalue != null) {
+            if (!mvalue.isArray()) {
+                throw new MojoExecutionException("'integrates' metadata element is expected to be an array");
+            }
+            arr = ((ArrayNode) mvalue);
+            templateLibs = new HashMap<>(arr.size());
+            for (var l : arr) {
+                templateLibs.put(l.get("name").asText(), l);
+            }
+        }
+        if (arr == null) {
+            var metadataNode = getMetadataNode(extObject);
+            arr = metadataNode.putArray(INTEGRATES);
+        }
+        for (var l : integrates) {
+            if (l.getVersion() == null || l.getVersion().isEmpty()) {
+                throw new MojoExecutionException("The version is missing for integrated library " + l.getName()
+                        + " in the Maven goal execution configuration");
+            }
+            var templateNode = templateLibs.get(l.getName());
+            if (templateNode == null) {
+                var node = mapper.createObjectNode();
+                node.set("name", node.textNode(l.getName()));
+                node.set("version", node.textNode(l.getVersion()));
+                arr.add(node);
+            } else {
+                var versionNode = templateNode.get("version");
+                if (versionNode != null) {
+                    if (l.getVersion() != null) {
+                        if (!l.getVersion().equals(versionNode.asText())) {
+                            throw new MojoExecutionException(
+                                    "Version " + versionNode.asText() + " of integrated library " + l.getName()
+                                            + " from the extension metadata template file does not match version "
+                                            + l.getVersion() + " configured in the Maven goal execution configuration");
+                        }
+                    }
+                }
+                var objectNode = (ObjectNode) templateNode;
+                objectNode.set("version", objectNode.textNode(l.getVersion()));
+            }
+        }
+    }
+
     private static JsonNode getJsonElement(ObjectNode extObject, String... elements) {
         JsonNode mvalue = extObject.get(elements[0]);
         int i = 1;
@@ -634,7 +690,7 @@ public class ExtensionDescriptorMojo extends AbstractMojo {
             @Override
             public boolean visitEnter(DependencyNode node) {
                 final org.eclipse.aether.artifact.Artifact a = node.getArtifact();
-                if (a != null && a.getFile() != null && a.getExtension().equals("jar")) {
+                if (a != null && a.getFile() != null && a.getExtension().equals(ArtifactCoords.TYPE_JAR)) {
                     Path p = a.getFile().toPath();
                     boolean isExtension = false;
                     if (Files.isDirectory(p)) {
@@ -1113,8 +1169,8 @@ public class ExtensionDescriptorMojo extends AbstractMojo {
                 .setRepositories(repos)
                 .setManagedDependencies(projectDescr.getManagedDependencies());
         for (Dependency dep : projectDescr.getDependencies()) {
-            if ("test".equals(dep.getScope())
-                    || "provided".equals(dep.getScope())
+            if (JavaScopes.TEST.equals(dep.getScope())
+                    || JavaScopes.PROVIDED.equals(dep.getScope())
                     || dep.isOptional()) {
                 continue;
             }
