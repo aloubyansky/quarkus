@@ -289,13 +289,7 @@ public class BootstrapAppModelResolver implements AppModelResolver {
     }
 
     private Set<String> getExcludedScopes() {
-        if (test) {
-            return Set.of();
-        }
-        if (devmode) {
-            return Set.of(JavaScopes.TEST);
-        }
-        return Set.of(JavaScopes.PROVIDED, JavaScopes.TEST);
+        return test ? Set.of() : Set.of(JavaScopes.TEST);
     }
 
     private ApplicationModel buildAppModel(ResolvedDependency appArtifact, CollectRequest collectRtDepsRequest,
@@ -318,6 +312,7 @@ public class BootstrapAppModelResolver implements AppModelResolver {
                     .setApplicationModelBuilder(appBuilder)
                     .setCollectReloadableModules(collectReloadableDeps && reloadableModules.isEmpty())
                     .setBuildTreeConsumer(buildTreeConsumer)
+                    .setIncludeCompileOnly(test || devmode)
                     .resolve(collectRtDepsRequest);
         } catch (BootstrapDependencyProcessingException e) {
             throw new AppModelResolverException(

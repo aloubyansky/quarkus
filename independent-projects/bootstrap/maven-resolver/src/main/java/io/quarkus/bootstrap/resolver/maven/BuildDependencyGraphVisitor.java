@@ -10,6 +10,7 @@ import java.util.function.Consumer;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyNode;
+import org.eclipse.aether.util.artifact.JavaScopes;
 
 import io.quarkus.bootstrap.model.ApplicationModelBuilder;
 import io.quarkus.bootstrap.util.DependencyUtils;
@@ -21,24 +22,23 @@ public class BuildDependencyGraphVisitor {
 
     private final MavenArtifactResolver resolver;
     private final ApplicationModelBuilder appBuilder;
-    private final StringBuilder buf;
     private final Consumer<String> buildTreeConsumer;
     private final List<Boolean> depth;
+    private final boolean includeCompileOnly;
 
     private DependencyNode currentDeployment;
     private DependencyNode currentRuntime;
     private Artifact runtimeArtifactToFind;
 
     public BuildDependencyGraphVisitor(MavenArtifactResolver resolver, ApplicationModelBuilder appBuilder,
-            Consumer<String> buildTreeConsumer) {
+            Consumer<String> buildTreeConsumer, boolean includeCompileOnly) {
         this.resolver = resolver;
         this.appBuilder = appBuilder;
         this.buildTreeConsumer = buildTreeConsumer;
+        this.includeCompileOnly = includeCompileOnly;
         if (buildTreeConsumer == null) {
-            buf = null;
             depth = null;
         } else {
-            buf = new StringBuilder();
             depth = new ArrayList<>();
         }
     }
@@ -97,7 +97,12 @@ public class BuildDependencyGraphVisitor {
     }
 
     private void consume(DependencyNode node) {
-        buf.setLength(0);
+        if (!includeCompileOnly
+                && !depth.isEmpty()
+                && JavaScopes.PROVIDED.equals(node.getDependency().getScope())) {
+            return;
+        }
+        var buf = new StringBuilder();
         if (!depth.isEmpty()) {
             for (int i = 0; i < depth.size() - 1; ++i) {
                 if (depth.get(i)) {
@@ -141,7 +146,9 @@ public class BuildDependencyGraphVisitor {
                 artifact = resolver.resolve(artifact, node.getRepositories()).getArtifact();
             }
 
-            int flags = DependencyFlags.DEPLOYMENT_CP;
+            int flags = includeCompileOnly || !JavaScopes.PROVIDED.equals(node.getDependency().getScope())
+                    ? DependencyFlags.DEPLOYMENT_CP
+                    : 0;
             if (node.getDependency().isOptional()) {
                 flags |= DependencyFlags.OPTIONAL;
             }

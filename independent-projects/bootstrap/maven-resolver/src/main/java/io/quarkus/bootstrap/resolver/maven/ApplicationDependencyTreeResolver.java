@@ -99,6 +99,7 @@ public class ApplicationDependencyTreeResolver {
     private ApplicationModelBuilder appBuilder;
     private boolean collectReloadableModules;
     private Consumer<String> buildTreeConsumer;
+    private boolean includeCompileOnly;
 
     public ApplicationDependencyTreeResolver setArtifactResolver(MavenArtifactResolver resolver) {
         this.resolver = resolver;
@@ -127,6 +128,11 @@ public class ApplicationDependencyTreeResolver {
 
     public ApplicationDependencyTreeResolver setBuildTreeConsumer(Consumer<String> buildTreeConsumer) {
         this.buildTreeConsumer = buildTreeConsumer;
+        return this;
+    }
+
+    public ApplicationDependencyTreeResolver setIncludeCompileOnly(boolean includeCompileOnly) {
+        this.includeCompileOnly = includeCompileOnly;
         return this;
     }
 
@@ -206,7 +212,7 @@ public class ApplicationDependencyTreeResolver {
         root = normalize(originalSession, root);
 
         final BuildDependencyGraphVisitor buildDepsVisitor = new BuildDependencyGraphVisitor(originalResolver, appBuilder,
-                buildTreeConsumer);
+                buildTreeConsumer, includeCompileOnly);
         buildDepsVisitor.visit(root);
 
         if (!CONVERGED_TREE_ONLY && collectReloadableModules) {
@@ -354,11 +360,17 @@ public class ApplicationDependencyTreeResolver {
                             artifact.getArtifactId(), artifact.getVersion());
                 }
                 dep = toAppArtifact(artifact, module)
-                        .setRuntimeCp()
-                        .setDeploymentCp()
                         .setOptional(node.getDependency().isOptional())
                         .setScope(node.getDependency().getScope())
                         .setDirect(isWalkingFlagOn(COLLECT_DIRECT_DEPS));
+                if (JavaScopes.PROVIDED.equals(dep.getScope())) {
+                    dep.setFlags(DependencyFlags.COMPILE_ONLY);
+                    if (includeCompileOnly) {
+                        dep.setRuntimeCp().setDeploymentCp();
+                    }
+                } else {
+                    dep.setRuntimeCp().setDeploymentCp();
+                }
                 if (extDep != null) {
                     dep.setRuntimeExtensionArtifact();
                     if (isWalkingFlagOn(COLLECT_TOP_EXTENSION_RUNTIME_NODES)) {

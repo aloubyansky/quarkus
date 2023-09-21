@@ -16,7 +16,12 @@ import io.quarkus.maven.dependency.ArtifactDependency;
 import io.quarkus.maven.dependency.Dependency;
 import io.quarkus.maven.dependency.DependencyFlags;
 
-public class ProvidedExtensionDepsTest extends BootstrapFromOriginalJarTestBase {
+public class ProvidedExtensionDepsTestModeTest extends BootstrapFromOriginalJarTestBase {
+
+    @Override
+    protected boolean isBootstrapForTestMode() {
+        return true;
+    }
 
     @Override
     protected TsArtifact composeApplication() {
@@ -25,7 +30,6 @@ public class ProvidedExtensionDepsTest extends BootstrapFromOriginalJarTestBase 
         addToExpectedLib(extADep);
 
         final TsArtifact depC1 = TsArtifact.jar("dep-c");
-        addToExpectedLib(depC1);
         extADep.addDependency(depC1);
 
         final TsArtifact extAProvidedDep = TsArtifact.jar("ext-a-provided-dep");
@@ -44,48 +48,61 @@ public class ProvidedExtensionDepsTest extends BootstrapFromOriginalJarTestBase 
 
         final TsQuarkusExt extB = new TsQuarkusExt("ext-b");
         this.install(extB);
+        addToExpectedLib(extB.getRuntime()); // test mode enabled
 
         final TsArtifact directProvidedDep = TsArtifact.jar("direct-provided-dep");
+        addToExpectedLib(directProvidedDep); // test mode enabled
 
-        // TODO this is when provided leaks into runtime
-        //final TsArtifact depC2 = TsArtifact.jar("dep-c", "2");
-        //addToExpectedLib(depC2); // in this case provided version will override the compile one
-        //directProvidedDep.addDependency(depC2);
+        final TsArtifact depC2 = TsArtifact.jar("dep-c", "2");
+        addToExpectedLib(depC2); // in this case provided version will override the compile one
+        directProvidedDep.addDependency(depC2);
 
         final TsArtifact transitiveProvidedDep = TsArtifact.jar("transitive-provided-dep");
         directProvidedDep.addDependency(transitiveProvidedDep);
+        addToExpectedLib(transitiveProvidedDep); // test mode enabled
 
         return TsArtifact.jar("app")
                 .addManagedDependency(platformDescriptor())
                 .addManagedDependency(platformProperties())
+                .addDependency(new TsDependency(directProvidedDep, "provided"))
                 .addDependency(extA)
-                .addDependency(extB, "provided")
-                .addDependency(new TsDependency(directProvidedDep, "provided"));
+                .addDependency(extB, "provided");
     }
 
     @Override
     protected void assertAppModel(ApplicationModel model) throws Exception {
+
+        final Set<Dependency> compileOnly = new HashSet<>();
+        compileOnly.add(new ArtifactDependency(ArtifactCoords.jar("io.quarkus.bootstrap.test", "ext-b", "1"),
+                JavaScopes.PROVIDED,
+                DependencyFlags.RUNTIME_CP,
+                DependencyFlags.DEPLOYMENT_CP,
+                DependencyFlags.RUNTIME_EXTENSION_ARTIFACT,
+                DependencyFlags.DIRECT,
+                DependencyFlags.TOP_LEVEL_RUNTIME_EXTENSION_ARTIFACT,
+                DependencyFlags.COMPILE_ONLY));
+        compileOnly.add(new ArtifactDependency(ArtifactCoords.jar("io.quarkus.bootstrap.test", "direct-provided-dep", "1"),
+                JavaScopes.PROVIDED,
+                DependencyFlags.RUNTIME_CP,
+                DependencyFlags.DEPLOYMENT_CP,
+                DependencyFlags.DIRECT,
+                DependencyFlags.COMPILE_ONLY));
+        compileOnly.add(new ArtifactDependency(ArtifactCoords.jar("io.quarkus.bootstrap.test", "transitive-provided-dep", "1"),
+                JavaScopes.PROVIDED,
+                DependencyFlags.RUNTIME_CP,
+                DependencyFlags.DEPLOYMENT_CP,
+                DependencyFlags.COMPILE_ONLY));
+        assertEquals(compileOnly, getDependenciesWithFlag(model, DependencyFlags.COMPILE_ONLY));
+
         Set<Dependency> expected = new HashSet<>();
         expected.add(new ArtifactDependency(ArtifactCoords.jar("io.quarkus.bootstrap.test", "ext-a-deployment", "1"),
                 DependencyFlags.DEPLOYMENT_CP));
         expected.add(new ArtifactDependency(ArtifactCoords.jar("io.quarkus.bootstrap.test", "ext-a-deployment-dep", "1"),
                 DependencyFlags.DEPLOYMENT_CP));
-        assertEquals(expected, getDeploymentOnlyDeps(model));
+        expected.add(new ArtifactDependency(ArtifactCoords.jar("io.quarkus.bootstrap.test", "ext-b-deployment", "1"),
+                JavaScopes.PROVIDED,
+                DependencyFlags.DEPLOYMENT_CP));
 
-        expected = new HashSet<>();
-        expected.add(new ArtifactDependency(ArtifactCoords.jar("io.quarkus.bootstrap.test", "ext-b", "1"),
-                JavaScopes.PROVIDED,
-                DependencyFlags.RUNTIME_EXTENSION_ARTIFACT,
-                DependencyFlags.DIRECT,
-                DependencyFlags.TOP_LEVEL_RUNTIME_EXTENSION_ARTIFACT,
-                DependencyFlags.COMPILE_ONLY));
-        expected.add(new ArtifactDependency(ArtifactCoords.jar("io.quarkus.bootstrap.test", "direct-provided-dep", "1"),
-                JavaScopes.PROVIDED,
-                DependencyFlags.DIRECT,
-                DependencyFlags.COMPILE_ONLY));
-        expected.add(new ArtifactDependency(ArtifactCoords.jar("io.quarkus.bootstrap.test", "transitive-provided-dep", "1"),
-                JavaScopes.PROVIDED,
-                DependencyFlags.COMPILE_ONLY));
-        assertEquals(expected, getDependenciesWithFlag(model, DependencyFlags.COMPILE_ONLY));
+        assertEquals(expected, getDeploymentOnlyDeps(model));
     }
 }

@@ -26,11 +26,24 @@ public interface ApplicationModel {
     ResolvedDependency getAppArtifact();
 
     /**
-     * All the dependencies of an application including runtime and build time dependencies.
+     * Returns application dependencies that are included into the runtime and augmentation (Quarkus build time)
+     * classpath.
+     * <p>
+     * Note: in production bootstrap mode, {@link io.quarkus.maven.dependency.DependencyFlags#COMPILE_ONLY} dependencies
+     * will not be included in the result. However, they could still be queries by calling {@link #getDependencies(int)}
+     * passing in {@link io.quarkus.maven.dependency.DependencyFlags#COMPILE_ONLY} flag as an argument.
      *
      * @return application runtime and build time dependencies
      */
     Collection<ResolvedDependency> getDependencies();
+
+    /**
+     * Returns application dependencies with the requested flags set.
+     *
+     * @param flags dependency flags that must be set for a dependency to be included in the result
+     * @return application dependencies that have requested flags set
+     */
+    Iterable<ResolvedDependency> getDependencies(int flags);
 
     /**
      * Runtime dependencies of an application
