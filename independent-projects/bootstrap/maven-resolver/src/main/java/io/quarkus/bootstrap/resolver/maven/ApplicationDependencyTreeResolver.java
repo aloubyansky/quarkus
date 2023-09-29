@@ -11,7 +11,6 @@ import java.util.Collection;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -25,20 +24,24 @@ import org.eclipse.aether.RepositoryException;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.collection.CollectRequest;
+import org.eclipse.aether.collection.DependencyCollectionException;
 import org.eclipse.aether.collection.DependencyGraphTransformationContext;
-import org.eclipse.aether.collection.DependencyGraphTransformer;
 import org.eclipse.aether.collection.DependencySelector;
 import org.eclipse.aether.graph.DefaultDependencyNode;
 import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.graph.Exclusion;
 import org.eclipse.aether.repository.RemoteRepository;
+import org.eclipse.aether.resolution.ArtifactRequest;
+import org.eclipse.aether.resolution.ArtifactResolutionException;
 import org.eclipse.aether.resolution.DependencyRequest;
 import org.eclipse.aether.resolution.DependencyResolutionException;
 import org.eclipse.aether.util.artifact.JavaScopes;
+import org.eclipse.aether.util.graph.manager.DependencyManagerUtils;
 import org.eclipse.aether.util.graph.selector.ExclusionDependencySelector;
 import org.eclipse.aether.util.graph.transformer.ConflictIdSorter;
 import org.eclipse.aether.util.graph.transformer.ConflictMarker;
+import org.eclipse.aether.util.graph.transformer.ConflictResolver;
 import org.jboss.logging.Logger;
 
 import io.quarkus.bootstrap.BootstrapConstants;
@@ -282,44 +285,76 @@ public class ApplicationDependencyTreeResolver {
     }
 
     private DependencyNode resolveRuntimeDeps(CollectRequest request) throws AppModelResolverException {
-        RepositorySystemSession session = resolver.getSession();
         if (!CONVERGED_TREE_ONLY && collectReloadableModules) {
-            final DefaultRepositorySystemSession mutableSession;
-            mutableSession = new DefaultRepositorySystemSession(resolver.getSession());
-            mutableSession.setDependencyGraphTransformer(new DependencyGraphTransformer() {
-
-                @Override
-                public DependencyNode transformGraph(DependencyNode node, DependencyGraphTransformationContext context)
-                        throws RepositoryException {
-                    final Map<DependencyNode, DependencyNode> visited = new IdentityHashMap<>();
-                    for (DependencyNode c : node.getChildren()) {
-                        walk(c, visited);
-                    }
-                    return resolver.getSession().getDependencyGraphTransformer().transformGraph(node, context);
-                }
-
-                private void walk(DependencyNode node, Map<DependencyNode, DependencyNode> visited) {
-                    if (visited.put(node, node) != null || node.getChildren().isEmpty()) {
-                        return;
-                    }
-                    final Set<ArtifactKey> deps = artifactDeps
-                            .computeIfAbsent(DependencyUtils.getCoords(node.getArtifact()),
-                                    k -> new HashSet<>(node.getChildren().size()));
-                    for (DependencyNode c : node.getChildren()) {
-                        deps.add(getKey(c.getArtifact()));
-                        walk(c, visited);
-                    }
-                }
-            });
-            session = mutableSession;
+            var mutableSession = new DefaultRepositorySystemSession(resolver.getSession());
+            mutableSession.setConfigProperty(ConflictResolver.CONFIG_PROP_VERBOSE, true);
+            mutableSession.setConfigProperty(DependencyManagerUtils.CONFIG_PROP_VERBOSE, true);
+            DependencyNode verboseRoot;
+            try {
+                verboseRoot = resolver.getSystem()
+                        .collectDependencies(mutableSession, request).getRoot();
+            } catch (DependencyCollectionException e) {
+                final Artifact a = request.getRoot() == null ? request.getRootArtifact() : request.getRoot().getArtifact();
+                throw new BootstrapMavenException("Failed to resolve dependencies for " + a, e);
+            }
+            return resolveConflicts(verboseRoot);
         }
         try {
-            return resolver.getSystem().resolveDependencies(session, new DependencyRequest().setCollectRequest(request))
+            return resolver.getSystem().resolveDependencies(resolver.getSession(),
+                    new DependencyRequest().setCollectRequest(request))
                     .getRoot();
         } catch (DependencyResolutionException e) {
             final Artifact a = request.getRoot() == null ? request.getRootArtifact() : request.getRoot().getArtifact();
             throw new BootstrapMavenException("Failed to resolve dependencies for " + a, e);
         }
+    }
+
+    private DependencyNode resolveConflicts(DependencyNode node) {
+        final List<DependencyNode> children = new ArrayList<>(node.getChildren().size());
+        if (!node.getChildren().isEmpty()) {
+            final boolean checkScope = node.getDependency() != null
+                    && (node.getDependency().getScope().equals(JavaScopes.PROVIDED)
+                            || node.getDependency().getScope().equals(JavaScopes.TEST));
+            final Set<ArtifactKey> deps = artifactDeps.computeIfAbsent(DependencyUtils.getCoords(node.getArtifact()),
+                    k -> new HashSet<>(node.getChildren().size()));
+
+            for (var child : node.getChildren()) {
+                var winner = (DependencyNode) child.getData().get(ConflictResolver.NODE_DATA_WINNER);
+                if (winner == null) {
+                    child = resolveConflicts(child);
+                    children.add(child);
+                    deps.add(getKey(child.getArtifact()));
+                    if (checkScope && !child.getDependency().getScope().equals(node.getDependency().getScope())) {
+                        log.warn(child.getDependency() + " originally had scope " + node.getDependency().getScope());
+                    }
+                } else {
+                    deps.add(getKey(winner.getArtifact()));
+                    if (!child.getDependency().getArtifact().getVersion()
+                            .equals(winner.getDependency().getArtifact().getVersion())) {
+                        System.out.println("OVERRIDE of " + child.getDependency().getArtifact() + " by "
+                                + winner.getDependency().getArtifact().getVersion() + " " + child.getChildren().size());
+                    }
+                }
+            }
+        }
+
+        var result = new DefaultDependencyNode(node);
+        result.setChildren(children);
+        if (result.getDependency() != null && result.getArtifact().getFile() == null) {
+            final Artifact resolved;
+            try {
+                resolved = resolver.getSystem().resolveArtifact(resolver.getSession(),
+                        new ArtifactRequest()
+                                .setRepositories(node.getRepositories())
+                                .setRequestContext(node.getRequestContext())
+                                .setArtifact(node.getArtifact()))
+                        .getArtifact();
+            } catch (ArtifactResolutionException e) {
+                throw new RuntimeException(e);
+            }
+            result.setArtifact(resolved);
+        }
+        return result;
     }
 
     private boolean isRuntimeArtifact(ArtifactKey key) {
