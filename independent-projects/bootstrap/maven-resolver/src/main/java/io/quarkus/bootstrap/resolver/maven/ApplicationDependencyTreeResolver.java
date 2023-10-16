@@ -340,6 +340,9 @@ public class ApplicationDependencyTreeResolver {
         Artifact artifact = node.getArtifact();
         final ArtifactKey key = getKey(artifact);
         ResolvedDependencyBuilder dep = appBuilder.getDependency(key);
+        if (dep != null) {
+            return;
+        }
         if (dep == null) {
             artifact = resolve(artifact);
         }
