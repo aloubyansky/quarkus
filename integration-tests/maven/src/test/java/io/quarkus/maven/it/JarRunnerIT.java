@@ -130,7 +130,7 @@ public class JarRunnerIT extends MojoTestBase {
                 "projects/platform-props-overriden-in-app-props");
         final RunningInvoker running = new RunningInvoker(testDir, false);
 
-        final MavenProcessInvocationResult result = running.execute(Arrays.asList("install"),
+        final MavenProcessInvocationResult result = running.execute(Arrays.asList("install", "-X"),
                 Collections.emptyMap());
         await().atMost(1, TimeUnit.MINUTES).until(() -> result.getProcess() != null && !result.getProcess().isAlive());
         assertThat(running.log()).containsIgnoringCase("BUILD SUCCESS");
