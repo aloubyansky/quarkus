@@ -157,6 +157,11 @@
             <groupId>org.eclipse.parsson</groupId>
             <artifactId>parsson</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.cyclonedx</groupId>
+            <artifactId>cyclonedx-core-java</artifactId>
+            <version>${cyclonedx.version}</version>
+        </dependency>
 
         <!-- extensions reader -->
         <dependency>

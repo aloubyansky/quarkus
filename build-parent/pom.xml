@@ -39,6 +39,7 @@
 
         <!-- Dev tools -->
         <freemarker.version>2.3.33</freemarker.version>
+        <cyclonedx.version>8.0.3</cyclonedx.version>
         <commonmark.version>0.22.0</commonmark.version>
 
         <!-- Arquillian BOM -->
