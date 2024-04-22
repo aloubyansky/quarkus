@@ -88,11 +88,15 @@ public class IncubatingApplicationModelResolver {
      * @return true if this implementation is enabled
      */
     public static boolean isIncubatingEnabled(Properties projectProperties) {
+        /* @formatter:off
         var value = System.getProperty(INCUBATING_MODEL_RESOLVER);
         if (value == null && projectProperties != null) {
             value = String.valueOf(projectProperties.get(INCUBATING_MODEL_RESOLVER));
         }
         return Boolean.parseBoolean(value);
+        @formatter:on
+         */
+        return true;
     }
 
     public static IncubatingApplicationModelResolver newInstance() {
