@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -205,6 +204,6 @@ public abstract class MultiplePlatformBomsTestBase {
     }
 
     static Path getProjectDir(String name) {
-        return Paths.get("target").resolve("generated-test-projects").resolve(name);
+        return Path.of("target").resolve("generated-test-projects").resolve(name);
     }
 }

@@ -96,6 +96,11 @@ public class ExtensionDescriptorMojo extends AbstractMojo {
         String resources;
     }
 
+    public static class Offering {
+        String name;
+        String version;
+    }
+
     private static final String GROUP_ID = "group-id";
     private static final String ARTIFACT_ID = "artifact-id";
     private static final String METADATA = "metadata";
@@ -240,8 +245,22 @@ public class ExtensionDescriptorMojo extends AbstractMojo {
     @Parameter(property = "skipCodestartValidation")
     boolean skipCodestartValidation;
 
+    /**
+     * The minimum version of Java an extension supports
+     */
     @Parameter(defaultValue = "${maven.compiler.release}", readonly = true)
     String minimumJavaVersion;
+
+    /**
+     * A list of offerings an extension is a part of.
+     * <p>
+     * An offering is a logical group of extensions that would typically be developed and maintained as a set by a team of
+     * developers.
+     * <p>
+     * An offering configuration includes a name (simple word) and a version.
+     */
+    @Parameter
+    List<Offering> offerings = List.of();
 
     ArtifactCoords deploymentCoords;
     CollectResult collectedDeploymentDeps;
@@ -386,6 +405,43 @@ public class ExtensionDescriptorMojo extends AbstractMojo {
             props.put(ApplicationModelBuilder.LESSER_PRIORITY_ARTIFACTS, val);
         }
 
+        ObjectNode extObject;
+        ObjectMapper mapper = null;
+        if (extensionFile.exists()) {
+            mapper = getMapper(extensionFile.toString().endsWith(".yaml"));
+            extObject = readExtensionDescriptorFile(extensionFile.toPath(), mapper);
+        } else {
+            mapper = getMapper(true);
+            extObject = getMapper(true).createObjectNode();
+        }
+
+        if (!offerings.isEmpty()) {
+            var sb = new StringBuilder();
+            var jsonArray = getMetadataNode(extObject).putArray(BootstrapConstants.PROP_OFFERINGS);
+            for (var offering : offerings) {
+                var name = offering.name == null ? "" : offering.name.trim();
+                if (name.isEmpty()) {
+                    throw new MojoExecutionException(
+                            "Offering name is null or an empty string, please, either remove the offering configuration or provide a proper name");
+                }
+                var version = offering.version == null ? "" : offering.version.trim();
+                if (version.isEmpty()) {
+                    throw new MojoExecutionException("The version is null or an empty string for offering " + name
+                            + ", please, either remove the offering configuration or provide a proper version");
+                }
+                if (sb.length() > 0) {
+                    sb.append(",");
+                }
+                sb.append(name).append("@").append(version);
+                var jsonOffering = jsonArray.addObject();
+                jsonOffering.put("name", name);
+                jsonOffering.put("version", version);
+            }
+            if (sb.length() > 0) {
+                props.setProperty(BootstrapConstants.PROP_OFFERINGS, sb.toString());
+            }
+        }
+
         final Path output = outputDirectory.toPath().resolve(BootstrapConstants.META_INF);
         try {
             Files.createDirectories(output);
@@ -401,19 +457,9 @@ public class ExtensionDescriptorMojo extends AbstractMojo {
             extensionFile = output.resolve(BootstrapConstants.QUARKUS_EXTENSION_FILE_NAME).toFile();
         }
 
-        ObjectNode extObject;
         if (!extensionFile.exists()) {
             // if does not exist look for fallback .json
             extensionFile = new File(extensionFile.getParent(), "quarkus-extension.json");
-        }
-
-        ObjectMapper mapper = null;
-        if (extensionFile.exists()) {
-            mapper = getMapper(extensionFile.toString().endsWith(".yaml"));
-            extObject = readExtensionDescriptorFile(extensionFile.toPath(), mapper);
-        } else {
-            mapper = getMapper(true);
-            extObject = getMapper(true).createObjectNode();
         }
 
         transformLegacyToNew(extObject, mapper);

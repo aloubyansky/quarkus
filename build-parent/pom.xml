@@ -52,6 +52,11 @@
         <!-- Enable APT by default for Eclipse -->
         <m2e.apt.activation>jdt_apt</m2e.apt.activation>
 
+        <!-- Extension offering - a group of extensions developed and maintained as a set -->
+        <!-- Offering info is recorded in extension metadata and Quarkus application manifest -->
+        <quarkus.offering.name>Quarkus</quarkus.offering.name>
+        <quarkus.offering.version>${project.version}</quarkus.offering.version>
+
         <!-- These 2 properties are used in catalog-overrides.json -->
         <minimum-java-version>${maven.compiler.release}</minimum-java-version>
         <recommended-java-version>21</recommended-java-version>
@@ -506,8 +511,13 @@
                             </goals>
                             <phase>process-resources</phase>
                             <configuration>
-                                <deployment>${project.groupId}:${project.artifactId}-deployment:${project.version}
-                                </deployment>
+                                <deployment>${project.groupId}:${project.artifactId}-deployment:${project.version}</deployment>
+                                <offerings>
+                                    <offering>
+                                        <name>${quarkus.offering.name}</name>
+                                        <version>${quarkus.offering.version}</version>
+                                    </offering>
+                                </offerings>
                             </configuration>
                         </execution>
                     </executions>

@@ -64,6 +64,20 @@ public class TestRegistryClientBuilder {
         return new TestRegistryClientBuilder();
     }
 
+    public static TestExtensionBuilder newExtension(String artifactId) {
+        var e = new TestExtensionBuilder();
+        e.artifactId = artifactId;
+        return e;
+    }
+
+    public static TestExtensionBuilder newExtension(String groupId, String artifactId, String version) {
+        var e = new TestExtensionBuilder();
+        e.groupId = groupId;
+        e.artifactId = artifactId;
+        e.version = version;
+        return e;
+    }
+
     private TestRegistryClientBuilder() {
     }
 
@@ -333,6 +347,18 @@ public class TestRegistryClientBuilder {
             }
             quarkusVersions.setRecognizedVersionsExpression(expr);
             quarkusVersions.setExclusiveProvider(exclusiveProvider);
+            return this;
+        }
+
+        public TestRegistryBuilder enableOfferings(String... offerings) {
+            if (offerings.length > 0) {
+                var extra = config.getExtra();
+                if (extra == null || extra.isEmpty()) {
+                    extra = new HashMap<>();
+                    config.setExtra(extra);
+                }
+                extra.put(Constants.OFFERINGS, List.of(offerings));
+            }
             return this;
         }
 
@@ -626,7 +652,8 @@ public class TestRegistryClientBuilder {
                 throw new RuntimeException("Quarkus core version hasn't been set");
             }
             final TestPlatformCatalogMemberBuilder quarkusBom = newMember("quarkus-bom");
-            quarkusBom.addExtension("io.quarkus", "quarkus-core", release.getQuarkusCoreVersion());
+            quarkusBom.addExtension(newExtension("io.quarkus", "quarkus-core", release.getQuarkusCoreVersion())
+                    .setUnlisted(true));
             Map<String, Object> metadata = quarkusBom.getProjectProperties();
             metadata.put("maven-plugin-groupId", quarkusBom.extensions.getBom().getGroupId());
             metadata.put("maven-plugin-artifactId", "quarkus-maven-plugin");
@@ -740,23 +767,21 @@ public class TestRegistryClientBuilder {
         }
 
         public TestPlatformCatalogMemberBuilder addExtension(String groupId, String artifactId, String version) {
-            final ArtifactCoords coords = ArtifactCoords.jar(groupId, artifactId, version);
-            final Extension.Mutable e = Extension.builder()
-                    .setArtifact(coords)
-                    .setName(artifactId)
-                    .setOrigins(Collections.singletonList(extensions));
-            extensions.addExtension(e);
+            return addExtension(newExtension(groupId, artifactId, version));
+        }
 
+        public TestPlatformCatalogMemberBuilder addExtension(TestExtensionBuilder extBuilder) {
+            var e = extBuilder.addToCatalog(extensions);
             final Dependency d = new Dependency();
-            d.setGroupId(coords.getGroupId());
-            d.setArtifactId(coords.getArtifactId());
-            if (!coords.getClassifier().isBlank()) {
-                d.setClassifier(coords.getClassifier());
+            d.setGroupId(e.getArtifact().getGroupId());
+            d.setArtifactId(e.getArtifact().getArtifactId());
+            if (!e.getArtifact().getClassifier().isBlank()) {
+                d.setClassifier(e.getArtifact().getClassifier());
             }
-            if (!coords.getType().equals("jar")) {
-                d.setType(coords.getType());
+            if (!e.getArtifact().getType().equals(ArtifactCoords.TYPE_JAR)) {
+                d.setType(e.getArtifact().getType());
             }
-            d.setVersion(coords.getVersion());
+            d.setVersion(e.getArtifact().getVersion());
             pom.getDependencyManagement().addDependency(d);
             return this;
         }
@@ -828,12 +853,7 @@ public class TestRegistryClientBuilder {
         }
 
         private Extension.Mutable addExtensionToCatalog(String groupId, String artifactId, String version) {
-            Extension.Mutable e = Extension.builder()
-                    .setArtifact(ArtifactCoords.jar(groupId, artifactId, version))
-                    .setName(artifactId)
-                    .setOrigins(Collections.singletonList(extensions));
-            extensions.addExtension(e);
-            return e;
+            return newExtension(groupId, artifactId, version).addToCatalog(extensions);
         }
 
         public TestNonPlatformCodestartBuilder addExtensionWithCodestart(String groupId, String artifactId, String version) {
@@ -851,7 +871,7 @@ public class TestRegistryClientBuilder {
         }
 
         private void persist(Path nonPlatformDir) {
-            codestarts.forEach(c -> c.persist());
+            codestarts.forEach(TestCodestartBuilder::persist);
             final Path json = getNonPlatformCatalogPath(nonPlatformDir, extensions.getQuarkusCoreVersion());
             try {
                 extensions.persist(json);
@@ -859,6 +879,48 @@ public class TestRegistryClientBuilder {
                 throw new IllegalStateException("Failed to persist extension catalog " + json, e);
             }
             registry().clientBuilder().installExtensionArtifacts(extensions.getExtensions());
+        }
+    }
+
+    public static class TestExtensionBuilder {
+
+        private String groupId;
+        private String artifactId;
+        private String version;
+        private List<String> offerings;
+        private boolean unlisted;
+
+        private TestExtensionBuilder() {
+        }
+
+        public TestExtensionBuilder addOffering(String offering) {
+            if (offerings == null) {
+                offerings = new ArrayList<>(2);
+            }
+            offerings.add(offering);
+            return this;
+        }
+
+        public TestExtensionBuilder setUnlisted(boolean unlisted) {
+            this.unlisted = unlisted;
+            return this;
+        }
+
+        private Extension.Mutable addToCatalog(ExtensionCatalog.Mutable catalog) {
+            Extension.Mutable e = Extension.builder()
+                    .setArtifact(ArtifactCoords.jar(groupId == null ? catalog.getBom().getGroupId() : groupId,
+                            artifactId,
+                            version == null ? catalog.getBom().getVersion() : version))
+                    .setName(artifactId)
+                    .setOrigins(List.of(catalog));
+            if (offerings != null) {
+                e.getMetadata().put(Constants.OFFERINGS, offerings);
+            }
+            if (unlisted) {
+                e.getMetadata().put("unlisted", true);
+            }
+            catalog.addExtension(e);
+            return e;
         }
     }
 
