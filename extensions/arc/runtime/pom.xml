@@ -37,6 +37,16 @@
             <capabilities>
               <provides>io.quarkus.cdi</provides>
             </capabilities>
+            <offerings>
+              <offering>
+                <name>Quarkus</name>
+                <version>${project.version}</version>
+              </offering>
+              <offering>
+                <name>other</name>
+                <version>3.3</version>
+              </offering>
+            </offerings>
           </configuration>
       </plugin>
       <plugin>

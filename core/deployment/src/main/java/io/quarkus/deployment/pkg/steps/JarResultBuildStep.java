@@ -50,6 +50,7 @@ import java.util.stream.Stream;
 
 import org.jboss.logging.Logger;
 
+import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.bootstrap.model.MutableJarApplicationModel;
 import io.quarkus.bootstrap.runner.QuarkusEntryPoint;
 import io.quarkus.bootstrap.runner.SerializedApplication;
@@ -355,16 +356,13 @@ public class JarResultBuildStep {
                 }
             };
 
-            final Collection<ResolvedDependency> appDeps = curateOutcomeBuildItem.getApplicationModel()
-                    .getRuntimeDependencies();
-
-            ResolvedDependency appArtifact = curateOutcomeBuildItem.getApplicationModel().getAppArtifact();
+            final ApplicationModel appModel = curateOutcomeBuildItem.getApplicationModel();
             // the manifest needs to be the first entry in the jar, otherwise JarInputStream does not work properly
             // see https://bugs.openjdk.java.net/browse/JDK-8031748
-            generateManifest(runnerZipFs, "", packageConfig, appArtifact, mainClassBuildItem.getClassName(),
+            generateManifest(runnerZipFs, "", packageConfig, appModel, mainClassBuildItem.getClassName(),
                     applicationInfo);
 
-            for (ResolvedDependency appDep : appDeps) {
+            for (ResolvedDependency appDep : appModel.getRuntimeDependencies()) {
 
                 // Exclude files that are not jars (typically, we can have XML files here, see https://github.com/quarkusio/quarkus/issues/2852)
                 // and are not part of the optional dependencies to include
@@ -766,8 +764,7 @@ public class JarResultBuildStep {
         }
         if (!rebuild) {
             try (FileSystem runnerZipFs = createNewZip(initJar, packageConfig)) {
-                ResolvedDependency appArtifact = curateOutcomeBuildItem.getApplicationModel().getAppArtifact();
-                generateManifest(runnerZipFs, classPath.toString(), packageConfig, appArtifact,
+                generateManifest(runnerZipFs, classPath.toString(), packageConfig, curateOutcomeBuildItem.getApplicationModel(),
                         QuarkusEntryPoint.class.getName(),
                         applicationInfo);
             }
@@ -1076,19 +1073,19 @@ public class JarResultBuildStep {
         final StringBuilder classPath = new StringBuilder();
         final Map<String, List<byte[]>> services = new HashMap<>();
 
-        final Collection<ResolvedDependency> appDeps = curateOutcomeBuildItem.getApplicationModel()
-                .getRuntimeDependencies();
+        final ApplicationModel appModel = curateOutcomeBuildItem.getApplicationModel();
 
         Predicate<String> ignoredEntriesPredicate = getThinJarIgnoredEntriesPredicate(packageConfig);
 
         final Set<ArtifactKey> removed = getRemovedKeys(classLoadingConfig);
-        copyLibraryJars(runnerZipFs, outputTargetBuildItem, transformedClasses, libDir, classPath, appDeps, services,
-                ignoredEntriesPredicate, removed);
+        copyLibraryJars(runnerZipFs, outputTargetBuildItem, transformedClasses, libDir, classPath,
+                appModel.getRuntimeDependencies(),
+                services, ignoredEntriesPredicate, removed);
 
-        ResolvedDependency appArtifact = curateOutcomeBuildItem.getApplicationModel().getAppArtifact();
+        ResolvedDependency appArtifact = appModel.getAppArtifact();
         // the manifest needs to be the first entry in the jar, otherwise JarInputStream does not work properly
         // see https://bugs.openjdk.java.net/browse/JDK-8031748
-        generateManifest(runnerZipFs, classPath.toString(), packageConfig, appArtifact, mainClassBuildItem.getClassName(),
+        generateManifest(runnerZipFs, classPath.toString(), packageConfig, appModel, mainClassBuildItem.getClassName(),
                 applicationInfo);
 
         copyCommonContent(runnerZipFs, services, applicationArchivesBuildItem, transformedClasses, allClasses,
@@ -1297,7 +1294,7 @@ public class JarResultBuildStep {
      * Otherwise, this manifest manipulation will be useless.
      */
     private void generateManifest(FileSystem runnerZipFs, final String classPath, PackageConfig config,
-            ResolvedDependency appArtifact,
+            ApplicationModel appModel,
             String mainClassName,
             ApplicationInfoBuildItem applicationInfo)
             throws IOException {
@@ -1334,14 +1331,14 @@ public class JarResultBuildStep {
         if (config.jar().manifest().addImplementationEntries()
                 && !attributes.containsKey(Attributes.Name.IMPLEMENTATION_TITLE)) {
             String name = ApplicationInfoBuildItem.UNSET_VALUE.equals(applicationInfo.getName())
-                    ? appArtifact.getArtifactId()
+                    ? appModel.getAppArtifact().getArtifactId()
                     : applicationInfo.getName();
             attributes.put(Attributes.Name.IMPLEMENTATION_TITLE, name);
         }
         if (config.jar().manifest().addImplementationEntries()
                 && !attributes.containsKey(Attributes.Name.IMPLEMENTATION_VERSION)) {
             String version = ApplicationInfoBuildItem.UNSET_VALUE.equals(applicationInfo.getVersion())
-                    ? appArtifact.getVersion()
+                    ? appModel.getAppArtifact().getVersion()
                     : applicationInfo.getVersion();
             attributes.put(Attributes.Name.IMPLEMENTATION_VERSION, version);
         }
@@ -1350,6 +1347,16 @@ public class JarResultBuildStep {
                 Attributes attribs = manifest.getEntries().computeIfAbsent(sectionName, k -> new Attributes());
                 attribs.putValue(entry.getKey(), entry.getValue());
             }
+        }
+        if (!appModel.getExtensionOfferings().isEmpty()) {
+            var sb = new StringBuilder();
+            for (var offering : appModel.getExtensionOfferings()) {
+                if (!sb.isEmpty()) {
+                    sb.append(",");
+                }
+                sb.append(offering.getName()).append(":").append(offering.getVersion());
+            }
+            attributes.putValue("Quarkiverse-Offerings", sb.toString());
         }
         try (final OutputStream os = Files.newOutputStream(manifestPath)) {
             manifest.write(os);

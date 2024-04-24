@@ -2,6 +2,7 @@ package io.quarkus.bootstrap.model;
 
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -70,6 +71,17 @@ public interface ApplicationModel {
     default Map<String, String> getPlatformProperties() {
         final PlatformImports platformImports = getPlatforms();
         return platformImports == null ? Map.of() : platformImports.getPlatformProperties();
+    }
+
+    /**
+     * Returns a collection of extension offerings found among the application dependencies or an empty collection,
+     * in case none of the extensions belongs to an offering.
+     *
+     * @return extension offerings found among the application dependencies or an empty collection, in case none of the
+     *         extensions belongs to an offering
+     */
+    default Collection<ExtensionOffering> getExtensionOfferings() {
+        return List.of();
     }
 
     /**

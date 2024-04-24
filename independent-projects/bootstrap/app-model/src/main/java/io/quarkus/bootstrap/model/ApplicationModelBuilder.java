@@ -32,6 +32,7 @@ public class ApplicationModelBuilder {
     public static final String EXCLUDED_ARTIFACTS = "excluded-artifacts";
     public static final String REMOVED_RESOURCES_DOT = "removed-resources.";
     public static final String LESSER_PRIORITY_ARTIFACTS = "lesser-priority-artifacts";
+    public static final String OFFERINGS = "offerings";
 
     private static final Logger log = Logger.getLogger(ApplicationModelBuilder.class);
 
@@ -47,6 +48,7 @@ public class ApplicationModelBuilder {
     final Collection<ExtensionCapabilities> extensionCapabilities = new ConcurrentLinkedDeque<>();
     PlatformImports platformImports;
     final Map<WorkspaceModuleId, WorkspaceModule.Mutable> projectModules = new HashMap<>();
+    final Map<ExtensionOffering, Object> offerings = new ConcurrentHashMap<>();
 
     public ApplicationModelBuilder() {
         // we never include the ide launcher in the final app model
@@ -198,10 +200,14 @@ public class ApplicationModelBuilder {
                     }
                     break;
                 case LESSER_PRIORITY_ARTIFACTS:
-                    String[] artifacts = value.split(",");
-                    for (String artifact : artifacts) {
+                    for (String artifact : value.split(",")) {
                         lesserPriorityArtifacts.add(new GACT(artifact.split(":")));
                         log.debugf("Extension %s is making %s a lesser priority artifact", extension, artifact);
+                    }
+                    break;
+                case OFFERINGS:
+                    for (var offering : value.split(",")) {
+                        offerings.put(ExtensionOffering.parse(offering), OFFERINGS);
                     }
                     break;
                 default:

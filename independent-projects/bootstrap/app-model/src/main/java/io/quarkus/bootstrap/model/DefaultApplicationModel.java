@@ -24,6 +24,7 @@ public class DefaultApplicationModel implements ApplicationModel, Serializable {
     private final List<ExtensionCapabilities> capabilityContracts;
     private final Set<ArtifactKey> localProjectArtifacts;
     private final Map<ArtifactKey, Set<String>> excludedResources;
+    private final Collection<ExtensionOffering> offerings;
 
     public DefaultApplicationModel(ApplicationModelBuilder builder) {
         this.appArtifact = builder.appArtifact.build();
@@ -32,6 +33,7 @@ public class DefaultApplicationModel implements ApplicationModel, Serializable {
         this.capabilityContracts = List.copyOf(builder.extensionCapabilities);
         this.localProjectArtifacts = Set.copyOf(builder.reloadableWorkspaceModules);
         this.excludedResources = builder.excludedResources;
+        this.offerings = List.copyOf(builder.offerings.keySet());
     }
 
     @Override
@@ -61,6 +63,11 @@ public class DefaultApplicationModel implements ApplicationModel, Serializable {
     @Override
     public PlatformImports getPlatforms() {
         return platformImports;
+    }
+
+    @Override
+    public Collection<ExtensionOffering> getExtensionOfferings() {
+        return offerings;
     }
 
     @Override
