@@ -803,7 +803,7 @@ public class BootstrapMavenContext {
         return activeSettingsProfiles = selectedProfiles;
     }
 
-    private static List<org.apache.maven.model.Profile> toModelProfiles(List<Profile> profiles) {
+    public static List<org.apache.maven.model.Profile> toModelProfiles(List<Profile> profiles) {
         final List<org.apache.maven.model.Profile> result = new ArrayList<>(profiles.size());
         for (Profile p : profiles) {
             result.add(SettingsUtils.convertFromSettingsProfile(p));
@@ -1118,7 +1118,7 @@ public class BootstrapMavenContext {
                 && varName.endsWith(option);
     }
 
-    private static FileProfileActivator createFileProfileActivator() throws BootstrapMavenException {
+    public static FileProfileActivator createFileProfileActivator() throws BootstrapMavenException {
         var activator = new FileProfileActivator();
         var translator = new DefaultPathTranslator();
         try {

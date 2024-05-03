@@ -3,9 +3,7 @@ package io.quarkus.bootstrap.resolver.maven;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
@@ -35,7 +33,6 @@ public class EffectiveModelResolver {
     private final MavenArtifactResolver resolver;
     private final ModelBuilder modelBuilder;
     private final ModelCache modelCache;
-    private final Map<ArtifactCoords, Model> effectiveModels = new HashMap<>();
 
     public EffectiveModelResolver(MavenArtifactResolver resolver) {
         this.resolver = resolver;
@@ -52,16 +49,6 @@ public class EffectiveModelResolver {
     }
 
     public Model resolveEffectiveModel(ArtifactCoords coords, List<RemoteRepository> repos) {
-
-        if (!ArtifactCoords.TYPE_POM.equals(coords.getType())) {
-            coords = ArtifactCoords.pom(coords.getGroupId(), coords.getArtifactId(), coords.getVersion());
-        }
-
-        var cached = effectiveModels.get(coords);
-        if (cached != null) {
-            return cached;
-        }
-
         final LocalWorkspace ws = resolver.getMavenContext().getWorkspace();
         if (ws != null) {
             final LocalProject project = ws.getProject(coords.getGroupId(), coords.getArtifactId());
@@ -70,12 +57,15 @@ public class EffectiveModelResolver {
                 return project.getModelBuildingResult().getEffectiveModel();
             }
         }
+        return doResolveEffectiveModel(coords, repos);
+    }
 
+    private Model doResolveEffectiveModel(ArtifactCoords coords, List<RemoteRepository> repos) {
         final File pomFile;
         final ArtifactResult pomResult;
         try {
             pomResult = resolver.resolve(new DefaultArtifact(coords.getGroupId(), coords.getArtifactId(),
-                    coords.getClassifier(), coords.getType(), coords.getVersion()), repos);
+                    coords.getClassifier(), ArtifactCoords.TYPE_POM, coords.getVersion()), repos);
             pomFile = pomResult.getArtifact().getFile();
         } catch (BootstrapMavenException e) {
             throw new RuntimeException("Failed to resolve " + coords.toCompactCoords(), e);
