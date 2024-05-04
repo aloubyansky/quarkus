@@ -1,16 +1,19 @@
 import { LitElement, html, css} from 'lit';
 import { root } from 'devui-data';
-import { groupIds } from 'devui-data';
-import { filteredGroupIds } from 'devui-data';
+import { allGavs } from 'devui-data';
 import '@vaadin/button';
 import '@vaadin/icon';
 import '@vaadin/checkbox';
 import '@vaadin/checkbox-group';
+import '@vaadin/combo-box';
+import { JsonRpc } from 'jsonrpc';
 
 /**
  * This component shows the Application dependencies
  */
 export class QwcDependencies extends LitElement {
+
+    jsonRpc = new JsonRpc("devui-dependencies");
 
     static styles = css`
         :host {
@@ -23,7 +26,7 @@ export class QwcDependencies extends LitElement {
             align-items: baseline;
             gap: 20px;
             padding-left: 20px;
-            justify-content: end;
+            justify-content: space-between;
             padding-right: 20px;
         }
         .middle {
@@ -31,10 +34,17 @@ export class QwcDependencies extends LitElement {
             width:100%;
             height: 100%;
         }
-        .filter {
-            overflow: scroll;
+        .allGavs {
+            width: 100%;
         }
-    
+        .controls {
+            display: flex;
+            gap: 5px;
+        }
+        .target {
+            width: 40%;
+            display: flex;
+        }
     `;
 
     static properties = {
@@ -46,8 +56,8 @@ export class QwcDependencies extends LitElement {
         _links: {state: true},
         _showSimpleDescription: {state: false},
         _showDirectOnly: {state: false},
-        _groupIds: {state: false},
-        _selectedGroupIds: {state: false}
+        _allGavs: {state: false},
+        _selectedTarget: {state: true}
     };
 
     constructor() {
@@ -59,10 +69,10 @@ export class QwcDependencies extends LitElement {
         this._edgeLength = 120;
         this._nodes = null;
         this._links = null;
-        this._showSimpleDescription = [];
+        this._showSimpleDescription = ["0"];
         this._showDirectOnly = [];
-        this._groupIds = groupIds;
-        this._selectedGroupIds = filteredGroupIds;
+        this._allGavs = allGavs.map(str => ({ id: str, name: str }));
+        this._selectedTarget = null;
     }
 
     connectedCallback() {
@@ -84,20 +94,12 @@ export class QwcDependencies extends LitElement {
             let catindex = this._categoriesEnum.indexOf(linkSpec.type);
             
             if(this._showDirectOnly.length==0 || (this._showDirectOnly.length>0 && this._isDirect(linkSpec))){
-                const filterOutSet = new Set(this._selectedGroupIds);
-                
-                let targetGroupId = linkSpec.target.split(':')[0];
-                
-                if (!filterOutSet.has(targetGroupId)) {
-                
-                    this._addToNodes(sourceNode, catindex);
-                    this._addToNodes(targetNode, catindex);
-
-                    let link = new Object();
-                    link.target = this._nodes.findIndex(item => item.id === sourceNode.id);
-                    link.source = this._nodes.findIndex(item => item.id === targetNode.id);
-                    this._links.push(link);
-                }
+                this._addToNodes(sourceNode, catindex);
+                this._addToNodes(targetNode, catindex);
+                let link = new Object();
+                link.target = this._nodes.findIndex(item => item.id === sourceNode.id);
+                link.source = this._nodes.findIndex(item => item.id === targetNode.id);
+                this._links.push(link);
             }
         }
     }
@@ -142,13 +144,13 @@ export class QwcDependencies extends LitElement {
     render() {
         return html`${this._renderTopBar()}
                         <div class="middle">    
-                            ${this._renderFilter()}
                             <echarts-force-graph width="400px" height="400px"
                                 edgeLength=${this._edgeLength}
                                 categories="${JSON.stringify(this._categories)}"
                                 colors="${JSON.stringify(this._colors)}"
                                 nodes="${JSON.stringify(this._nodes)}"
-                                links="${JSON.stringify(this._links)}">
+                                links="${JSON.stringify(this._links)}"
+                                @echarts-click=${this._echartClicked}>
                             </echarts-force-graph>
                         </div>`;
         
@@ -157,7 +159,13 @@ export class QwcDependencies extends LitElement {
     _renderTopBar(){
             return html`
                     <div class="top-bar">
-                        <div>
+                        <div class="target">
+                            ${this._renderPathToTargetCombobox()}
+                            <vaadin-button theme="tertiary" @click=${() => this._fetchPathToTarget()}>
+                                <vaadin-icon icon="font-awesome-solid:eraser"></vaadin-icon>
+                            </vaadin-button>
+                        </div>
+                        <div class="controls">    
                             ${this._renderDirectOnlyCheckbox()}
                             ${this._renderSimpleDescriptionCheckbox()}
                             
@@ -171,22 +179,18 @@ export class QwcDependencies extends LitElement {
                     </div>`;
     }
 
-    _renderFilter(){
-        return html`<div class="filter">
-            <vaadin-checkbox-group
-                label="Filter out group id:"
-                    .value="${this._selectedGroupIds}"
-                    @value-changed="${(event) => {
-                        this._selectedGroupIds = event.detail.value;
-                        this._createNodes();
-                    }}"
-                    theme="vertical">
-                ${this._groupIds.map((groupId) =>
-                    html`<vaadin-checkbox value="${groupId}" label="${groupId}"></vaadin-checkbox>`
-                )}
-              </vaadin-checkbox-group>
-            </div>
-          `;
+    _renderPathToTargetCombobox(){
+        return html`<vaadin-combo-box
+            @change="${(event) => {
+                this._togglePathToTarget(event);
+            }}"
+            class="allGavs"
+            placeholder="Show path to ..."
+            item-label-path="name"
+            item-value-path="id"
+            .items="${this._allGavs}"
+            value="${this._selectedTarget}"
+        ></vaadin-combo-box>`;
     }
 
     _renderSimpleDescriptionCheckbox(){
@@ -212,16 +216,43 @@ export class QwcDependencies extends LitElement {
     }
 
     _zoomIn(){
-        if(this._edgeLength>10){
-            this._edgeLength = this._edgeLength - 10;
+        if(this._edgeLength>20){
+            this._edgeLength = this._edgeLength - 20;
         }else{
-            this._edgeLength = 10;
+            this._edgeLength = 20;
         }
     }
 
     _zoomOut(){
-        this._edgeLength = this._edgeLength + 10;
+        this._edgeLength = this._edgeLength + 20;
     }
 
+    _togglePathToTarget(event){
+        if(event.target.value){
+            this._fetchPathToTarget(event.target.value);
+        }else{
+            this._fetchPathToTarget();
+        }
+    }
+    
+    _echartClicked(e){
+        this._fetchPathToTarget(e.detail.id);
+    }
+
+    _fetchPathToTarget(target){
+        if(target){
+            this._selectedTarget = target;
+            this.jsonRpc.pathToTarget({target: target}).then(jsonRpcResponse => { 
+                this._root = jsonRpcResponse.result;
+                this._createNodes();    
+            });
+        }else {
+            this._selectedTarget = null;
+            this.jsonRpc.pathToTarget().then(jsonRpcResponse => { 
+                this._root = jsonRpcResponse.result;
+                this._createNodes();
+            });
+        }
+    }
 }
 customElements.define('qwc-dependencies', QwcDependencies);

@@ -7,6 +7,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -16,6 +17,7 @@ import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.pkg.builditem.CurateOutcomeBuildItem;
 import io.quarkus.devui.deployment.InternalPageBuildItem;
+import io.quarkus.devui.spi.buildtime.BuildTimeActionBuildItem;
 import io.quarkus.devui.spi.page.Page;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
@@ -41,52 +43,69 @@ public class DependenciesProcessor {
 
         Root root = new Root();
         root.rootId = curateOutcomeBuildItem.getApplicationModel().getAppArtifact().toCompactCoords();
-
-        Set<String> groupIds = new TreeSet<>();
-        Set<String> filteredGroupIds = new TreeSet<>();
-
-        buildTree(curateOutcomeBuildItem.getApplicationModel(), root, groupIds, filteredGroupIds);
+        Set<String> allGavs = new TreeSet<>();
+        buildTree(curateOutcomeBuildItem.getApplicationModel(), root, Optional.of(allGavs), Optional.empty());
 
         page.addBuildTimeData("root", root);
-        page.addBuildTimeData("groupIds", groupIds);
-        page.addBuildTimeData("filteredGroupIds", filteredGroupIds);
+        page.addBuildTimeData("allGavs", allGavs);
 
         menuProducer.produce(page);
     }
 
-    private void buildTree(ApplicationModel model, Root root, Set<String> groupIds, Set<String> filteredGroupIds) {
+    @BuildStep(onlyIf = IsDevelopment.class)
+    BuildTimeActionBuildItem createBuildTimeActions(CurateOutcomeBuildItem curateOutcomeBuildItem) {
+        BuildTimeActionBuildItem pathToTargetAction = new BuildTimeActionBuildItem(NAMESPACE);
+        pathToTargetAction.addAction("pathToTarget", p -> {
+            String target = p.get("target");
+            Root root = new Root();
+            root.rootId = curateOutcomeBuildItem.getApplicationModel().getAppArtifact().toCompactCoords();
+
+            if (target == null || target.isBlank()) {
+                buildTree(curateOutcomeBuildItem.getApplicationModel(), root, Optional.empty(), Optional.empty());
+            } else {
+                buildTree(curateOutcomeBuildItem.getApplicationModel(), root, Optional.empty(), Optional.of(target));
+            }
+
+            return root;
+        });
+
+        return pathToTargetAction;
+    }
+
+    //"io.quarkus:quarkus-vertx-http:999-SNAPSHOT"
+
+    private void buildTree(ApplicationModel model, Root root, Optional<Set<String>> allGavs, Optional<String> toTarget) {
         final Collection<ResolvedDependency> resolvedDeps = model.getDependencies();
         final List<Node> nodes = new ArrayList<>(resolvedDeps.size());
         final List<Link> links = new ArrayList<>();
 
-        boolean displayAll = false;
-        if (displayAll) {
-            addDependency(model.getAppArtifact(), nodes, links, groupIds, filteredGroupIds);
+        if (toTarget.isEmpty()) {
+
+            addDependency(model.getAppArtifact(), nodes, links, allGavs);
             for (ResolvedDependency rd : resolvedDeps) {
-                addDependency(rd, nodes, links, groupIds, filteredGroupIds);
+                addDependency(rd, nodes, links, allGavs);
             }
         } else {
-            var targetDep = getTargetDepNode(model, ArtifactCoords.fromString("io.quarkus:quarkus-vertx-http:999-SNAPSHOT"));
-            addDependency(targetDep, nodes, links, groupIds, filteredGroupIds, new HashSet<>());
+            var targetDep = getTargetDepNode(model, ArtifactCoords.fromString(toTarget.get()));
+            addDependency(targetDep, nodes, links, allGavs, new HashSet<>());
         }
 
         root.nodes = nodes;
         root.links = links;
     }
 
-    private static void addDependency(ResolvedDependency rd, List<Node> nodes, List<Link> links, Set<String> groupIds,
-            Set<String> filteredGroupIds) {
+    private static void addDependency(ResolvedDependency rd, List<Node> nodes, List<Link> links,
+            Optional<Set<String>> allGavs) {
         Node node = new Node();
+
+        if (allGavs.isPresent()) {
+            allGavs.get().add(rd.toCompactCoords());
+        }
 
         node.id = rd.toCompactCoords();
         node.name = rd.getArtifactId();
         node.description = rd.toCompactCoords();
         nodes.add(node);
-
-        groupIds.add(rd.getGroupId());
-        if (rd.getGroupId().startsWith("io.mvnpm") || rd.getGroupId().startsWith("org.mvnpm")) {
-            filteredGroupIds.add(rd.getGroupId());
-        }
 
         String type = rd.isRuntimeCp() ? "runtime" : "deployment";
 
@@ -105,14 +124,18 @@ public class DependenciesProcessor {
         }
     }
 
-    private static void addDependency(DepNode dep, List<Node> nodes, List<Link> links, Set<String> groupIds,
-            Set<String> filteredGroupIds, Set<String> visited) {
-
+    private static void addDependency(DepNode dep, List<Node> nodes, List<Link> links, Optional<Set<String>> allGavs,
+            Set<String> visited) {
         String id = dep.resolvedDep.toCompactCoords();
         if (!visited.add(id)) {
             return;
         }
         var rd = dep.resolvedDep;
+
+        if (allGavs.isPresent()) {
+            System.out.println(">>>>>>>>>>>>>> " + rd.toCompactCoords());
+            allGavs.get().add(rd.toCompactCoords());
+        }
 
         Node node = new Node();
         node.id = id;
@@ -120,13 +143,8 @@ public class DependenciesProcessor {
         node.description = id;
         nodes.add(node);
 
-        groupIds.add(rd.getGroupId());
-        if (rd.getGroupId().startsWith("io.mvnpm") || rd.getGroupId().startsWith("org.mvnpm")) {
-            filteredGroupIds.add(rd.getGroupId());
-        }
-
         for (DepNode dependent : dep.dependents) {
-            addDependency(dependent, nodes, links, groupIds, filteredGroupIds, visited);
+            addDependency(dependent, nodes, links, allGavs, visited);
             Link link = new Link();
             link.source = dependent.resolvedDep.toCompactCoords();
             link.target = node.id;
