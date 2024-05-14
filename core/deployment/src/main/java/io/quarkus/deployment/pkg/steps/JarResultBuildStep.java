@@ -51,6 +51,8 @@ import java.util.stream.Stream;
 
 import org.jboss.logging.Logger;
 
+import io.quarkus.bootstrap.app.ApplicationComponent;
+import io.quarkus.bootstrap.app.PackagedApplication;
 import io.quarkus.bootstrap.model.MutableJarApplicationModel;
 import io.quarkus.bootstrap.runner.QuarkusEntryPoint;
 import io.quarkus.bootstrap.runner.SerializedApplication;
@@ -175,12 +177,10 @@ public class JarResultBuildStep {
 
     @BuildStep(onlyIf = JarRequired.class)
     ArtifactResultBuildItem jarOutput(JarBuildItem jarBuildItem) {
-        if (jarBuildItem.getLibraryDir() != null) {
-            return new ArtifactResultBuildItem(jarBuildItem.getPath(), "jar",
-                    Collections.singletonMap("library-dir", jarBuildItem.getLibraryDir().toString()));
-        } else {
-            return new ArtifactResultBuildItem(jarBuildItem.getPath(), "jar", Collections.emptyMap());
-        }
+        return new ArtifactResultBuildItem(jarBuildItem.getPath(), "jar",
+                jarBuildItem.getLibraryDir() == null ? Map.of()
+                        : Map.of("library-dir", jarBuildItem.getLibraryDir().toString()),
+                jarBuildItem.getPackagedApplication());
     }
 
     @SuppressWarnings("deprecation") // JarType#LEGACY_JAR
@@ -311,7 +311,10 @@ public class JarResultBuildStep {
         final Path originalJar = Files.exists(standardJar) ? standardJar : null;
 
         return new JarBuildItem(runnerJar, originalJar, null, UBER_JAR,
-                suffixToClassifier(packageConfig.computedRunnerSuffix()));
+                suffixToClassifier(packageConfig.computedRunnerSuffix()),
+                PackagedApplication.builder()
+                        .setRunner(ApplicationComponent.builder().setPath(runnerJar).build())
+                        .build());
     }
 
     private String suffixToClassifier(String suffix) {
@@ -570,6 +573,8 @@ public class JarResultBuildStep {
             buildDir = outputTargetBuildItem.getOutputDirectory().resolve(DEFAULT_FAST_JAR_DIRECTORY_NAME);
         }
 
+        final PackagedApplication.Builder packagedApp = PackagedApplication.builder()
+                .setDistributionDirectory(buildDir);
         //unmodified 3rd party dependencies
         Path libDir = buildDir.resolve(LIB);
         Path mainLib = libDir.resolve(MAIN);
@@ -626,6 +631,7 @@ public class JarResultBuildStep {
         //transformed classes first
         if (!transformedClasses.getTransformedClassesByJar().isEmpty()) {
             Path transformedZip = quarkus.resolve(TRANSFORMED_BYTECODE_JAR);
+            packagedApp.addComponent(ApplicationComponent.builder().setPath(transformedZip).build());
             fastJarJarsBuilder.setTransformed(transformedZip);
             try (FileSystem out = createNewZip(transformedZip, packageConfig)) {
                 for (Set<TransformedClassesBuildItem.TransformedClass> transformedSet : transformedClasses
@@ -647,6 +653,7 @@ public class JarResultBuildStep {
         }
         //now generated classes and resources
         Path generatedZip = quarkus.resolve(GENERATED_BYTECODE_JAR);
+        packagedApp.addComponent(ApplicationComponent.builder().setPath(generatedZip).build());
         fastJarJarsBuilder.setGenerated(generatedZip);
         try (FileSystem out = createNewZip(generatedZip, packageConfig)) {
             for (GeneratedClassBuildItem i : generatedClasses) {
@@ -693,7 +700,7 @@ public class JarResultBuildStep {
             if (!rebuild) {
                 copyDependency(parentFirstKeys, outputTargetBuildItem, copiedArtifacts, mainLib, baseLib,
                         fastJarJarsBuilder::addDep, true,
-                        classPath, appDep, transformedClasses, removed, packageConfig);
+                        classPath, appDep, transformedClasses, removed, packageConfig, packagedApp);
             } else if (includeAppDep(appDep, outputTargetBuildItem.getIncludedOptionalDependencies(), removed)) {
                 appDep.getResolvedPaths().forEach(fastJarJarsBuilder::addDep);
             }
@@ -729,6 +736,7 @@ public class JarResultBuildStep {
         }
 
         Path appInfo = buildDir.resolve(QuarkusEntryPoint.QUARKUS_APPLICATION_DAT);
+        packagedApp.addComponent(ApplicationComponent.builder().setPath(appInfo).build());
         try (OutputStream out = Files.newOutputStream(appInfo)) {
             FastJarJars fastJarJars = fastJarJarsBuilder.build();
             List<Path> allJars = new ArrayList<>();
@@ -750,6 +758,7 @@ public class JarResultBuildStep {
 
         runnerJar.toFile().setReadable(true, false);
         Path initJar = buildDir.resolve(QUARKUS_RUN_JAR);
+        packagedApp.setRunner(ApplicationComponent.builder().setPath(initJar).build());
         boolean mutableJar = packageConfig.jar().type() == MUTABLE_JAR;
         if (mutableJar) {
             //we output the properties in a reproducible manner, so we remove the date comment
@@ -781,7 +790,7 @@ public class JarResultBuildStep {
                     copyDependency(parentFirstKeys, outputTargetBuildItem, copiedArtifacts, deploymentLib, baseLib, (p) -> {
                     },
                             false, classPath,
-                            appDep, new TransformedClassesBuildItem(Map.of()), removed, packageConfig); //we don't care about transformation here, so just pass in an empty item
+                            appDep, new TransformedClassesBuildItem(Map.of()), removed, packageConfig, packagedApp); //we don't care about transformation here, so just pass in an empty item
                 }
                 Map<ArtifactKey, List<String>> relativePaths = new HashMap<>();
                 for (Map.Entry<ArtifactKey, List<Path>> e : copiedArtifacts.entrySet()) {
@@ -824,6 +833,7 @@ public class JarResultBuildStep {
 
             if (packageConfig.jar().includeDependencyList()) {
                 Path deplist = buildDir.resolve(QUARKUS_APP_DEPS);
+                packagedApp.addComponent(ApplicationComponent.builder().setPath(deplist).build());
                 List<String> lines = new ArrayList<>();
                 for (ResolvedDependency i : curateOutcomeBuildItem.getApplicationModel().getRuntimeDependencies()) {
                     lines.add(i.toGACTVString());
@@ -842,7 +852,7 @@ public class JarResultBuildStep {
                 }
             });
         }
-        return new JarBuildItem(initJar, null, libDir, packageConfig.jar().type(), null);
+        return new JarBuildItem(initJar, null, libDir, packageConfig.jar().type(), null, packagedApp.build());
     }
 
     /**
@@ -883,7 +893,7 @@ public class JarResultBuildStep {
             Map<ArtifactKey, List<Path>> runtimeArtifacts, Path libDir, Path baseLib, Consumer<Path> targetPathConsumer,
             boolean allowParentFirst, StringBuilder classPath, ResolvedDependency appDep,
             TransformedClassesBuildItem transformedClasses, Set<ArtifactKey> removedDeps,
-            PackageConfig packageConfig)
+            PackageConfig packageConfig, PackagedApplication.Builder packagedApp)
             throws IOException {
 
         // Exclude files that are not jars (typically, we can have XML files here, see https://github.com/quarkusio/quarkus/issues/2852)
@@ -913,6 +923,7 @@ public class JarResultBuildStep {
                 // the non-jar dependencies are the Quarkus dependencies picked up on the file system
                 packageClasses(resolvedDep, targetPath, packageConfig);
             } else {
+                packagedApp.addComponent(ApplicationComponent.builder().setPath(targetPath).build());
                 Set<TransformedClassesBuildItem.TransformedClass> transformedFromThisArchive = transformedClasses
                         .getTransformedClassesByJar().get(resolvedDep);
                 Set<String> removedFromThisArchive = new HashSet<>();

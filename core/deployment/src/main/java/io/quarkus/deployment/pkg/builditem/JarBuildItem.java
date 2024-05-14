@@ -5,6 +5,7 @@ import static io.quarkus.deployment.pkg.PackageConfig.JarConfig.JarType.*;
 import java.nio.file.Path;
 
 import io.quarkus.bootstrap.app.JarResult;
+import io.quarkus.bootstrap.app.PackagedApplication;
 import io.quarkus.builder.item.SimpleBuildItem;
 import io.quarkus.deployment.pkg.PackageConfig;
 
@@ -15,14 +16,21 @@ public final class JarBuildItem extends SimpleBuildItem {
     private final Path libraryDir;
     private final PackageConfig.JarConfig.JarType type;
     private final String classifier;
+    private final PackagedApplication packagedApplication;
 
     public JarBuildItem(Path path, Path originalArtifact, Path libraryDir, PackageConfig.JarConfig.JarType type,
             String classifier) {
+        this(path, originalArtifact, libraryDir, type, classifier, null);
+    }
+
+    public JarBuildItem(Path path, Path originalArtifact, Path libraryDir, PackageConfig.JarConfig.JarType type,
+            String classifier, PackagedApplication packagedApplication) {
         this.path = path;
         this.originalArtifact = originalArtifact;
         this.libraryDir = libraryDir;
         this.type = type;
         this.classifier = classifier;
+        this.packagedApplication = packagedApplication;
     }
 
     public boolean isUberJar() {
@@ -47,6 +55,10 @@ public final class JarBuildItem extends SimpleBuildItem {
 
     public String getClassifier() {
         return classifier;
+    }
+
+    public PackagedApplication getPackagedApplication() {
+        return packagedApplication;
     }
 
     public JarResult toJarResult() {

@@ -167,6 +167,20 @@ public class BuildMojo extends QuarkusBootstrapMojo {
                         }
                     }
                 }
+
+                for (var ar : result.getResults()) {
+                    System.out.println("Application: " + ar.getPath());
+                    var pkgApp = ar.getPackagedApplication();
+                    if (pkgApp != null) {
+                        if (pkgApp.getDistributionDirectory() != null) {
+                            System.out.println("Distribution: " + pkgApp.getDistributionDirectory());
+                        }
+                        System.out.println("Runner: " + pkgApp.getRunner().getPath());
+                        for (var c : pkgApp.getComponents()) {
+                            System.out.println("- " + c.getPath());
+                        }
+                    }
+                }
             } finally {
                 // Clear all the system properties set by the plugin
                 propertiesToClear.forEach(System::clearProperty);

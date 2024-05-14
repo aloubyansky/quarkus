@@ -190,7 +190,7 @@ public class AugmentActionImpl implements AugmentAction {
             writeArtifactResultMetadataFile(buildSystemTargetBuildItem, lastResult);
 
             return new AugmentResult(artifactResultBuildItems.stream()
-                    .map(a -> new ArtifactResult(a.getPath(), a.getType(), a.getMetadata()))
+                    .map(a -> new ArtifactResult(a.getPath(), a.getType(), a.getMetadata(), a.getPackagedApplication()))
                     .collect(Collectors.toList()),
                     jarBuildItem != null ? jarBuildItem.toJarResult() : null,
                     nativeImageBuildItem != null ? nativeImageBuildItem.getPath() : null,

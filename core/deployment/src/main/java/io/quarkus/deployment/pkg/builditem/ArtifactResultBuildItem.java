@@ -3,6 +3,7 @@ package io.quarkus.deployment.pkg.builditem;
 import java.nio.file.Path;
 import java.util.Map;
 
+import io.quarkus.bootstrap.app.PackagedApplication;
 import io.quarkus.builder.item.MultiBuildItem;
 
 /**
@@ -17,11 +18,18 @@ public final class ArtifactResultBuildItem extends MultiBuildItem {
     private final Path path;
     private final String type;
     private final Map<String, String> metadata;
+    private final PackagedApplication packagedApplication;
 
     public ArtifactResultBuildItem(Path path, String type, Map<String, String> metadata) {
+        this(path, type, metadata, null);
+    }
+
+    public ArtifactResultBuildItem(Path path, String type, Map<String, String> metadata,
+            PackagedApplication packagedApplication) {
         this.path = path;
         this.type = type;
         this.metadata = metadata;
+        this.packagedApplication = packagedApplication;
     }
 
     public Path getPath() {
@@ -30,6 +38,10 @@ public final class ArtifactResultBuildItem extends MultiBuildItem {
 
     public String getType() {
         return type;
+    }
+
+    public PackagedApplication getPackagedApplication() {
+        return packagedApplication;
     }
 
     public Map<String, String> getMetadata() {
