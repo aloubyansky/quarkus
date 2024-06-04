@@ -52,8 +52,6 @@ import org.eclipse.aether.util.listener.ChainedRepositoryListener;
 import com.github.packageurl.MalformedPackageURLException;
 import com.github.packageurl.PackageURL;
 
-import io.quarkus.bootstrap.app.CuratedApplication;
-import io.quarkus.bootstrap.classloading.QuarkusClassLoader;
 import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.EffectiveModelResolver;
@@ -276,25 +274,10 @@ public class SbomMojo extends QuarkusBootstrapMojo {
 
     private ApplicationModel resolveApplicationModel(LaunchMode launchMode, MavenArtifactResolver artifactResolver)
             throws MojoExecutionException {
-        QuarkusClassLoader deploymentClassLoader = null;
-        final ClassLoader originalCl = Thread.currentThread().getContextClassLoader();
-        final boolean clearNativeEnabledSystemProperty = setNativeEnabledIfNativeProfileEnabled();
         try {
-            CuratedApplication curatedApplication = bootstrapApplication(launchMode, artifactResolver);
-            deploymentClassLoader = curatedApplication.createDeploymentClassLoader();
-            Thread.currentThread().setContextClassLoader(deploymentClassLoader);
-
-            return curatedApplication.getApplicationModel();
+            return bootstrapApplication(launchMode, artifactResolver).getApplicationModel();
         } catch (Exception any) {
             throw new MojoExecutionException("Failed to bootstrap Quarkus application", any);
-        } finally {
-            if (clearNativeEnabledSystemProperty) {
-                System.clearProperty("quarkus.native.enabled");
-            }
-            Thread.currentThread().setContextClassLoader(originalCl);
-            if (deploymentClassLoader != null) {
-                deploymentClassLoader.close();
-            }
         }
     }
 
