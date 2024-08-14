@@ -39,7 +39,7 @@ abstract class AbstractDependencyBuilder<B extends AbstractDependencyBuilder<B, 
 
     @SuppressWarnings("unchecked")
     public B setClassifier(String classifier) {
-        this.classifier = classifier;
+        this.classifier = classifier == null ? ArtifactCoords.DEFAULT_CLASSIFIER : classifier;
         return (B) this;
     }
 
