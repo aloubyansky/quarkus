@@ -298,7 +298,7 @@ public abstract class QuarkusBootstrapMojo extends AbstractMojo {
 
     protected CuratedApplication bootstrapApplication(LaunchMode mode, Consumer<QuarkusBootstrap.Builder> builderCustomizer)
             throws MojoExecutionException {
-        return bootstrapProvider.bootstrapApplication(this, mode, builderCustomizer, null);
+        return bootstrapProvider.bootstrapApplication(this, mode, builderCustomizer);
     }
 
     protected Properties getBuildSystemProperties(boolean quarkusOnly) throws MojoExecutionException {
