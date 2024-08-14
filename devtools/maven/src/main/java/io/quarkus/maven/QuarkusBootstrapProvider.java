@@ -127,23 +127,14 @@ public class QuarkusBootstrapProvider implements Closeable {
         }
     }
 
-    public MavenArtifactResolver getArtifactResolver(QuarkusBootstrapMojo mojo, LaunchMode mode) throws MojoExecutionException {
-        return bootstrapper(mojo).artifactResolver(mojo, mode);
-    }
-
     public CuratedApplication bootstrapApplication(QuarkusBootstrapMojo mojo, LaunchMode mode)
             throws MojoExecutionException {
-        return bootstrapApplication(mojo, mode, (Consumer<QuarkusBootstrap.Builder>) null);
+        return bootstrapApplication(mojo, mode, null);
     }
 
     public CuratedApplication bootstrapApplication(QuarkusBootstrapMojo mojo, LaunchMode mode,
             Consumer<QuarkusBootstrap.Builder> builderCustomizer) throws MojoExecutionException {
         return bootstrapper(mojo).bootstrapApplication(mojo, mode, builderCustomizer);
-    }
-
-    public CuratedApplication bootstrapApplication(QuarkusBootstrapMojo mojo, LaunchMode mode,
-            MavenArtifactResolver artifactResolver) throws MojoExecutionException {
-        return bootstrapper(mojo).bootstrapApplication(mojo, mode, null, artifactResolver);
     }
 
     public CuratedApplication bootstrapApplication(QuarkusBootstrapMojo mojo, LaunchMode mode,
