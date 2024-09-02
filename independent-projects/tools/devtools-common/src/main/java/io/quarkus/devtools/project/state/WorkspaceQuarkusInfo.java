@@ -23,7 +23,8 @@ public class WorkspaceQuarkusInfo {
         //load(Path.of("/home/aloubyansky/git/kogito-runtimes/springboot/bom"));
         //MavenProjectConfigurationLoader.load(Path.of("/home/aloubyansky/git/debezium"));
         //MavenProjectConfigurationLoader.load(Path.of("/home/aloubyansky/git/optaplanner"));
-        MavenProjectConfigurationLoader.load(Path.of("/home/aloubyansky/git/camel-quarkus"));
+        //MavenProjectConfigurationLoader.load(Path.of("/home/aloubyansky/git/camel-quarkus"));
+        MavenProjectConfigurationLoader.load(Path.of("/home/aloubyansky/git/insights-runtimes-inventory"));
         //MavenProjectConfigurationLoader.load(Path.of("/home/aloubyansky/git/kogito-examples"));
         //generateUpdateRecipe(Path.of("/home/aloubyansky/git/camel-quarkus"));
         //load(Path.of("/home/aloubyansky/git/quarkus-copy"));
