@@ -139,6 +139,7 @@ public class IncubatingApplicationModelResolver {
     private boolean collectReloadableModules;
     private DependencyLoggingConfig depLogging;
     private List<Dependency> collectCompileOnly;
+    private boolean runtimeModelOnly;
 
     public IncubatingApplicationModelResolver setArtifactResolver(MavenArtifactResolver resolver) {
         this.resolver = resolver;
@@ -172,6 +173,11 @@ public class IncubatingApplicationModelResolver {
         return this;
     }
 
+    public IncubatingApplicationModelResolver setRuntimeModelOnly(boolean runtimeModelOnly) {
+        this.runtimeModelOnly = runtimeModelOnly;
+        return this;
+    }
+
     public void resolve(CollectRequest collectRtDepsRequest) throws AppModelResolverException {
         this.managedDeps = collectRtDepsRequest.getManagedDependencies();
         // managed dependencies will be a bit augmented with every added extension, so let's load the properties early
@@ -182,10 +188,14 @@ public class IncubatingApplicationModelResolver {
         processRuntimeDeps(root);
         final List<ConditionalDependency> activatedConditionalDeps = activateConditionalDeps();
 
-        // resolve and inject deployment dependency branches for the top (first met) runtime extension nodes
-        injectDeployment(activatedConditionalDeps);
-        root = normalize(resolver.getSession(), root);
-        processDeploymentDeps(root);
+        if (runtimeModelOnly) {
+            root = normalize(resolver.getSession(), root);
+        } else {
+            // resolve and inject deployment dependency branches for the top (first met) runtime extension nodes
+            injectDeployment(activatedConditionalDeps);
+            root = normalize(resolver.getSession(), root);
+            processDeploymentDeps(root);
+        }
 
         for (var d : appBuilder.getDependencies()) {
             if (!d.isFlagSet(DependencyFlags.RELOADABLE) && !d.isFlagSet(DependencyFlags.VISITED)) {
@@ -201,7 +211,9 @@ public class IncubatingApplicationModelResolver {
             appBuilder.addDependency(d);
         }
 
-        collectCompileOnly(collectRtDepsRequest, root);
+        if (!runtimeModelOnly) {
+            collectCompileOnly(collectRtDepsRequest, root);
+        }
     }
 
     private List<ConditionalDependency> activateConditionalDeps() {
@@ -1053,7 +1065,6 @@ public class IncubatingApplicationModelResolver {
             } else {
                 currentChildren.addAll(originalNode.getChildren());
             }
-            conditionalDep.walkingFlags = COLLECT_DIRECT_DEPS;
             if (collectReloadableModules) {
                 conditionalDep.walkingFlags |= COLLECT_RELOADABLE_MODULES;
             }
