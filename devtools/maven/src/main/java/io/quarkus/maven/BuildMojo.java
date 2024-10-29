@@ -23,9 +23,9 @@ import org.apache.maven.project.MavenProjectHelper;
 import org.eclipse.aether.repository.RemoteRepository;
 
 import io.quarkus.analytics.dto.segment.TrackEventType;
-import io.quarkus.bootstrap.app.AugmentAction;
 import io.quarkus.bootstrap.app.AugmentResult;
 import io.quarkus.bootstrap.app.CuratedApplication;
+import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.maven.dependency.ArtifactCoords;
 
@@ -134,55 +134,59 @@ public class BuildMojo extends QuarkusBootstrapMojo {
                 getLog().warn("* parallel execution                                            *");
                 getLog().warn("*****************************************************************");
             }
+            final AugmentResult result;
+            final ApplicationModel appModel;
             try (CuratedApplication curatedApplication = bootstrapApplication()) {
-                AugmentAction action = curatedApplication.createAugmentor();
-                AugmentResult result = action.createProductionApplication();
-                analyticsProvider.sendAnalytics(
-                        TrackEventType.BUILD,
-                        curatedApplication.getApplicationModel(),
-                        result.getGraalVMInfo(),
-                        buildDirectory);
-                Artifact original = mavenProject().getArtifact();
-                if (result.getJar() != null) {
-
-                    final boolean uberJarWithSuffix = result.getJar().isUberJar()
-                            && result.getJar().getOriginalArtifact() != null
-                            && !result.getJar().getOriginalArtifact().equals(result.getJar().getPath());
-                    if (!skipOriginalJarRename && uberJarWithSuffix
-                            && result.getJar().getOriginalArtifact() != null) {
-                        final Path standardJar = result.getJar().getOriginalArtifact();
-                        if (Files.exists(standardJar)) {
-                            final Path renamedOriginal = standardJar.getParent().toAbsolutePath()
-                                    .resolve(standardJar.getFileName() + ".original");
-                            try {
-                                IoUtils.recursiveDelete(renamedOriginal);
-                                Files.move(standardJar, renamedOriginal);
-                            } catch (IOException e) {
-                                throw new UncheckedIOException(e);
-                            }
-                            // unless we point to the renamed file the install plugin will fail
-                            original.setFile(renamedOriginal.toFile());
-                        }
-                    }
-                    if (uberJarWithSuffix) {
-                        if (attachRunnerAsMainArtifact || result.getJar().getClassifier().isEmpty()) {
-                            original.setFile(result.getJar().getPath().toFile());
-                        } else {
-                            projectHelper.attachArtifact(mavenProject(), result.getJar().getPath().toFile(),
-                                    result.getJar().getClassifier());
-                        }
-                    }
-                    if (attachSboms && result.getJar().isUberJar() && !result.getJar().getSboms().isEmpty()) {
-                        for (var sbom : result.getJar().getSboms()) {
-                            projectHelper.attachArtifact(mavenProject(), sbom.getFormat(), sbom.getClassifier(),
-                                    sbom.getSbomFile().toFile());
-                        }
-                    }
-                }
+                result = curatedApplication.createAugmentor().createProductionApplication();
+                appModel = curatedApplication.getApplicationModel();
             } finally {
                 // Clear all the system properties set by the plugin
                 propertiesToClear.forEach(System::clearProperty);
             }
+
+            analyticsProvider.sendAnalytics(
+                    TrackEventType.BUILD,
+                    appModel,
+                    result.getGraalVMInfo(),
+                    buildDirectory);
+
+            Artifact original = mavenProject().getArtifact();
+            if (result.getJar() != null) {
+                final boolean uberJarWithSuffix = result.getJar().isUberJar()
+                        && result.getJar().getOriginalArtifact() != null
+                        && !result.getJar().getOriginalArtifact().equals(result.getJar().getPath());
+                if (!skipOriginalJarRename && uberJarWithSuffix
+                        && result.getJar().getOriginalArtifact() != null) {
+                    final Path standardJar = result.getJar().getOriginalArtifact();
+                    if (Files.exists(standardJar)) {
+                        final Path renamedOriginal = standardJar.getParent().toAbsolutePath()
+                                .resolve(standardJar.getFileName() + ".original");
+                        try {
+                            IoUtils.recursiveDelete(renamedOriginal);
+                            Files.move(standardJar, renamedOriginal);
+                        } catch (IOException e) {
+                            throw new UncheckedIOException(e);
+                        }
+                        // unless we point to the renamed file the install plugin will fail
+                        original.setFile(renamedOriginal.toFile());
+                    }
+                }
+                if (uberJarWithSuffix) {
+                    if (attachRunnerAsMainArtifact || result.getJar().getClassifier().isEmpty()) {
+                        original.setFile(result.getJar().getPath().toFile());
+                    } else {
+                        projectHelper.attachArtifact(mavenProject(), result.getJar().getPath().toFile(),
+                                result.getJar().getClassifier());
+                    }
+                }
+                if (attachSboms && result.getJar().isUberJar() && !result.getJar().getSboms().isEmpty()) {
+                    for (var sbom : result.getJar().getSboms()) {
+                        projectHelper.attachArtifact(mavenProject(), sbom.getFormat(), sbom.getClassifier(),
+                                sbom.getSbomFile().toFile());
+                    }
+                }
+            }
+
         } catch (Exception e) {
             throw new MojoExecutionException("Failed to build quarkus application", e);
         }
