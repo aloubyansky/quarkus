@@ -19,7 +19,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -64,14 +63,12 @@ import io.quarkus.maven.dependency.ResolvedDependency;
 import io.quarkus.maven.dependency.ResolvedDependencyBuilder;
 import io.quarkus.paths.PathTree;
 
-public class IncubatingApplicationModelResolver {
+public class ApplicationModelResolver {
 
-    private static final Logger log = Logger.getLogger(IncubatingApplicationModelResolver.class);
+    private static final Logger log = Logger.getLogger(ApplicationModelResolver.class);
 
     private static final String QUARKUS_RUNTIME_ARTIFACT = "quarkus.runtime";
     private static final String QUARKUS_EXTENSION_DEPENDENCY = "quarkus.ext";
-
-    private static final String INCUBATING_MODEL_RESOLVER = "quarkus.bootstrap.incubating-model-resolver";
 
     /* @formatter:off */
     private static final byte COLLECT_TOP_EXTENSION_RUNTIME_NODES = 0b001;
@@ -81,50 +78,8 @@ public class IncubatingApplicationModelResolver {
 
     private static final Artifact[] NO_ARTIFACTS = new Artifact[0];
 
-    /**
-     * Temporary method that will be removed once this implementation becomes the default.
-     * <p>
-     * Returns {@code true} if system or POM property {@code quarkus.bootstrap.incubating-model-resolver}
-     * is set to {@code true}.
-     *
-     * @return true if this implementation is enabled
-     */
-    public static boolean isIncubatingEnabled(Properties projectProperties) {
-        return Boolean.parseBoolean(getIncubatingModelResolverProperty(projectProperties));
-    }
-
-    /**
-     * Temporary method that will be removed once this implementation becomes the default.
-     * <p>
-     * Calls {@link #getIncubatingModelResolverProperty(Properties)} and checks whether the returned value
-     * equals the passed in {@code value}.
-     *
-     * @return true if value of quarkus.bootstrap.incubating-model-resolver property is equal to the passed in value
-     */
-    public static boolean isIncubatingModelResolverProperty(Properties projectProperties, String value) {
-        Objects.requireNonNull(value);
-        return value.equals(getIncubatingModelResolverProperty(projectProperties));
-    }
-
-    /**
-     * Temporary method that will be removed once this implementation becomes the default.
-     * <p>
-     * Returns value of system or POM property {@code quarkus.bootstrap.incubating-model-resolver}.
-     * The system property is checked first and if its value is not {@code null}, it's returned.
-     * Otherwise, the value of POM property is returned as the result.
-     *
-     * @return value of system or POM property quarkus.bootstrap.incubating-model-resolver or null if it's not set
-     */
-    public static String getIncubatingModelResolverProperty(Properties projectProperties) {
-        var value = System.getProperty(INCUBATING_MODEL_RESOLVER);
-        if (value != null || projectProperties == null) {
-            return value;
-        }
-        return String.valueOf(projectProperties.get(INCUBATING_MODEL_RESOLVER));
-    }
-
-    public static IncubatingApplicationModelResolver newInstance() {
-        return new IncubatingApplicationModelResolver();
+    public static ApplicationModelResolver newInstance() {
+        return new ApplicationModelResolver();
     }
 
     private final ExtensionInfo EXT_INFO_NONE = new ExtensionInfo();
@@ -141,22 +96,22 @@ public class IncubatingApplicationModelResolver {
     private List<Dependency> collectCompileOnly;
     private boolean runtimeModelOnly;
 
-    public IncubatingApplicationModelResolver setArtifactResolver(MavenArtifactResolver resolver) {
+    public ApplicationModelResolver setArtifactResolver(MavenArtifactResolver resolver) {
         this.resolver = resolver;
         return this;
     }
 
-    public IncubatingApplicationModelResolver setApplicationModelBuilder(ApplicationModelBuilder appBuilder) {
+    public ApplicationModelResolver setApplicationModelBuilder(ApplicationModelBuilder appBuilder) {
         this.appBuilder = appBuilder;
         return this;
     }
 
-    public IncubatingApplicationModelResolver setCollectReloadableModules(boolean collectReloadableModules) {
+    public ApplicationModelResolver setCollectReloadableModules(boolean collectReloadableModules) {
         this.collectReloadableModules = collectReloadableModules;
         return this;
     }
 
-    public IncubatingApplicationModelResolver setDependencyLogging(DependencyLoggingConfig depLogging) {
+    public ApplicationModelResolver setDependencyLogging(DependencyLoggingConfig depLogging) {
         this.depLogging = depLogging;
         return this;
     }
@@ -168,12 +123,12 @@ public class IncubatingApplicationModelResolver {
      * @param collectCompileOnly compile-only dependencies to add to the model
      * @return self
      */
-    public IncubatingApplicationModelResolver setCollectCompileOnly(List<Dependency> collectCompileOnly) {
+    public ApplicationModelResolver setCollectCompileOnly(List<Dependency> collectCompileOnly) {
         this.collectCompileOnly = collectCompileOnly;
         return this;
     }
 
-    public IncubatingApplicationModelResolver setRuntimeModelOnly(boolean runtimeModelOnly) {
+    public ApplicationModelResolver setRuntimeModelOnly(boolean runtimeModelOnly) {
         this.runtimeModelOnly = runtimeModelOnly;
         return this;
     }
@@ -525,9 +480,8 @@ public class IncubatingApplicationModelResolver {
 
         void visitRuntimeDependency() {
             Artifact artifact = node.getArtifact();
-            final ArtifactKey key = getKey(artifact);
             if (resolvedDep == null) {
-                resolvedDep = appBuilder.getDependency(key);
+                resolvedDep = appBuilder.getDependency(getKey(artifact));
             }
 
             // in case it was relocated it might not survive conflict resolution in the deployment graph
@@ -571,8 +525,7 @@ public class IncubatingApplicationModelResolver {
                 var winner = getWinner(childNode);
                 if (winner == null) {
                     allDeps.add(getCoords(childNode.getArtifact()));
-                    var child = new AppDep(this, childNode);
-                    children.add(child);
+                    children.add(new AppDep(this, childNode));
                     if (filtered != null) {
                         filtered.add(childNode);
                     }

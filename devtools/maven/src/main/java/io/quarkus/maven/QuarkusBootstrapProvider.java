@@ -39,10 +39,10 @@ import io.quarkus.bootstrap.app.QuarkusBootstrap;
 import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
 import io.quarkus.bootstrap.resolver.BootstrapAppModelResolver;
+import io.quarkus.bootstrap.resolver.maven.ApplicationDependencyTreeResolver;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.EffectiveModelResolver;
-import io.quarkus.bootstrap.resolver.maven.IncubatingApplicationModelResolver;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.maven.components.ManifestSection;
 import io.quarkus.maven.components.QuarkusWorkspaceProvider;
@@ -214,11 +214,8 @@ public class QuarkusBootstrapProvider implements Closeable {
                 Consumer<QuarkusBootstrap.Builder> builderCustomizer) throws MojoExecutionException {
 
             final BootstrapAppModelResolver modelResolver = new BootstrapAppModelResolver(artifactResolver(mojo, mode))
-                    .setIncubatingModelResolver(
-                            IncubatingApplicationModelResolver.isIncubatingEnabled(mojo.mavenProject().getProperties())
-                                    || mode == LaunchMode.DEVELOPMENT
-                                            && !IncubatingApplicationModelResolver.isIncubatingModelResolverProperty(
-                                                    mojo.mavenProject().getProperties(), "false"))
+                    .setLegacyModelResolver(
+                            ApplicationDependencyTreeResolver.isLegacyModelResolverEnabled(mojo.mavenProject().getProperties()))
                     .setDevMode(mode == LaunchMode.DEVELOPMENT)
                     .setTest(mode == LaunchMode.TEST)
                     .setCollectReloadableDependencies(mode == LaunchMode.DEVELOPMENT || mode == LaunchMode.TEST);

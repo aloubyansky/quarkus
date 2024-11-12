@@ -22,9 +22,9 @@ import org.apache.maven.project.MavenProject;
 import org.eclipse.aether.repository.RemoteRepository;
 
 import io.quarkus.bootstrap.resolver.BootstrapAppModelResolver;
+import io.quarkus.bootstrap.resolver.maven.ApplicationDependencyTreeResolver;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.DependencyLoggingConfig;
-import io.quarkus.bootstrap.resolver.maven.IncubatingApplicationModelResolver;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.maven.components.QuarkusWorkspaceProvider;
 import io.quarkus.maven.dependency.ArtifactCoords;
@@ -55,8 +55,6 @@ public class DependencyTreeMojo extends AbstractMojo {
     String mode;
 
     /**
-     * INCUBATING option, enabled with @{code -Dquarkus.bootstrap.incubating-model-resolver} system or project property.
-     * <p>
      * Whether to log dependency properties, such as on which classpath they belong, whether they are hot-reloadable in dev
      * mode, etc.
      */
@@ -64,8 +62,6 @@ public class DependencyTreeMojo extends AbstractMojo {
     boolean verbose;
 
     /**
-     * INCUBATING option, enabled with @{code -Dquarkus.bootstrap.incubating-model-resolver} system or project property.
-     * <p>
      * Whether to log all dependencies of each dependency node in a tree, adding {@code [+]} suffix
      * to those whose dependencies are not expanded.
      */
@@ -155,8 +151,8 @@ public class DependencyTreeMojo extends AbstractMojo {
                 }
             }
             // enable the incubating model resolver impl by default for this mojo
-            modelResolver.setIncubatingModelResolver(
-                    !IncubatingApplicationModelResolver.isIncubatingModelResolverProperty(project.getProperties(), "false"));
+            modelResolver.setLegacyModelResolver(
+                    ApplicationDependencyTreeResolver.isLegacyModelResolverEnabled(project.getProperties()));
             modelResolver.setDepLogConfig(DependencyLoggingConfig.builder()
                     .setMessageConsumer(log)
                     .setVerbose(verbose)

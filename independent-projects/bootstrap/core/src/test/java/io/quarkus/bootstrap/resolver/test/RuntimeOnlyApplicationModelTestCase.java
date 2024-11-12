@@ -14,7 +14,7 @@ public class RuntimeOnlyApplicationModelTestCase extends CollectDependenciesBase
     @Override
     protected BootstrapAppModelResolver newAppModelResolver(LocalProject currentProject) throws Exception {
         var resolver = super.newAppModelResolver(currentProject);
-        resolver.setIncubatingModelResolver(false);
+        resolver.setLegacyModelResolver(false);
         resolver.setRuntimeModelOnly(runtimeOnly);
         return resolver;
     }

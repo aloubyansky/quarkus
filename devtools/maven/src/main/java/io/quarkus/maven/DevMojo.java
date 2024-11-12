@@ -95,9 +95,9 @@ import io.quarkus.bootstrap.devmode.DependenciesFilter;
 import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.bootstrap.model.PathsCollection;
 import io.quarkus.bootstrap.resolver.BootstrapAppModelResolver;
+import io.quarkus.bootstrap.resolver.maven.ApplicationDependencyTreeResolver;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContextConfig;
-import io.quarkus.bootstrap.resolver.maven.IncubatingApplicationModelResolver;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.util.BootstrapUtils;
 import io.quarkus.bootstrap.workspace.ArtifactSources;
@@ -1387,8 +1387,8 @@ public class DevMojo extends AbstractMojo {
                     .setTest(LaunchMode.TEST.equals(getLaunchModeClasspath()))
                     .setCollectReloadableDependencies(!noDeps)
                     // enabled the incubating model resolver for in dev mode
-                    .setIncubatingModelResolver(!IncubatingApplicationModelResolver
-                            .isIncubatingModelResolverProperty(project.getProperties(), "false"))
+                    .setLegacyModelResolver(
+                            ApplicationDependencyTreeResolver.isLegacyModelResolverEnabled(project.getProperties()))
                     .resolveModel(mvnCtx.getCurrentProject().getAppArtifact());
         }
 

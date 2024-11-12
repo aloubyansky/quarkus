@@ -65,6 +65,12 @@ import io.quarkus.maven.dependency.DependencyFlags;
 import io.quarkus.maven.dependency.ResolvedDependencyBuilder;
 import io.quarkus.paths.PathTree;
 
+/**
+ * Deprecated in favor of {@link ApplicationModelResolver}
+ *
+ * @deprecated
+ */
+@Deprecated(forRemoval = true, since = "3.17.0.CR1")
 public class ApplicationDependencyTreeResolver {
 
     private static final Logger log = Logger.getLogger(ApplicationDependencyTreeResolver.class);
@@ -82,6 +88,44 @@ public class ApplicationDependencyTreeResolver {
     private static final boolean CONVERGED_TREE_ONLY = PropertyUtils.getBoolean("quarkus.bootstrap.converged-tree-only", false);
 
     private static final Artifact[] NO_ARTIFACTS = new Artifact[0];
+
+    private static final String LEGACY_MODEL_RESOLVER = "quarkus.bootstrap.legacy-model-resolver";
+
+    /**
+     * Returns {@code true} if system or POM property {@code quarkus.bootstrap.legacy-model-resolver}
+     * is set to {@code true}.
+     *
+     * @return true if this implementation is enabled
+     */
+    public static boolean isLegacyModelResolverEnabled(Properties projectProperties) {
+        return Boolean.parseBoolean(getLegacyModelResolverProperty(projectProperties));
+    }
+
+    /**
+     * Calls {@link #getLegacyModelResolverProperty(Properties)} and checks whether the returned value
+     * equals the passed in {@code value}.
+     *
+     * @return true if value of quarkus.bootstrap.legacy-model-resolver property is equal to the passed in value
+     */
+    public static boolean isLegacyModelResolverProperty(Properties projectProperties, String value) {
+        Objects.requireNonNull(value);
+        return value.equals(getLegacyModelResolverProperty(projectProperties));
+    }
+
+    /**
+     * Returns the value of the system or the POM property {@code quarkus.bootstrap.legacy-model-resolver}.
+     * The system property is checked first and if its value is not {@code null}, it's returned.
+     * Otherwise, the value of POM property is returned as the result.
+     *
+     * @return value of the system or the POM property quarkus.bootstrap.legacy-model-resolver or null if it's not set
+     */
+    public static String getLegacyModelResolverProperty(Properties projectProperties) {
+        var value = System.getProperty(LEGACY_MODEL_RESOLVER);
+        if (value != null || projectProperties == null) {
+            return value;
+        }
+        return projectProperties.getProperty(LEGACY_MODEL_RESOLVER);
+    }
 
     public static ApplicationDependencyTreeResolver newInstance() {
         return new ApplicationDependencyTreeResolver();
