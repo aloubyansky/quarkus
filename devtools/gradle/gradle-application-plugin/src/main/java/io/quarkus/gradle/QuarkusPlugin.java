@@ -157,8 +157,7 @@ public class QuarkusPlugin implements Plugin<Project> {
                 forcedPropertiesService, ForcedPropertieBuildService.class,
                 spec -> {
                 });
-        final String devRuntimeConfigName = ApplicationDeploymentClasspathBuilder
-                .getBaseRuntimeConfigName(LaunchMode.DEVELOPMENT);
+        final String devRuntimeConfigName = ApplicationDeploymentClasspathBuilder.getBaseRuntimeConfigName(LaunchMode.DEVELOPMENT);
         final Configuration devRuntimeDependencies = project.getConfigurations().maybeCreate(devRuntimeConfigName);
 
         tasks.register(LIST_EXTENSIONS_TASK_NAME, QuarkusListExtensions.class);
