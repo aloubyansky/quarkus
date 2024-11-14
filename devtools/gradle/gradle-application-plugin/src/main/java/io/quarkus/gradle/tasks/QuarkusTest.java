@@ -13,10 +13,12 @@ import io.quarkus.gradle.extension.QuarkusPluginExtension;
 public abstract class QuarkusTest extends QuarkusDev {
 
     @Inject
-    public QuarkusTest(Configuration quarkusDevConfiguration, QuarkusPluginExtension extension) {
+    public QuarkusTest(Configuration quarkusDevConfiguration, Configuration quarkusBootstrapResolverConfig,
+            QuarkusPluginExtension extension) {
         super(
                 "Continuous testing mode: enables continuous testing without starting dev mode",
                 quarkusDevConfiguration,
+                quarkusBootstrapResolverConfig,
                 extension);
     }
 

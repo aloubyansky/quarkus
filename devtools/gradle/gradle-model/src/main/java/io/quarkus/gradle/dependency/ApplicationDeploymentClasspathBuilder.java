@@ -1,11 +1,14 @@
 package io.quarkus.gradle.dependency;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -30,6 +33,7 @@ import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.model.PlatformImports;
 import io.quarkus.bootstrap.model.PlatformImportsImpl;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
+import io.quarkus.deployment.dev.DevModeMain;
 import io.quarkus.gradle.tooling.ToolingUtils;
 import io.quarkus.gradle.tooling.dependency.DependencyUtils;
 import io.quarkus.gradle.tooling.dependency.ExtensionDependency;
@@ -76,6 +80,68 @@ public class ApplicationDeploymentClasspathBuilder {
             config.setCanBeConsumed(false);
         });
 
+        configContainer.register(this.platformConfigurationName, configuration -> {
+            configuration.setCanBeConsumed(false);
+            // Platform configuration is just implementation, filtered to platform dependencies
+            ListProperty<Dependency> dependencyListProperty = project.getObjects().listProperty(Dependency.class);
+            configuration.getDependencies()
+                    .addAllLater(dependencyListProperty.value(project.provider(() -> project.getConfigurations()
+                            .getByName(JavaPlugin.IMPLEMENTATION_CONFIGURATION_NAME)
+                            .getAllDependencies()
+                            .stream()
+                            .filter(dependency -> dependency instanceof ModuleDependency &&
+                                    ToolingUtils.isEnforcedPlatform((ModuleDependency) dependency))
+                            .collect(Collectors.toList()))));
+            final PlatformImportsImpl platformImports = ApplicationDeploymentClasspathBuilder.platformImports
+                    .computeIfAbsent(this.platformImportName, (ignored) -> new PlatformImportsImpl());
+            // Configures PlatformImportsImpl once the platform configuration is resolved
+            configuration.getResolutionStrategy().eachDependency(d -> {
+                ModuleIdentifier identifier = d.getTarget().getModule();
+                final String group = identifier.getGroup();
+                final String name = identifier.getName();
+                if (name.endsWith(BootstrapConstants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX)) {
+                    platformImports.addPlatformDescriptor(group, name, d.getTarget().getVersion(), "json",
+                            d.getTarget().getVersion());
+                } else if (name.endsWith(BootstrapConstants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX)) {
+                    final DefaultDependencyArtifact dep = new DefaultDependencyArtifact();
+                    dep.setExtension("properties");
+                    dep.setType("properties");
+                    dep.setName(name);
+
+                    final DefaultExternalModuleDependency gradleDep = new DefaultExternalModuleDependency(
+                            group, name, d.getTarget().getVersion(), null);
+                    gradleDep.addArtifact(dep);
+
+                    for (ResolvedArtifact a : project.getConfigurations().detachedConfiguration(gradleDep)
+                            .getResolvedConfiguration().getResolvedArtifacts()) {
+                        if (a.getName().equals(name)) {
+                            try {
+                                platformImports.addPlatformProperties(group, name, null, "properties",
+                                        d.getTarget().getVersion(),
+                                        a.getFile().toPath());
+                            } catch (AppModelResolverException e) {
+                                throw new GradleException("Failed to import platform properties " + a.getFile(), e);
+                            }
+                            break;
+                        }
+                    }
+                }
+            });
+        });
+
+        // Quarkus bootstrap Gradle resolver configuration for dev mode
+        final DependencyHandler dependencyHandler = project.getDependencies();
+        configContainer.register(QUARKUS_BOOTSTRAP_RESOLVER_CONFIGURATION, config -> {
+            config.extendsFrom(configContainer.getByName(
+                    ToolingUtils.toPlatformConfigurationName(
+                            ApplicationDeploymentClasspathBuilder.getFinalRuntimeConfigName(LaunchMode.DEVELOPMENT))));
+            config.getDependencies().add(getClassPathDependencyFromPomProperties(dependencyHandler, "io.quarkus",
+                    "quarkus-bootstrap-gradle-resolver"));
+            config.getDependencies().add(getClassPathDependencyFromPomProperties(dependencyHandler, "io.quarkus",
+                    "quarkus-code-deployment"));
+            config.setCanBeConsumed(false);
+        });
+
         // Base runtime configurations for every launch mode
         configContainer
                 .register(ApplicationDeploymentClasspathBuilder.getBaseRuntimeConfigName(LaunchMode.TEST), config -> {
@@ -97,6 +163,34 @@ public class ApplicationDeploymentClasspathBuilder {
                             configContainer.getByName(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME));
                     config.setCanBeConsumed(false);
                 });
+    }
+
+    private static Dependency getClassPathDependencyFromPomProperties(DependencyHandler dependencyHandler, String groupId,
+            String artifactId) {
+        final String pomPropsPath = "META-INF/maven/" + groupId + "/" + artifactId + "/pom.properties";
+        final InputStream pomPropsIs = DevModeMain.class.getClassLoader().getResourceAsStream(pomPropsPath);
+        if (pomPropsIs == null) {
+            throw new GradleException("Failed to locate " + pomPropsPath + " on the classpath");
+        }
+        final Properties props = new Properties();
+        try (InputStream is = pomPropsIs) {
+            props.load(is);
+        } catch (IOException e) {
+            throw new GradleException("Failed to load " + pomPropsPath + " from the classpath", e);
+        }
+        final String devModeGroupId = props.getProperty("groupId");
+        if (devModeGroupId == null) {
+            throw new GradleException("Classpath resource " + pomPropsPath + " is missing groupId");
+        }
+        final String devModeArtifactId = props.getProperty("artifactId");
+        if (devModeArtifactId == null) {
+            throw new GradleException("Classpath resource " + pomPropsPath + " is missing artifactId");
+        }
+        final String devModeVersion = props.getProperty("version");
+        if (devModeVersion == null) {
+            throw new GradleException("Classpath resource " + pomPropsPath + " is missing version");
+        }
+        return dependencyHandler.create(String.format("%s:%s:%s", devModeGroupId, devModeArtifactId, devModeVersion));
     }
 
     private static Configuration[] getOriginalRuntimeClasspaths(Project project, LaunchMode mode) {
@@ -159,9 +253,6 @@ public class ApplicationDeploymentClasspathBuilder {
 
     private void setUpPlatformConfiguration() {
         if (project.getConfigurations().findByName(this.platformConfigurationName) == null) {
-            PlatformImportsImpl platformImports = ApplicationDeploymentClasspathBuilder.platformImports
-                    .computeIfAbsent(this.platformImportName, (ignored) -> new PlatformImportsImpl());
-
             project.getConfigurations().register(this.platformConfigurationName, configuration -> {
                 configuration.setCanBeConsumed(false);
                 // Platform configuration is just implementation, filtered to platform dependencies
@@ -174,6 +265,8 @@ public class ApplicationDeploymentClasspathBuilder {
                                 .filter(dependency -> dependency instanceof ModuleDependency &&
                                         ToolingUtils.isEnforcedPlatform((ModuleDependency) dependency))
                                 .collect(Collectors.toList()))));
+                final PlatformImportsImpl platformImports = ApplicationDeploymentClasspathBuilder.platformImports
+                        .computeIfAbsent(this.platformImportName, (ignored) -> new PlatformImportsImpl());
                 // Configures PlatformImportsImpl once the platform configuration is resolved
                 configuration.getResolutionStrategy().eachDependency(d -> {
                     ModuleIdentifier identifier = d.getTarget().getModule();

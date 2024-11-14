@@ -9,10 +9,12 @@ import io.quarkus.gradle.extension.QuarkusPluginExtension;
 public abstract class QuarkusRemoteDev extends QuarkusDev {
 
     @Inject
-    public QuarkusRemoteDev(Configuration quarkusDevConfiguration, QuarkusPluginExtension extension) {
+    public QuarkusRemoteDev(Configuration quarkusDevConfiguration, Configuration quarkusBootstrapResolverConfig,
+            QuarkusPluginExtension extension) {
         super(
                 "Remote development mode: enables hot deployment on remote JVM with background compilation",
                 quarkusDevConfiguration,
+                quarkusBootstrapResolverConfig,
                 extension);
     }
 

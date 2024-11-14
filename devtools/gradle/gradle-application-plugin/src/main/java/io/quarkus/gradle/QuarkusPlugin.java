@@ -157,8 +157,10 @@ public class QuarkusPlugin implements Plugin<Project> {
                 forcedPropertiesService, ForcedPropertieBuildService.class,
                 spec -> {
                 });
-        final String devRuntimeConfigName = ApplicationDeploymentClasspathBuilder.getBaseRuntimeConfigName(LaunchMode.DEVELOPMENT);
-        final Configuration devRuntimeDependencies = project.getConfigurations().maybeCreate(devRuntimeConfigName);
+        final Configuration devRuntimeDependencies = project.getConfigurations().maybeCreate(
+                ApplicationDeploymentClasspathBuilder.getBaseRuntimeConfigName(LaunchMode.DEVELOPMENT));
+        final Configuration quarkusBootstrapResolverDependencies = project.getConfigurations().maybeCreate(
+                ApplicationDeploymentClasspathBuilder.QUARKUS_BOOTSTRAP_RESOLVER_CONFIGURATION);
 
         tasks.register(LIST_EXTENSIONS_TASK_NAME, QuarkusListExtensions.class);
         tasks.register(LIST_CATEGORIES_TASK_NAME, QuarkusListCategories.class);
@@ -322,7 +324,7 @@ public class QuarkusPlugin implements Plugin<Project> {
         });
 
         TaskProvider<QuarkusDev> quarkusDev = tasks.register(QUARKUS_DEV_TASK_NAME, QuarkusDev.class, devRuntimeDependencies,
-                quarkusExt);
+                quarkusBootstrapResolverDependencies, quarkusExt);
         TaskProvider<QuarkusRun> quarkusRun = tasks.register(QUARKUS_RUN_TASK_NAME, QuarkusRun.class,
                 build -> {
                     configureQuarkusBuildTask(project, build, quarkusBuildAppModelTask, serviceProvider);
@@ -333,9 +335,9 @@ public class QuarkusPlugin implements Plugin<Project> {
 
                 });
         TaskProvider<QuarkusRemoteDev> quarkusRemoteDev = tasks.register(QUARKUS_REMOTE_DEV_TASK_NAME, QuarkusRemoteDev.class,
-                devRuntimeDependencies, quarkusExt);
+                devRuntimeDependencies, quarkusBootstrapResolverDependencies, quarkusExt);
         TaskProvider<QuarkusTest> quarkusTest = tasks.register(QUARKUS_TEST_TASK_NAME, QuarkusTest.class,
-                devRuntimeDependencies, quarkusExt);
+                devRuntimeDependencies, quarkusBootstrapResolverDependencies, quarkusExt);
         tasks.register(QUARKUS_TEST_CONFIG_TASK_NAME, QuarkusTestConfig.class);
 
         tasks.register(BUILD_NATIVE_TASK_NAME, DefaultTask.class, task -> {
