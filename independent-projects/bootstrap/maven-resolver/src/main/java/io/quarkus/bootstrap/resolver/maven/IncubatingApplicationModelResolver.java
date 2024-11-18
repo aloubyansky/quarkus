@@ -10,7 +10,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -60,6 +59,7 @@ import io.quarkus.maven.dependency.DependencyFlags;
 import io.quarkus.maven.dependency.ResolvedDependency;
 import io.quarkus.maven.dependency.ResolvedDependencyBuilder;
 import io.quarkus.paths.PathTree;
+import io.quarkus.paths.PathVisit;
 
 public class IncubatingApplicationModelResolver {
 
@@ -758,17 +758,8 @@ public class IncubatingApplicationModelResolver {
             return ext == EXT_INFO_NONE ? null : ext;
         }
         artifact = resolve(artifact, repos);
-        final Path path = artifact.getFile().toPath();
-        final Properties descriptor = PathTree.ofDirectoryOrArchive(path).apply(BootstrapConstants.DESCRIPTOR_PATH, visit -> {
-            if (visit == null) {
-                return null;
-            }
-            try {
-                return readDescriptor(visit.getPath());
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
-        });
+        final Properties descriptor = PathTree.ofDirectoryOrArchive(artifact.getFile().toPath())
+                .apply(BootstrapConstants.DESCRIPTOR_PATH, IncubatingApplicationModelResolver::readExtensionProperties);
         if (descriptor == null) {
             allExtensions.put(extKey, EXT_INFO_NONE);
             return null;
@@ -776,6 +767,21 @@ public class IncubatingApplicationModelResolver {
         ext = new ExtensionInfo(artifact, descriptor, devMode);
         allExtensions.put(extKey, ext);
         return ext;
+    }
+
+    private static Properties readExtensionProperties(PathVisit visit) {
+        if (visit == null) {
+            return null;
+        }
+        try {
+            final Properties rtProps = new Properties();
+            try (BufferedReader reader = Files.newBufferedReader(visit.getPath())) {
+                rtProps.load(reader);
+            }
+            return rtProps;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private DependencyNode collectDependencies(Artifact artifact, Collection<Exclusion> exclusions,
@@ -826,14 +832,6 @@ public class IncubatingApplicationModelResolver {
         } catch (ArtifactResolutionException e) {
             throw new DeploymentInjectionException("Failed to resolve artifact " + artifact, e);
         }
-    }
-
-    private static Properties readDescriptor(Path path) throws IOException {
-        final Properties rtProps = new Properties();
-        try (BufferedReader reader = Files.newBufferedReader(path)) {
-            rtProps.load(reader);
-        }
-        return rtProps;
     }
 
     private class ExtensionDependency {

@@ -66,8 +66,11 @@ public class ConditionalDependenciesProdModelTestCase extends CollectDependencie
                         | DependencyFlags.TOP_LEVEL_RUNTIME_EXTENSION_ARTIFACT);
         addCollectedDeploymentDep(extF.getDeployment());
 
+        TsArtifact devOnlyLib = TsArtifact.jar("dev-only-lib");
+        install(devOnlyLib, false);
+
         final TsQuarkusExt extG = new TsQuarkusExt("ext-g");
-        extG.setConditionalDevDeps(extB);
+        extG.setConditionalDevDeps(extB.getRuntime(), devOnlyLib);
         install(extG, false);
         installAsDep(extG.getRuntime(),
                 DependencyFlags.DIRECT
