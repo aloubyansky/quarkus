@@ -22,6 +22,7 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-cache-devui</artifactId>
             <version>${project.version}</version>
+            <optional>true</optional>
         </dependency>
          <dependency>
             <groupId>io.quarkus</groupId>
