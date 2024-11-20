@@ -18,6 +18,11 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-cache</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-cache-devui</artifactId>
+            <version>${project.version}</version>
+        </dependency>
          <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-cache-deployment-spi</artifactId>

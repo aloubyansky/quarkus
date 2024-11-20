@@ -9,8 +9,6 @@ import java.util.Optional;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import org.jboss.logging.Logger;
-
 import io.quarkus.cache.Cache;
 import io.quarkus.cache.CacheManager;
 import io.quarkus.cache.CaffeineCache;
@@ -25,9 +23,6 @@ public class CacheJsonRPCService {
 
     @Inject
     CacheManager manager;
-
-    @Inject
-    Logger logger;
 
     @NonBlocking
     public JsonArray getAll() {
