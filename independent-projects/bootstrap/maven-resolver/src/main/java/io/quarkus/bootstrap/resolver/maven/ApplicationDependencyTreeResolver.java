@@ -78,8 +78,6 @@ public class ApplicationDependencyTreeResolver {
     // this is a temporary option, to enable the previous way of initializing runtime classpath dependencies
     private static final boolean CONVERGED_TREE_ONLY = PropertyUtils.getBoolean("quarkus.bootstrap.converged-tree-only", false);
 
-    private static final Artifact[] NO_ARTIFACTS = new Artifact[0];
-
     public static ApplicationDependencyTreeResolver newInstance() {
         return new ApplicationDependencyTreeResolver();
     }
