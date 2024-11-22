@@ -203,10 +203,9 @@ public class IncubatingApplicationModelResolver {
         DependencyNode root = resolveRuntimeDeps(collectRtDepsRequest);
         processRuntimeDeps(root);
         activateConditionalDeps();
-
         // resolve and inject deployment dependency branches for the top (first met) runtime extension nodes
         if (!runtimeModelOnly) {
-            injectDeployment();
+            injectDeploymentDeps();
         }
         root = normalize(resolver.getSession(), root);
         populateModelBuilder(root);
@@ -268,26 +267,24 @@ public class IncubatingApplicationModelResolver {
         }
     }
 
-    private void injectDeployment() {
-        final ConcurrentLinkedDeque<Runnable> injectQueue = new ConcurrentLinkedDeque<>();
-        collectDeploymentDeps(injectQueue);
-        for (var inject : injectQueue) {
-            inject.run();
+    private void injectDeploymentDeps() {
+        for (var dep : collectDeploymentDeps()) {
+            dep.injectDeploymentDependency();
         }
     }
 
-    private void collectDeploymentDeps(ConcurrentLinkedDeque<Runnable> injectQueue) {
+    private Collection<AppDep> collectDeploymentDeps() {
+        final ConcurrentLinkedDeque<AppDep> injectQueue = new ConcurrentLinkedDeque<>();
         var taskRunner = new ModelResolutionTaskRunner();
-        //for(int i = deploymentInjectionPoints.size() - 1; i >= 0; --i) {
         for (AppDep extDep : deploymentInjectionPoints) {
-            //ExtensionDependency extDep = deploymentInjectionPoints.get(i);
             injectDeploymentDep(taskRunner, extDep, injectQueue);
         }
         taskRunner.waitForCompletion();
+        return injectQueue;
     }
 
     private void injectDeploymentDep(ModelResolutionTaskRunner taskRunner, AppDep extDep,
-            ConcurrentLinkedDeque<Runnable> injectQueue) {
+            ConcurrentLinkedDeque<AppDep> injectQueue) {
         //taskRunner.run(() -> {
         var resolvedDep = appBuilder.getDependency(getKey(extDep.ext.info.deploymentArtifact));
         if (resolvedDep == null) {
@@ -296,7 +293,7 @@ public class IncubatingApplicationModelResolver {
             } catch (BootstrapDependencyProcessingException e) {
                 throw new RuntimeException(e);
             }
-            injectQueue.add(extDep::injectDeploymentDependency);
+            injectQueue.add(extDep);
         } else {
             // if resolvedDep isn't null, it means the deployment artifact is on the runtime classpath
             // in which case we also clear the reloadable flag on it, in case it's coming from the workspace
@@ -746,8 +743,7 @@ public class IncubatingApplicationModelResolver {
             // if the parent is an extension then add the deployment node as a dependency of the parent's deployment node
             // (that would happen when injecting conditional dependencies)
             // otherwise, the runtime module is going to be replaced with the deployment node
-            var targetNode = parent == null ? null : parent.ext == null ? null : parent.ext.deploymentNode;
-            ext.injectDependencyDependency(targetNode);
+            ext.injectDependencyDependency(parent == null ? null : (parent.ext == null ? null : parent.ext.deploymentNode));
         }
     }
 
