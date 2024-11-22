@@ -370,7 +370,7 @@ public class BootstrapAppModelResolver implements AppModelResolver {
             if (logTime) {
                 start = System.currentTimeMillis();
             }
-            if (incubatingModelResolver) {
+            if (true) {
                 IncubatingApplicationModelResolver.newInstance()
                         .setArtifactResolver(mvn)
                         .setApplicationModelBuilder(appBuilder)
