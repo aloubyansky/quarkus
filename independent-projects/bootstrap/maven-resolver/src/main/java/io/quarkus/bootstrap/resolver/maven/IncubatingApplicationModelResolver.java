@@ -285,21 +285,17 @@ public class IncubatingApplicationModelResolver {
 
     private void injectDeploymentDep(ModelResolutionTaskRunner taskRunner, AppDep extDep,
             ConcurrentLinkedDeque<AppDep> injectQueue) {
-        //taskRunner.run(() -> {
-        var resolvedDep = appBuilder.getDependency(getKey(extDep.ext.info.deploymentArtifact));
-        if (resolvedDep == null) {
-            try {
+        taskRunner.run(() -> {
+            var resolvedDep = appBuilder.getDependency(getKey(extDep.ext.info.deploymentArtifact));
+            if (resolvedDep == null) {
                 extDep.ext.collectDeploymentDeps();
-            } catch (BootstrapDependencyProcessingException e) {
-                throw new RuntimeException(e);
+                injectQueue.add(extDep);
+            } else {
+                // if resolvedDep isn't null, it means the deployment artifact is on the runtime classpath
+                // in which case we also clear the reloadable flag on it, in case it's coming from the workspace
+                resolvedDep.clearFlag(DependencyFlags.RELOADABLE);
             }
-            injectQueue.add(extDep);
-        } else {
-            // if resolvedDep isn't null, it means the deployment artifact is on the runtime classpath
-            // in which case we also clear the reloadable flag on it, in case it's coming from the workspace
-            resolvedDep.clearFlag(DependencyFlags.RELOADABLE);
-        }
-        //});
+        });
     }
 
     /**
