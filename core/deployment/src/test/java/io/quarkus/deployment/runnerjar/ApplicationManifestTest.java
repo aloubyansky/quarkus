@@ -1,5 +1,16 @@
 package io.quarkus.deployment.runnerjar;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import org.eclipse.aether.util.artifact.JavaScopes;
+
 import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.bootstrap.resolver.TsArtifact;
 import io.quarkus.bootstrap.resolver.TsQuarkusExt;
@@ -10,16 +21,6 @@ import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactDependency;
 import io.quarkus.maven.dependency.Dependency;
 import io.quarkus.maven.dependency.DependencyFlags;
-import org.eclipse.aether.util.artifact.JavaScopes;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 public class ApplicationManifestTest extends BootstrapFromOriginalJarTestBase {
 
@@ -28,7 +29,7 @@ public class ApplicationManifestTest extends BootstrapFromOriginalJarTestBase {
         @Override
         public Consumer<List<BuildChainBuilder>> apply(Map<String, Object> stringObjectMap) {
             return chain -> {
-                
+
             };
         }
     }
