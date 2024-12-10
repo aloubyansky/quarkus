@@ -16,6 +16,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.jar.Attributes;
@@ -133,6 +134,15 @@ public abstract class PackageAppTestBase extends BootstrapTestBase {
         return set;
     }
 
+    protected String getBuildChainCustomer() {
+        return null;
+    }
+
+    private AugmentAction newAugmentAction(CuratedApplication curated) {
+        final String buildChainCustomer = getBuildChainCustomer();
+        return buildChainCustomer == null ? curated.createAugmentor() : curated.createAugmentor(buildChainCustomer, Map.of());
+    }
+
     @Override
     protected void testBootstrap(QuarkusBootstrap creator) throws Exception {
         CuratedApplication curated = creator.bootstrap();
@@ -141,7 +151,7 @@ public abstract class PackageAppTestBase extends BootstrapTestBase {
         if (expectedExtensions != null) {
             assertExtensionDependencies(curated.getApplicationModel(), expectedExtensions);
         }
-        AugmentAction action = curated.createAugmentor();
+        AugmentAction action = newAugmentAction(curated);
         AugmentResult outcome = action.createProductionApplication();
 
         final Path libDir = outcome.getJar().getLibraryDir();
