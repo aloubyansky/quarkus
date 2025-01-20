@@ -74,6 +74,7 @@ import io.quarkus.deployment.dev.DevModeContext;
 import io.quarkus.deployment.dev.DevModeMain;
 import io.quarkus.deployment.dev.ExtensionDevModeJvmOptionFilter;
 import io.quarkus.gradle.dependency.ApplicationDeploymentClasspathBuilder;
+import io.quarkus.gradle.dependency.DeploymentConfigurationResolver;
 import io.quarkus.gradle.dsl.CompilerOption;
 import io.quarkus.gradle.dsl.CompilerOptions;
 import io.quarkus.gradle.extension.QuarkusPluginExtension;
@@ -570,6 +571,8 @@ public abstract class QuarkusDev extends QuarkusTask {
                         configuration.getDependencies().add(getQuarkusGradleBootstrapResolver());
                         configuration.getDependencies().add(getQuarkusMavenBootstrapResolver());
                         configuration.getDependencies().add(getQuarkusCoreDeployment(appModel));
+                        DeploymentConfigurationResolver.setDeploymentAndConditionalAttributes(
+                                configuration, getProject(), LaunchMode.DEVELOPMENT);
                     });
             devModeDependencyConfiguration = getProject().getConfigurations()
                     .getByName(ApplicationDeploymentClasspathBuilder.QUARKUS_BOOTSTRAP_RESOLVER_CONFIGURATION);
