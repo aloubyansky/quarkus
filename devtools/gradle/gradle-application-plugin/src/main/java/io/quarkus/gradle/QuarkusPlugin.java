@@ -27,6 +27,7 @@ import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.artifacts.ExternalModuleDependency;
 import org.gradle.api.artifacts.ProjectDependency;
 import org.gradle.api.file.FileCollection;
+import org.gradle.api.internal.tasks.TaskDependencyFactory;
 import org.gradle.api.plugins.BasePlugin;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.provider.Property;
@@ -130,11 +131,13 @@ public class QuarkusPlugin implements Plugin<Project> {
     public static final String IMAGE_CHECK_REQUIREMENTS_NAME = "quarkusImageExtensionChecks";
 
     private final ToolingModelBuilderRegistry registry;
+    private final TaskDependencyFactory taskDependencyFactory;
 
     @SuppressWarnings("CdiInjectionPointsInspection")
     @Inject
-    public QuarkusPlugin(ToolingModelBuilderRegistry registry) {
+    public QuarkusPlugin(ToolingModelBuilderRegistry registry, TaskDependencyFactory taskDepFactory) {
         this.registry = registry;
+        this.taskDependencyFactory = taskDepFactory;
     }
 
     @Override
@@ -183,12 +186,9 @@ public class QuarkusPlugin implements Plugin<Project> {
         });
 
         Provider<DefaultProjectDescriptor> projectDescriptor = ProjectDescriptorBuilder.buildForApp(project);
-        ApplicationDeploymentClasspathBuilder normalClasspath = new ApplicationDeploymentClasspathBuilder(project,
-                LaunchMode.NORMAL);
-        ApplicationDeploymentClasspathBuilder testClasspath = new ApplicationDeploymentClasspathBuilder(project,
-                LaunchMode.TEST);
-        ApplicationDeploymentClasspathBuilder devClasspath = new ApplicationDeploymentClasspathBuilder(project,
-                LaunchMode.DEVELOPMENT);
+        ApplicationDeploymentClasspathBuilder normalClasspath = getDeploymentClasspathBuilder(project, LaunchMode.NORMAL);
+        ApplicationDeploymentClasspathBuilder testClasspath = getDeploymentClasspathBuilder(project, LaunchMode.TEST);
+        ApplicationDeploymentClasspathBuilder devClasspath = getDeploymentClasspathBuilder(project, LaunchMode.DEVELOPMENT);
 
         TaskProvider<QuarkusApplicationModelTask> quarkusGenerateTestAppModelTask = tasks.register(
                 "quarkusGenerateTestAppModel",
@@ -201,7 +201,6 @@ public class QuarkusPlugin implements Plugin<Project> {
                     configureApplicationModelTask(project, task, projectDescriptor, devClasspath, LaunchMode.DEVELOPMENT,
                             "quarkus/application-model/quarkus-app-dev-model.dat");
                 });
-
         TaskProvider<QuarkusApplicationModelTask> quarkusGenerateAppModelTask = tasks.register("quarkusGenerateAppModel",
                 QuarkusApplicationModelTask.class, task -> {
                     configureApplicationModelTask(project, task, projectDescriptor
@@ -509,6 +508,10 @@ public class QuarkusPlugin implements Plugin<Project> {
         });
     }
 
+    private ApplicationDeploymentClasspathBuilder getDeploymentClasspathBuilder(Project project, LaunchMode mode) {
+        return new ApplicationDeploymentClasspathBuilder(project, mode, taskDependencyFactory);
+    }
+
     private static void configureApplicationModelTask(Project project, QuarkusApplicationModelTask task,
             Provider<DefaultProjectDescriptor> projectDescriptor,
             ApplicationDeploymentClasspathBuilder classpath,
@@ -517,9 +520,10 @@ public class QuarkusPlugin implements Plugin<Project> {
         task.getLaunchMode().set(launchMode);
         task.getTypeModel().set(task.getPath());
         task.getOriginalClasspath().setFrom(classpath.getOriginalRuntimeClasspathAsInput());
-        task.getAppClasspath().configureFrom(classpath.getRuntimeConfigurationWithoutResolvingDeployment());
-        task.getPlatformConfiguration().configureFrom(classpath.getPlatformConfiguration());
-        task.getDeploymentClasspath().configureFrom(classpath.getDeploymentConfiguration());
+        task.getAppClasspath().configureFrom(classpath.getRuntimeConfigurationWithoutResolvingDeployment(), launchMode,
+                project.getName());
+        task.getPlatformConfiguration().configureFrom(classpath.getPlatformConfiguration(), launchMode, project.getName());
+        task.getDeploymentClasspath().configureFrom(classpath.getDeploymentConfiguration(), launchMode, project.getName());
         task.getDeploymentResolvedWorkaround().from(classpath.getDeploymentConfiguration().getIncoming().getFiles());
         task.getPlatformImports().set(classpath.getPlatformImportsWithoutResolvingPlatform());
         task.getApplicationModel().set(project.getLayout().getBuildDirectory().file(quarkusModelFile));
@@ -576,11 +580,6 @@ public class QuarkusPlugin implements Plugin<Project> {
                 .extendsFrom(configContainer.findByName(JavaPlugin.TEST_RUNTIME_ONLY_CONFIGURATION_NAME));
 
         ApplicationDeploymentClasspathBuilder.initConfigurations(project);
-
-        // Also initialize the configurations that are specific to a LaunchMode
-        for (LaunchMode launchMode : LaunchMode.values()) {
-            new ApplicationDeploymentClasspathBuilder(project, launchMode);
-        }
     }
 
     private Set<Path> getSourcesParents(SourceSet mainSourceSet) {
