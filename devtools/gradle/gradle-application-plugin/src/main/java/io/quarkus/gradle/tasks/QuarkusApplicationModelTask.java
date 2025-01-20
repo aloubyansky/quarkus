@@ -64,6 +64,8 @@ import io.quarkus.bootstrap.workspace.SourceDir;
 import io.quarkus.bootstrap.workspace.WorkspaceModule;
 import io.quarkus.bootstrap.workspace.WorkspaceModuleId;
 import io.quarkus.fs.util.ZipUtils;
+import io.quarkus.gradle.dependency.ConditionalDependencyResolver;
+import io.quarkus.gradle.dependency.DeploymentConfigurationResolver;
 import io.quarkus.gradle.tooling.ToolingUtils;
 import io.quarkus.gradle.workspace.descriptors.DefaultProjectDescriptor;
 import io.quarkus.gradle.workspace.descriptors.ProjectDescriptor;
@@ -71,7 +73,6 @@ import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactDependency;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.maven.dependency.DependencyFlags;
-import io.quarkus.maven.dependency.GACT;
 import io.quarkus.maven.dependency.GACTV;
 import io.quarkus.maven.dependency.ResolvedDependencyBuilder;
 import io.quarkus.paths.PathList;
@@ -369,7 +370,7 @@ public abstract class QuarkusApplicationModelTask extends DefaultTask {
         for (QuarkusResolvedArtifact artifact : artifacts) {
 
             String classifier = resolveClassifier(moduleVersionIdentifier, artifact.file);
-            ArtifactKey artifactKey = new GACT(moduleVersionIdentifier.getGroup(), moduleVersionIdentifier.getName(),
+            ArtifactKey artifactKey = ArtifactKey.of(moduleVersionIdentifier.getGroup(), moduleVersionIdentifier.getName(),
                     classifier,
                     artifact.type);
             if (!alreadyVisited.add(artifactKey)) {
@@ -498,7 +499,7 @@ public abstract class QuarkusApplicationModelTask extends DefaultTask {
             return new QuarkusResolvedArtifact(result.getId(), result.getFile(), type);
         }
 
-        public void configureFrom(Configuration configuration) {
+        public void configureFrom(Configuration configuration, LaunchMode mode, String appName) {
             ResolvableDependencies resolvableDependencies = configuration.getIncoming();
             getRoot().set(resolvableDependencies.getResolutionResult().getRootComponent());
             getResolvedArtifactCollection().set(resolvableDependencies.getArtifacts());
@@ -507,8 +508,12 @@ public abstract class QuarkusApplicationModelTask extends DefaultTask {
                 // Project descriptors make sense only for projects
                 viewConfiguration.withVariantReselection();
                 viewConfiguration.componentFilter(component -> component instanceof ProjectComponentIdentifier);
-                viewConfiguration.attributes(attributes -> attributes.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE,
-                        QUARKUS_PROJECT_DESCRIPTOR_ARTIFACT_TYPE));
+                viewConfiguration.attributes(attributes -> {
+                    attributes.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE,
+                            QUARKUS_PROJECT_DESCRIPTOR_ARTIFACT_TYPE);
+                    DeploymentConfigurationResolver.setDeploymentAttributes(attributes, appName, mode);
+                    ConditionalDependencyResolver.setConditionalAttributes(attributes, appName, mode);
+                });
             }).getFiles());
         }
     }

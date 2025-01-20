@@ -12,9 +12,12 @@ import org.gradle.api.artifacts.ResolvedArtifact;
 import org.gradle.api.artifacts.ResolvedDependency;
 import org.gradle.api.artifacts.dsl.DependencyHandler;
 
+import io.quarkus.gradle.dependency.ConditionalDependencyResolver;
+import io.quarkus.gradle.dependency.DeploymentConfigurationResolver;
 import io.quarkus.gradle.tooling.ToolingUtils;
 import io.quarkus.gradle.tooling.dependency.DependencyUtils;
 import io.quarkus.gradle.tooling.dependency.ExtensionDependency;
+import io.quarkus.runtime.LaunchMode;
 
 public class DeploymentClasspathBuilder {
 
@@ -25,12 +28,15 @@ public class DeploymentClasspathBuilder {
         this.project = project;
     }
 
-    public void exportDeploymentClasspath(String configurationName) {
+    public void exportDeploymentClasspath(String configurationName, LaunchMode mode) {
 
         String deploymentConfigurationName = ToolingUtils.toDeploymentConfigurationName(configurationName);
         project.getConfigurations().create(deploymentConfigurationName, config -> {
             Configuration configuration = DependencyUtils.duplicateConfiguration(project,
                     project.getConfigurations().getByName(configurationName));
+            DeploymentConfigurationResolver.setDeploymentAttributes(configuration.getAttributes(), project.getName(), mode);
+            ConditionalDependencyResolver.setConditionalAttributes(configuration.getAttributes(), project.getName(), mode);
+
             Set<ExtensionDependency<?>> extensionDependencies = collectFirstMetQuarkusExtensions(configuration);
 
             DependencyHandler dependencies = project.getDependencies();
@@ -43,6 +49,8 @@ public class DeploymentClasspathBuilder {
                 dependencies.add(deploymentConfigurationName,
                         DependencyUtils.createDeploymentDependency(dependencies, extension));
             }
+            DeploymentConfigurationResolver.setDeploymentAttributes(config.getAttributes(), project.getName(), mode);
+            ConditionalDependencyResolver.setConditionalAttributes(config.getAttributes(), project.getName(), mode);
         });
     }
 
