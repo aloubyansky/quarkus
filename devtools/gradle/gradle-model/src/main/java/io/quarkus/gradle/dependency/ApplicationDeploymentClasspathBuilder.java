@@ -21,6 +21,7 @@ import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.ResolvedArtifact;
 import org.gradle.api.artifacts.ResolvedDependency;
 import org.gradle.api.artifacts.dsl.DependencyHandler;
+import org.gradle.api.attributes.Attribute;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.internal.artifacts.dependencies.DefaultDependencyArtifact;
 import org.gradle.api.internal.artifacts.dependencies.DefaultExternalModuleDependency;
@@ -40,7 +41,7 @@ public class ApplicationDeploymentClasspathBuilder {
 
     public static final String QUARKUS_BOOTSTRAP_RESOLVER_CONFIGURATION = "quarkusBootstrapResolverConfiguration";
 
-    private static String getLaunchModeAlias(LaunchMode mode) {
+    public static String getLaunchModeAlias(LaunchMode mode) {
         if (mode == LaunchMode.DEVELOPMENT) {
             return "Dev";
         }
@@ -98,6 +99,32 @@ public class ApplicationDeploymentClasspathBuilder {
                             configContainer.getByName(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME));
                     config.setCanBeConsumed(false);
                 });
+
+        var quarkusDepsAttr = Attribute.of("quarkus.deps", String.class);
+        project.getDependencies().getComponents().all(compDetails -> {
+            if (compDetails.getId().getName().equals("xercesImpl")) {
+                System.out.println("Component: " + compDetails.getId());
+                compDetails.addVariant("custom", "compile", variant -> {
+                    variant.attributes(attrs -> {
+                        attrs.attribute(quarkusDepsAttr, "custom");
+                    });
+                    variant.withDependencies(directDeps -> {
+                        for (var directDep : directDeps) {
+                            System.out.println("- " + directDep.getModule());
+                        }
+                        directDeps.add("ai.active:webhook-sdk:1.0.7");
+                    });
+                });
+            }
+        });
+        configContainer.register("quarkusWip", config -> {
+            config.withDependencies(deps -> {
+                deps.add(project.getDependencies().create("xom:xom:1.3.9"));
+            });
+            config.attributes(attrs -> {
+                attrs.attribute(quarkusDepsAttr, "custom");
+            });
+        });
     }
 
     private static Configuration[] getOriginalRuntimeClasspaths(Project project, LaunchMode mode) {
@@ -220,51 +247,66 @@ public class ApplicationDeploymentClasspathBuilder {
                         project.getConfigurations()
                                 .getByName(ApplicationDeploymentClasspathBuilder.getBaseRuntimeConfigName(mode)));
             });
+            if (!isLegacyConfig(project)) {
+                ConditionalDependencyResolver.resolve(project, mode, deploymentConfigurationName);
+            }
         }
     }
 
     private void setUpDeploymentConfiguration() {
+
         if (!project.getConfigurations().getNames().contains(this.deploymentConfigurationName)) {
-            project.getConfigurations().register(this.deploymentConfigurationName, configuration -> {
-                configuration.setCanBeConsumed(false);
-                Configuration enforcedPlatforms = this.getPlatformConfiguration();
-                configuration.extendsFrom(enforcedPlatforms);
-                Map<String, Set<Dependency>> calculatedDependenciesByModeAndConfiguration = new HashMap<>();
-                ListProperty<Dependency> dependencyListProperty = project.getObjects().listProperty(Dependency.class);
-                configuration.getDependencies().addAllLater(dependencyListProperty.value(project.provider(() -> {
-                    String key = String.format("%s%s%s", mode, configuration.getName(), project.getName());
-                    if (!calculatedDependenciesByModeAndConfiguration.containsKey(key)) {
-                        ConditionalDependenciesEnabler cdEnabler = new ConditionalDependenciesEnabler(project, mode,
-                                enforcedPlatforms);
-                        final Collection<ExtensionDependency<?>> allExtensions = cdEnabler.getAllExtensions();
-                        Set<ExtensionDependency<?>> extensions = collectFirstMetQuarkusExtensions(getRawRuntimeConfiguration(),
-                                allExtensions);
-                        // Add conditional extensions
-                        for (ExtensionDependency<?> knownExtension : allExtensions) {
-                            if (knownExtension.isConditional()) {
-                                extensions.add(knownExtension);
-                            }
-                        }
-
-                        final Set<ModuleVersionIdentifier> alreadyProcessed = new HashSet<>(extensions.size());
-                        final DependencyHandler dependencies = project.getDependencies();
-                        final Set<Dependency> deploymentDependencies = new HashSet<>();
-                        for (ExtensionDependency<?> extension : extensions) {
-                            if (!alreadyProcessed.add(extension.getExtensionId())) {
-                                continue;
+            if (isLegacyConfig(project)) {
+                project.getConfigurations().register(this.deploymentConfigurationName, configuration -> {
+                    configuration.setCanBeConsumed(false);
+                    Configuration enforcedPlatforms = this.getPlatformConfiguration();
+                    configuration.extendsFrom(enforcedPlatforms);
+                    Map<String, Set<Dependency>> calculatedDependenciesByModeAndConfiguration = new HashMap<>();
+                    ListProperty<Dependency> dependencyListProperty = project.getObjects().listProperty(Dependency.class);
+                    configuration.getDependencies().addAllLater(dependencyListProperty.value(project.provider(() -> {
+                        String key = String.format("%s%s%s", mode, configuration.getName(), project.getName());
+                        if (!calculatedDependenciesByModeAndConfiguration.containsKey(key)) {
+                            ConditionalDependenciesEnabler cdEnabler = new ConditionalDependenciesEnabler(project, mode,
+                                    enforcedPlatforms);
+                            final Collection<ExtensionDependency<?>> allExtensions = cdEnabler.getAllExtensions();
+                            Set<ExtensionDependency<?>> extensions = collectFirstMetQuarkusExtensions(
+                                    getRawRuntimeConfiguration(),
+                                    allExtensions);
+                            // Add conditional extensions
+                            for (ExtensionDependency<?> knownExtension : allExtensions) {
+                                if (knownExtension.isConditional()) {
+                                    extensions.add(knownExtension);
+                                }
                             }
 
-                            deploymentDependencies.add(
-                                    DependencyUtils.createDeploymentDependency(dependencies, extension));
+                            final Set<ModuleVersionIdentifier> alreadyProcessed = new HashSet<>(extensions.size());
+                            final DependencyHandler dependencies = project.getDependencies();
+                            final Set<Dependency> deploymentDependencies = new HashSet<>();
+                            for (ExtensionDependency<?> extension : extensions) {
+                                if (!alreadyProcessed.add(extension.getExtensionId())) {
+                                    continue;
+                                }
+
+                                deploymentDependencies.add(
+                                        DependencyUtils.createDeploymentDependency(dependencies, extension));
+                            }
+                            calculatedDependenciesByModeAndConfiguration.put(key, deploymentDependencies);
+                            return deploymentDependencies;
+                        } else {
+                            return calculatedDependenciesByModeAndConfiguration.get(key);
                         }
-                        calculatedDependenciesByModeAndConfiguration.put(key, deploymentDependencies);
-                        return deploymentDependencies;
-                    } else {
-                        return calculatedDependenciesByModeAndConfiguration.get(key);
-                    }
-                })));
-            });
+                    })));
+                });
+            } else {
+                DeploymentConfigurationResolver.registerDeploymentConfiguration(project, mode,
+                        this.deploymentConfigurationName);
+            }
         }
+    }
+
+    private static boolean isLegacyConfig(Project project) {
+        final Object value = project.getProperties().get("quarkusLegacyConfig");
+        return value != null && Boolean.parseBoolean(String.valueOf(value));
     }
 
     private void setUpCompileOnlyConfiguration() {
