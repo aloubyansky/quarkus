@@ -389,4 +389,10 @@ public class DependencyUtils {
                 + dependency.getDeploymentModule().getArtifactId() + ":"
                 + dependency.getDeploymentModule().getVersion());
     }
+
+    public static ArtifactKey getKey(ResolvedArtifact artifact) {
+        return ArtifactKey.of(artifact.getModuleVersion().getId().getGroup(), artifact.getName(),
+                artifact.getClassifier() == null ? ArtifactCoords.DEFAULT_CLASSIFIER : artifact.getClassifier(),
+                artifact.getExtension() == null ? ArtifactCoords.TYPE_JAR : artifact.getExtension());
+    }
 }

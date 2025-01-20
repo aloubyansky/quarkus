@@ -76,6 +76,12 @@ public abstract class ExtensionDependency<T> {
         return extensionId.getVersion();
     }
 
+    public abstract String getDeploymentGroup();
+
+    public abstract String getDeploymentName();
+
+    public abstract String getDeploymentVersion();
+
     public ModuleVersionIdentifier getExtensionId() {
         return extensionId;
     }

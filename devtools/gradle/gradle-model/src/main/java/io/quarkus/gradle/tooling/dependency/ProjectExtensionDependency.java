@@ -33,4 +33,19 @@ public class ProjectExtensionDependency extends ExtensionDependency<Project> {
     public Boolean isIncludedBuild() {
         return isIncludedBuild;
     }
+
+    @Override
+    public String getDeploymentGroup() {
+        return String.valueOf(getDeploymentModule().getGroup());
+    }
+
+    @Override
+    public String getDeploymentName() {
+        return getDeploymentModule().getName();
+    }
+
+    @Override
+    public String getDeploymentVersion() {
+        return String.valueOf(getDeploymentModule().getVersion());
+    }
 }

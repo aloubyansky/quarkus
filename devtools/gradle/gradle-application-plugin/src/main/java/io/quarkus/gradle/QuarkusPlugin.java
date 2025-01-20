@@ -12,7 +12,6 @@ import java.util.stream.Collectors;
 
 import javax.inject.Inject;
 
-import org.gradle.api.Action;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
 import org.gradle.api.Plugin;
@@ -463,12 +462,7 @@ public class QuarkusPlugin implements Plugin<Project> {
 
                         // Quarkus test configuration action which should be executed before any Quarkus test
                         // Use anonymous classes in order to leverage task avoidance.
-                        t.doFirst(new Action<Task>() {
-                            @Override
-                            public void execute(Task task) {
-                                quarkusExt.beforeTest((Test) task);
-                            }
-                        });
+                        t.doFirst(task -> quarkusExt.beforeTest((Test) task));
                         // also make each task use the JUnit platform since it's the only supported test environment
                         t.useJUnitPlatform();
                     });
@@ -563,11 +557,6 @@ public class QuarkusPlugin implements Plugin<Project> {
                 .extendsFrom(configContainer.findByName(JavaPlugin.TEST_RUNTIME_ONLY_CONFIGURATION_NAME));
 
         ApplicationDeploymentClasspathBuilder.initConfigurations(project);
-
-        // Also initialize the configurations that are specific to a LaunchMode
-        for (LaunchMode launchMode : LaunchMode.values()) {
-            new ApplicationDeploymentClasspathBuilder(project, launchMode);
-        }
     }
 
     private Set<Path> getSourcesParents(SourceSet mainSourceSet) {

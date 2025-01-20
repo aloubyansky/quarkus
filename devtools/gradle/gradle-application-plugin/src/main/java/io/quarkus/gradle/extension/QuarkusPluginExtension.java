@@ -52,10 +52,8 @@ public abstract class QuarkusPluginExtension extends AbstractQuarkusExtension {
     public QuarkusPluginExtension(Project project) {
         super(project);
 
-        this.cleanupBuildOutput = project.getObjects().property(Boolean.class)
-                .convention(true);
-        this.cacheLargeArtifacts = project.getObjects().property(Boolean.class)
-                .convention(!System.getenv().containsKey("CI"));
+        this.cleanupBuildOutput = project.getObjects().property(Boolean.class).convention(true);
+        this.cacheLargeArtifacts = project.getObjects().property(Boolean.class).convention(!System.getenv().containsKey("CI"));
 
         this.sourceSetExtension = new SourceSetExtension();
     }
