@@ -24,6 +24,7 @@ import org.gradle.api.artifacts.dsl.DependencyHandler;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.internal.artifacts.dependencies.DefaultDependencyArtifact;
 import org.gradle.api.internal.artifacts.dependencies.DefaultExternalModuleDependency;
+import org.gradle.api.internal.tasks.TaskDependencyFactory;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.provider.ListProperty;
 
@@ -39,8 +40,9 @@ import io.quarkus.runtime.LaunchMode;
 public class ApplicationDeploymentClasspathBuilder {
 
     public static final String QUARKUS_BOOTSTRAP_RESOLVER_CONFIGURATION = "quarkusBootstrapResolverConfiguration";
+    private static final String ON = "on";
 
-    private static String getLaunchModeAlias(LaunchMode mode) {
+    public static String getLaunchModeAlias(LaunchMode mode) {
         if (mode == LaunchMode.DEVELOPMENT) {
             return "Dev";
         }
@@ -75,6 +77,8 @@ public class ApplicationDeploymentClasspathBuilder {
         configContainer.register(ToolingUtils.DEV_MODE_CONFIGURATION_NAME, config -> {
             config.extendsFrom(configContainer.getByName(JavaPlugin.IMPLEMENTATION_CONFIGURATION_NAME));
             config.setCanBeConsumed(false);
+            config.attributes(attrs -> attrs.attribute(ConditionalDependencyResolver
+                    .getQuarkusConditionalDependencyAttribute(project.getName(), LaunchMode.TEST), ON));
         });
 
         // Base runtime configurations for every launch mode
@@ -82,12 +86,16 @@ public class ApplicationDeploymentClasspathBuilder {
                 .register(ApplicationDeploymentClasspathBuilder.getBaseRuntimeConfigName(LaunchMode.TEST), config -> {
                     config.extendsFrom(configContainer.getByName(JavaPlugin.TEST_RUNTIME_CLASSPATH_CONFIGURATION_NAME));
                     config.setCanBeConsumed(false);
+                    config.attributes(attrs -> attrs.attribute(ConditionalDependencyResolver
+                            .getQuarkusConditionalDependencyAttribute(project.getName(), LaunchMode.TEST), ON));
                 });
 
         configContainer
                 .register(ApplicationDeploymentClasspathBuilder.getBaseRuntimeConfigName(LaunchMode.NORMAL), config -> {
                     config.extendsFrom(configContainer.getByName(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME));
                     config.setCanBeConsumed(false);
+                    config.attributes(attrs -> attrs.attribute(ConditionalDependencyResolver
+                            .getQuarkusConditionalDependencyAttribute(project.getName(), LaunchMode.NORMAL), ON));
                 });
 
         configContainer
@@ -97,6 +105,8 @@ public class ApplicationDeploymentClasspathBuilder {
                             configContainer.getByName(JavaPlugin.COMPILE_CLASSPATH_CONFIGURATION_NAME),
                             configContainer.getByName(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME));
                     config.setCanBeConsumed(false);
+                    config.attributes(attrs -> attrs.attribute(ConditionalDependencyResolver
+                            .getQuarkusConditionalDependencyAttribute(project.getName(), LaunchMode.DEVELOPMENT), ON));
                 });
     }
 
@@ -126,6 +136,7 @@ public class ApplicationDeploymentClasspathBuilder {
 
     private final Project project;
     private final LaunchMode mode;
+    private final TaskDependencyFactory taskDependencyFactory;
 
     private final String runtimeConfigurationName;
     private final String platformConfigurationName;
@@ -143,9 +154,11 @@ public class ApplicationDeploymentClasspathBuilder {
      */
     private final String platformImportName;
 
-    public ApplicationDeploymentClasspathBuilder(Project project, LaunchMode mode) {
+    public ApplicationDeploymentClasspathBuilder(Project project, LaunchMode mode,
+            TaskDependencyFactory taskDependencyFactory) {
         this.project = project;
         this.mode = mode;
+        this.taskDependencyFactory = taskDependencyFactory;
         this.runtimeConfigurationName = getFinalRuntimeConfigName(mode);
         this.platformConfigurationName = ToolingUtils.toPlatformConfigurationName(this.runtimeConfigurationName);
         this.deploymentConfigurationName = ToolingUtils.toDeploymentConfigurationName(this.runtimeConfigurationName);
@@ -219,52 +232,69 @@ public class ApplicationDeploymentClasspathBuilder {
                 configuration.extendsFrom(
                         project.getConfigurations()
                                 .getByName(ApplicationDeploymentClasspathBuilder.getBaseRuntimeConfigName(mode)));
+                configuration.attributes(attrs -> attrs.attribute(
+                        ConditionalDependencyResolver.getQuarkusConditionalDependencyAttribute(project.getName(), mode), ON));
             });
+            if (!isLegacyConfig(project)) {
+                ConditionalDependencyResolver.resolve(project, mode, taskDependencyFactory);
+            }
         }
     }
 
     private void setUpDeploymentConfiguration() {
+
         if (!project.getConfigurations().getNames().contains(this.deploymentConfigurationName)) {
-            project.getConfigurations().register(this.deploymentConfigurationName, configuration -> {
-                configuration.setCanBeConsumed(false);
-                Configuration enforcedPlatforms = this.getPlatformConfiguration();
-                configuration.extendsFrom(enforcedPlatforms);
-                Map<String, Set<Dependency>> calculatedDependenciesByModeAndConfiguration = new HashMap<>();
-                ListProperty<Dependency> dependencyListProperty = project.getObjects().listProperty(Dependency.class);
-                configuration.getDependencies().addAllLater(dependencyListProperty.value(project.provider(() -> {
-                    String key = String.format("%s%s%s", mode, configuration.getName(), project.getName());
-                    if (!calculatedDependenciesByModeAndConfiguration.containsKey(key)) {
-                        ConditionalDependenciesEnabler cdEnabler = new ConditionalDependenciesEnabler(project, mode,
-                                enforcedPlatforms);
-                        final Collection<ExtensionDependency<?>> allExtensions = cdEnabler.getAllExtensions();
-                        Set<ExtensionDependency<?>> extensions = collectFirstMetQuarkusExtensions(getRawRuntimeConfiguration(),
-                                allExtensions);
-                        // Add conditional extensions
-                        for (ExtensionDependency<?> knownExtension : allExtensions) {
-                            if (knownExtension.isConditional()) {
-                                extensions.add(knownExtension);
-                            }
-                        }
-
-                        final Set<ModuleVersionIdentifier> alreadyProcessed = new HashSet<>(extensions.size());
-                        final DependencyHandler dependencies = project.getDependencies();
-                        final Set<Dependency> deploymentDependencies = new HashSet<>();
-                        for (ExtensionDependency<?> extension : extensions) {
-                            if (!alreadyProcessed.add(extension.getExtensionId())) {
-                                continue;
+            if (isLegacyConfig(project)) {
+                project.getConfigurations().register(this.deploymentConfigurationName, configuration -> {
+                    configuration.setCanBeConsumed(false);
+                    Configuration enforcedPlatforms = this.getPlatformConfiguration();
+                    configuration.extendsFrom(enforcedPlatforms);
+                    Map<String, Set<Dependency>> calculatedDependenciesByModeAndConfiguration = new HashMap<>();
+                    ListProperty<Dependency> dependencyListProperty = project.getObjects().listProperty(Dependency.class);
+                    configuration.getDependencies().addAllLater(dependencyListProperty.value(project.provider(() -> {
+                        String key = String.format("%s%s%s", mode, configuration.getName(), project.getName());
+                        if (!calculatedDependenciesByModeAndConfiguration.containsKey(key)) {
+                            ConditionalDependenciesEnabler cdEnabler = new ConditionalDependenciesEnabler(project, mode,
+                                    enforcedPlatforms);
+                            final Collection<ExtensionDependency<?>> allExtensions = cdEnabler.getAllExtensions();
+                            Set<ExtensionDependency<?>> extensions = collectFirstMetQuarkusExtensions(
+                                    getRawRuntimeConfiguration(),
+                                    allExtensions);
+                            // Add conditional extensions
+                            for (ExtensionDependency<?> knownExtension : allExtensions) {
+                                if (knownExtension.isConditional()) {
+                                    extensions.add(knownExtension);
+                                }
                             }
 
-                            deploymentDependencies.add(
-                                    DependencyUtils.createDeploymentDependency(dependencies, extension));
+                            final Set<ModuleVersionIdentifier> alreadyProcessed = new HashSet<>(extensions.size());
+                            final DependencyHandler dependencies = project.getDependencies();
+                            final Set<Dependency> deploymentDependencies = new HashSet<>();
+                            for (ExtensionDependency<?> extension : extensions) {
+                                if (!alreadyProcessed.add(extension.getExtensionId())) {
+                                    continue;
+                                }
+
+                                deploymentDependencies.add(
+                                        DependencyUtils.createDeploymentDependency(dependencies, extension));
+                            }
+                            calculatedDependenciesByModeAndConfiguration.put(key, deploymentDependencies);
+                            return deploymentDependencies;
+                        } else {
+                            return calculatedDependenciesByModeAndConfiguration.get(key);
                         }
-                        calculatedDependenciesByModeAndConfiguration.put(key, deploymentDependencies);
-                        return deploymentDependencies;
-                    } else {
-                        return calculatedDependenciesByModeAndConfiguration.get(key);
-                    }
-                })));
-            });
+                    })));
+                });
+            } else {
+                DeploymentConfigurationResolver.registerDeploymentConfiguration(project, mode,
+                        deploymentConfigurationName, taskDependencyFactory);
+            }
         }
+    }
+
+    private static boolean isLegacyConfig(Project project) {
+        final Object value = project.getProperties().get("quarkusLegacyConfig");
+        return value != null && Boolean.parseBoolean(String.valueOf(value));
     }
 
     private void setUpCompileOnlyConfiguration() {
@@ -295,7 +325,8 @@ public class ApplicationDeploymentClasspathBuilder {
      */
     public Configuration getRuntimeConfiguration() {
         this.getDeploymentConfiguration().resolve();
-        return project.getConfigurations().getByName(this.runtimeConfigurationName);
+        return isLegacyConfig(project) ? project.getConfigurations().getByName(this.runtimeConfigurationName)
+                : project.getConfigurations().findByName(ConditionalDependencyResolver.getConfigurationName(mode));
     }
 
     public Configuration getRuntimeConfigurationWithoutResolvingDeployment() {
