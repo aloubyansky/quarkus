@@ -23,6 +23,7 @@ import org.gradle.api.Task;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ResolvedArtifact;
 import org.gradle.api.artifacts.ResolvedConfiguration;
+import org.gradle.api.artifacts.ResolvedDependency;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.FileCollection;
@@ -57,7 +58,6 @@ import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactDependency;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.maven.dependency.DependencyFlags;
-import io.quarkus.maven.dependency.GACT;
 import io.quarkus.maven.dependency.GACTV;
 import io.quarkus.maven.dependency.GAV;
 import io.quarkus.maven.dependency.ResolvedDependencyBuilder;
@@ -121,6 +121,11 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
         collectDependencies(classpathConfig.getResolvedConfiguration(), workspaceDiscovery,
                 project, modelBuilder, appArtifact.getWorkspaceModule().mutable());
         collectExtensionDependencies(project, deploymentConfig, modelBuilder);
+        for (var dep : modelBuilder.getDependencies()) {
+            if (dep.isRuntimeCp()) {
+                dep.setDeploymentCp();
+            }
+        }
         addCompileOnly(project, classpathBuilder, modelBuilder);
 
         return modelBuilder.build();
@@ -139,11 +144,10 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
                     continue;
                 }
                 var moduleId = a.getModuleVersion().getId();
-                var key = ArtifactKey.of(moduleId.getGroup(), moduleId.getName(), a.getClassifier(), a.getType());
-                var appDep = modelBuilder.getDependency(key);
+                var appDep = modelBuilder
+                        .getDependency(ArtifactKey.of(moduleId.getGroup(), moduleId.getName(), a.getClassifier(), a.getType()));
                 if (appDep == null) {
-                    addArtifactDependency(project, modelBuilder, a);
-                    appDep = modelBuilder.getDependency(key);
+                    appDep = addArtifactDependency(project, modelBuilder, a);
                     appDep.clearFlag(DependencyFlags.DEPLOYMENT_CP);
                 }
                 if (!appDep.isFlagSet(DependencyFlags.COMPILE_ONLY)) {
@@ -220,12 +224,68 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
     private void collectExtensionDependencies(Project project, Configuration deploymentConfiguration,
             ApplicationModelBuilder modelBuilder) {
         final ResolvedConfiguration rc = deploymentConfiguration.getResolvedConfiguration();
-        for (ResolvedArtifact a : rc.getResolvedArtifacts()) {
-            addArtifactDependency(project, modelBuilder, a);
+        for (var dep : rc.getFirstLevelModuleDependencies()) {
+            System.out.println("Direct deployment " + dep + " " + dep.getModuleGroup() + ":" + dep.getModuleName() + " "
+                    + dep.getClass());
+            for (var a : dep.getModuleArtifacts()) {
+                System.out.println("- " + a);
+            }
+            processDeploymentDependency(project, dep, modelBuilder, false);
+        }
+        //for (ResolvedArtifact a : rc.getResolvedArtifacts()) {
+        //    addArtifactDependency(project, modelBuilder, a);
+        //}
+    }
+
+    private static void processDeploymentDependency(Project project, ResolvedDependency resolvedDep,
+            ApplicationModelBuilder modelBuilder, boolean clearReloadableFlag) {
+        boolean processChildren = false;
+        for (var a : resolvedDep.getModuleArtifacts()) {
+            ResolvedDependencyBuilder dep = modelBuilder.getDependency(getKey(a));
+            if (dep == null) {
+                if (a.getId().getComponentIdentifier() instanceof ProjectComponentIdentifier projectComponentIdentifier) {
+                    var includedBuild = ToolingUtils.includedBuild(project, projectComponentIdentifier.getBuild().getName());
+                    final Project projectDep;
+                    if (includedBuild != null) {
+                        projectDep = ToolingUtils.includedBuildProject((IncludedBuildInternal) includedBuild,
+                                projectComponentIdentifier.getProjectPath());
+                    } else {
+                        projectDep = project.getRootProject().findProject(projectComponentIdentifier.getProjectPath());
+                    }
+                    Objects.requireNonNull(projectDep,
+                            () -> "project " + projectComponentIdentifier.getProjectPath() + " should exist");
+                    SourceSetContainer sourceSets = projectDep.getExtensions().getByType(SourceSetContainer.class);
+
+                    dep = toDependency(a, sourceSets.getByName(SourceSet.MAIN_SOURCE_SET_NAME));
+                    modelBuilder.addDependency(dep);
+                } else if (isDependency(a)) {
+                    dep = toDependency(a);
+                    modelBuilder.addDependency(dep);
+                }
+                if (dep != null) {
+                    modelBuilder.addDependency(dep);
+                    clearReloadableFlag = true;
+                }
+            }
+            if (dep != null) {
+                if (!dep.isDeploymentCp()) {
+                    dep.setDeploymentCp();
+                    processChildren = true;
+                }
+                if (clearReloadableFlag) {
+                    dep.clearFlag(DependencyFlags.RELOADABLE);
+                }
+            }
+        }
+        if (processChildren) {
+            for (var child : resolvedDep.getChildren()) {
+                processDeploymentDependency(project, child, modelBuilder, clearReloadableFlag);
+            }
         }
     }
 
-    private static void addArtifactDependency(Project project, ApplicationModelBuilder modelBuilder, ResolvedArtifact a) {
+    private static ResolvedDependencyBuilder addArtifactDependency(Project project, ApplicationModelBuilder modelBuilder,
+            ResolvedArtifact a) {
         ResolvedDependencyBuilder dep = modelBuilder.getDependency(getKey(a));
         if (dep == null) {
             if (a.getId().getComponentIdentifier() instanceof ProjectComponentIdentifier projectComponentIdentifier) {
@@ -241,8 +301,7 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
                         () -> "project " + projectComponentIdentifier.getProjectPath() + " should exist");
                 SourceSetContainer sourceSets = projectDep.getExtensions().getByType(SourceSetContainer.class);
 
-                SourceSet mainSourceSet = sourceSets.getByName(SourceSet.MAIN_SOURCE_SET_NAME);
-                dep = toDependency(a, mainSourceSet);
+                dep = toDependency(a, sourceSets.getByName(SourceSet.MAIN_SOURCE_SET_NAME));
                 modelBuilder.addDependency(dep);
             } else if (isDependency(a)) {
                 dep = toDependency(a);
@@ -253,26 +312,21 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
             dep.setDeploymentCp();
             dep.clearFlag(DependencyFlags.RELOADABLE);
         }
+        return dep;
     }
 
     private void collectDependencies(ResolvedConfiguration configuration,
             boolean workspaceDiscovery, Project project, ApplicationModelBuilder modelBuilder,
             WorkspaceModule.Mutable wsModule) {
 
-        final Set<ResolvedArtifact> resolvedArtifacts = configuration.getResolvedArtifacts();
-        // if the number of artifacts is less than the number of files then probably
-        // the project includes direct file dependencies
-        final Set<File> artifactFiles = resolvedArtifacts.size() < configuration.getFiles().size()
-                ? new HashSet<>(resolvedArtifacts.size())
-                : null;
+        final Set<File> artifactFiles = getArtifactFilesOrNull(configuration);
 
-        configuration.getFirstLevelModuleDependencies()
-                .forEach(d -> {
-                    collectDependencies(d, workspaceDiscovery, project, artifactFiles, new HashSet<>(),
-                            modelBuilder,
-                            wsModule,
-                            (byte) (COLLECT_TOP_EXTENSION_RUNTIME_NODES | COLLECT_DIRECT_DEPS | COLLECT_RELOADABLE_MODULES));
-                });
+        for (ResolvedDependency d : configuration.getFirstLevelModuleDependencies()) {
+            collectDependencies(d, workspaceDiscovery, project, artifactFiles, new HashSet<>(),
+                    modelBuilder,
+                    wsModule,
+                    (byte) (COLLECT_TOP_EXTENSION_RUNTIME_NODES | COLLECT_DIRECT_DEPS | COLLECT_RELOADABLE_MODULES));
+        }
 
         if (artifactFiles != null) {
             // detect FS paths that aren't provided by the resolved artifacts
@@ -311,6 +365,15 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
         }
     }
 
+    private static Set<File> getArtifactFilesOrNull(ResolvedConfiguration configuration) {
+        final Set<ResolvedArtifact> resolvedArtifacts = configuration.getResolvedArtifacts();
+        // if the number of artifacts is less than the number of files then probably
+        // the project includes direct file dependencies
+        return resolvedArtifacts.size() < configuration.getFiles().size()
+                ? new HashSet<>(resolvedArtifacts.size())
+                : null;
+    }
+
     private void collectDependencies(org.gradle.api.artifacts.ResolvedDependency resolvedDep, boolean workspaceDiscovery,
             Project project, Set<File> artifactFiles, Set<ArtifactKey> processedModules, ApplicationModelBuilder modelBuilder,
             WorkspaceModule.Mutable parentModule,
@@ -330,8 +393,8 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
             final ArtifactCoords depCoords = toArtifactCoords(a);
             depBuilder = ResolvedDependencyBuilder.newInstance()
                     .setCoords(depCoords)
-                    .setRuntimeCp()
-                    .setDeploymentCp();
+                    .setRuntimeCp();
+            //.setDeploymentCp();
             if (isFlagOn(flags, COLLECT_DIRECT_DEPS)) {
                 depBuilder.setDirect(true);
                 flags = clearFlag(flags, COLLECT_DIRECT_DEPS);
@@ -408,7 +471,7 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
 
         processedModules.add(ArtifactKey.ga(resolvedDep.getModuleGroup(), resolvedDep.getModuleName()));
         for (org.gradle.api.artifacts.ResolvedDependency child : resolvedDep.getChildren()) {
-            if (!processedModules.contains(new GACT(child.getModuleGroup(), child.getModuleName()))) {
+            if (!processedModules.contains(ArtifactKey.ga(child.getModuleGroup(), child.getModuleName()))) {
                 collectDependencies(child, workspaceDiscovery, project, artifactFiles, processedModules,
                         modelBuilder, projectModule, flags);
             }
