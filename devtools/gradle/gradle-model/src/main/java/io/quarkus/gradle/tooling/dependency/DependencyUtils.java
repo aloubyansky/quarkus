@@ -8,8 +8,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
@@ -97,7 +97,6 @@ public class DependencyUtils {
                     project,
                     componentId.getProjectPath(),
                     componentId.getBuild().getName());
-
             if (projectDependency != null)
                 return projectDependency;
         }
@@ -231,7 +230,6 @@ public class DependencyUtils {
         if (extensionConfiguration != null) {
             final String deploymentProjectPath = ConfigurationUtils.getDeploymentModule(extensionConfiguration).get();
             deploymentProject = ToolingUtils.findLocalProject(extensionProject, deploymentProjectPath);
-
             if (deploymentProject == null) {
                 throw new GradleException("Cannot find deployment project for extension " + extensionArtifactId + " at path "
                         + deploymentProjectPath);
@@ -239,7 +237,6 @@ public class DependencyUtils {
         } else if (extensionDescriptor.containsKey(BootstrapConstants.PROP_DEPLOYMENT_ARTIFACT)) {
             final ArtifactCoords deploymentArtifact = ArtifactCoords
                     .fromString(extensionDescriptor.getProperty(BootstrapConstants.PROP_DEPLOYMENT_ARTIFACT));
-
             deploymentProject = ToolingUtils.findLocalProject(project, deploymentArtifact);
 
             if (deploymentProject == null) {
@@ -360,11 +357,9 @@ public class DependencyUtils {
     public static Dependency createDeploymentDependency(
             DependencyHandler dependencyHandler,
             ExtensionDependency<?> dependency) {
-        if (dependency instanceof ProjectExtensionDependency) {
-            ProjectExtensionDependency ped = (ProjectExtensionDependency) dependency;
+        if (dependency instanceof ProjectExtensionDependency ped) {
             return createDeploymentProjectDependency(dependencyHandler, ped);
-        } else if (dependency instanceof ArtifactExtensionDependency) {
-            ArtifactExtensionDependency aed = (ArtifactExtensionDependency) dependency;
+        } else if (dependency instanceof ArtifactExtensionDependency aed) {
             return createArtifactDeploymentDependency(dependencyHandler, aed);
         }
 
@@ -381,7 +376,7 @@ public class DependencyUtils {
             return handler.create(new DefaultProjectDependency((ProjectInternal) ped.getDeploymentModule(), true,
                     DefaultTaskDependencyFactory.withNoAssociatedProject()));
         } else {
-            return handler.create(handler.project(Collections.singletonMap("path", ped.getDeploymentModule().getPath())));
+            return handler.create(handler.project(Map.of("path", ped.getDeploymentModule().getPath())));
         }
     }
 

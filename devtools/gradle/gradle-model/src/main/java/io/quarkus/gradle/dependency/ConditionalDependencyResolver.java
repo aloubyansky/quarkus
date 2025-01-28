@@ -64,80 +64,84 @@ public class ConditionalDependencyResolver {
                     final AtomicInteger invocations = new AtomicInteger();
                     config.getDependencies().addAllLater(dependencyListProperty.value(project.provider(() -> {
                         if (invocations.getAndIncrement() == 0) {
-                            boolean satisfiedConditions;
-                            processConfiguration(baseConfig.copyRecursive());
-                            while (!dependencyVariantQueue.isEmpty()) {
-                                satisfiedConditions = false;
-                                var i = dependencyVariantQueue.iterator();
-                                while (i.hasNext()) {
-                                    var conditionalVariant = i.next();
-                                    if (conditionalVariant.conditionalDep.isConditionSatisfied()) {
-                                        satisfiedConditions = true;
-                                        // TODO add
-                                        System.out.println(
-                                                "Conditional variant (" + config.getName() + ": "
-                                                        + conditionalVariant.parent.getExtensionId() + " -> "
-                                                        + conditionalVariant.conditionalDep.artifact + ", satisfied="
-                                                        + conditionalVariant.conditionalDep.isConditionSatisfied());
-                                        i.remove();
-
-                                        project.getDependencies().getComponents().all(compDetails -> {
-                                            if (compDetails.getId().getGroup().equals(conditionalVariant.parent.getGroup())
-                                                    && compDetails.getId().getName().equals(conditionalVariant.parent.getName())
-                                                    && compDetails.getId().getVersion()
-                                                            .equals(conditionalVariant.parent.getVersion())) {
-                                                compDetails.addVariant(
-                                                        "quarkusConditionalDependencyVariant" + deploymentConfigurationName,
-                                                        "compile",
-                                                        variant -> {
-                                                            variant.attributes(attrs -> {
-                                                                attrs.attribute(quarkusDepAttr, deploymentConfigurationName);
-                                                                System.out
-                                                                        .println("Adding variant " + deploymentConfigurationName
-                                                                                + " of " + compDetails.getId());
-                                                            });
-                                                            variant.withDependencies(directDeps -> {
-                                                                boolean alreadyAdded = false;
-                                                                for (var directDep : directDeps) {
-                                                                    if (directDep.getName()
-                                                                            .equals(conditionalVariant.conditionalDep.key
-                                                                                    .getArtifactId())
-                                                                            &&
-                                                                            directDep.getGroup().equals(
-                                                                                    conditionalVariant.conditionalDep.key
-                                                                                            .getGroupId())) {
-                                                                        alreadyAdded = true;
-                                                                        break;
-                                                                    }
-                                                                }
-                                                                if (!alreadyAdded) {
-                                                                    var a = conditionalVariant.conditionalDep.artifact;
-                                                                    directDeps.add(DependencyUtils.asDependencyNotation(project
-                                                                            .getDependencyFactory()
-                                                                            .create(a.getModuleVersion().getId().getGroup(),
-                                                                                    a.getName(),
-                                                                                    a.getModuleVersion().getId().getVersion(),
-                                                                                    a.getClassifier(), a.getExtension())));
-                                                                }
-                                                            });
-                                                        });
-                                            }
-                                        });
-                                    }
-                                }
-                                if (!satisfiedConditions) {
-                                    break;
-                                }
-                                int queueSize = dependencyVariantQueue.size();
-                                processConfiguration(baseConfig.copyRecursive());
-                                if (queueSize == dependencyVariantQueue.size()) {
-                                    break;
-                                }
-                            }
+                            activateConditionalDeps(baseConfig, deploymentConfigurationName, config);
                         }
                         return Set.of();
                     })));
                 });
+    }
+
+    private void activateConditionalDeps(Configuration baseConfig, String deploymentConfigurationName, Configuration config) {
+        boolean satisfiedConditions;
+        processConfiguration(baseConfig.copyRecursive());
+        while (!dependencyVariantQueue.isEmpty()) {
+            satisfiedConditions = false;
+            var i = dependencyVariantQueue.iterator();
+            while (i.hasNext()) {
+                var conditionalVariant = i.next();
+                if (conditionalVariant.conditionalDep.isConditionSatisfied()) {
+                    satisfiedConditions = true;
+                    // TODO add
+                    System.out.println(
+                            "Conditional variant (" + config.getName() + ": "
+                                    + conditionalVariant.parent.getExtensionId() + " -> "
+                                    + conditionalVariant.conditionalDep.artifact + ", satisfied="
+                                    + conditionalVariant.conditionalDep.isConditionSatisfied());
+                    i.remove();
+
+                    project.getDependencies().getComponents().all(compDetails -> {
+                        if (compDetails.getId().getGroup().equals(conditionalVariant.parent.getGroup())
+                                && compDetails.getId().getName().equals(conditionalVariant.parent.getName())
+                                && compDetails.getId().getVersion()
+                                        .equals(conditionalVariant.parent.getVersion())) {
+                            compDetails.addVariant(
+                                    "quarkusConditionalDependencyVariant" + deploymentConfigurationName,
+                                    "compile",
+                                    variant -> {
+                                        variant.attributes(attrs -> {
+                                            attrs.attribute(quarkusDepAttr, deploymentConfigurationName);
+                                            System.out
+                                                    .println("Adding variant " + deploymentConfigurationName
+                                                            + " of " + compDetails.getId());
+                                        });
+                                        variant.withDependencies(directDeps -> {
+                                            boolean alreadyAdded = false;
+                                            for (var directDep : directDeps) {
+                                                if (directDep.getName()
+                                                        .equals(conditionalVariant.conditionalDep.key
+                                                                .getArtifactId())
+                                                        &&
+                                                        directDep.getGroup().equals(
+                                                                conditionalVariant.conditionalDep.key
+                                                                        .getGroupId())) {
+                                                    alreadyAdded = true;
+                                                    break;
+                                                }
+                                            }
+                                            if (!alreadyAdded) {
+                                                var a = conditionalVariant.conditionalDep.artifact;
+                                                directDeps.add(DependencyUtils.asDependencyNotation(project
+                                                        .getDependencyFactory()
+                                                        .create(a.getModuleVersion().getId().getGroup(),
+                                                                a.getName(),
+                                                                a.getModuleVersion().getId().getVersion(),
+                                                                a.getClassifier(), a.getExtension())));
+                                            }
+                                        });
+                                    });
+                        }
+                    });
+                }
+            }
+            if (!satisfiedConditions) {
+                break;
+            }
+            int queueSize = dependencyVariantQueue.size();
+            processConfiguration(baseConfig.copyRecursive());
+            if (queueSize == dependencyVariantQueue.size()) {
+                break;
+            }
+        }
     }
 
     private void processConfiguration(Configuration config) {
