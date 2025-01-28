@@ -31,4 +31,9 @@ public class ArtifactExtensionDependency extends ExtensionDependency<ArtifactCoo
     public String getDeploymentVersion() {
         return getDeploymentModule().getVersion();
     }
+
+    @Override
+    public boolean isProjectDependency() {
+        return false;
+    }
 }

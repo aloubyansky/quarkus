@@ -48,4 +48,9 @@ public class ProjectExtensionDependency extends ExtensionDependency<Project> {
     public String getDeploymentVersion() {
         return String.valueOf(getDeploymentModule().getVersion());
     }
+
+    @Override
+    public boolean isProjectDependency() {
+        return true;
+    }
 }

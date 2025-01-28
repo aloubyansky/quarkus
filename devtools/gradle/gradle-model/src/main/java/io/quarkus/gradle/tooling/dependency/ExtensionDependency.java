@@ -82,6 +82,8 @@ public abstract class ExtensionDependency<T> {
 
     public abstract String getDeploymentVersion();
 
+    public abstract boolean isProjectDependency();
+
     public ModuleVersionIdentifier getExtensionId() {
         return extensionId;
     }

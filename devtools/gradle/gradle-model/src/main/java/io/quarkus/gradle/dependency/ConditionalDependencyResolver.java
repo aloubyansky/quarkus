@@ -135,7 +135,7 @@ public class ConditionalDependencyResolver {
             if (!satisfiedConditions) {
                 break;
             }
-            int queueSize = dependencyVariantQueue.size();
+            final int queueSize = dependencyVariantQueue.size();
             processConfiguration(baseConfig.copyRecursive());
             if (queueSize == dependencyVariantQueue.size()) {
                 break;
