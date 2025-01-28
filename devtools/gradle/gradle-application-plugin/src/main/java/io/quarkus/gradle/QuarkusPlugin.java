@@ -23,6 +23,7 @@ import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.artifacts.ExternalModuleDependency;
 import org.gradle.api.artifacts.ProjectDependency;
 import org.gradle.api.file.FileCollection;
+import org.gradle.api.internal.tasks.TaskDependencyFactory;
 import org.gradle.api.plugins.BasePlugin;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.provider.Property;
@@ -124,11 +125,13 @@ public class QuarkusPlugin implements Plugin<Project> {
     public static final String IMAGE_CHECK_REQUIREMENTS_NAME = "quarkusImageExtensionChecks";
 
     private final ToolingModelBuilderRegistry registry;
+    private final TaskDependencyFactory taskDependencyFactory;
 
     @SuppressWarnings("CdiInjectionPointsInspection")
     @Inject
-    public QuarkusPlugin(ToolingModelBuilderRegistry registry) {
+    public QuarkusPlugin(ToolingModelBuilderRegistry registry, TaskDependencyFactory taskDepFactory) {
         this.registry = registry;
+        this.taskDependencyFactory = taskDepFactory;
     }
 
     @Override
@@ -178,11 +181,11 @@ public class QuarkusPlugin implements Plugin<Project> {
 
         Provider<DefaultProjectDescriptor> projectDescriptor = ProjectDescriptorBuilder.buildForApp(project);
         ApplicationDeploymentClasspathBuilder normalClasspath = new ApplicationDeploymentClasspathBuilder(project,
-                LaunchMode.NORMAL);
+                LaunchMode.NORMAL, taskDependencyFactory);
         ApplicationDeploymentClasspathBuilder testClasspath = new ApplicationDeploymentClasspathBuilder(project,
-                LaunchMode.TEST);
+                LaunchMode.TEST, taskDependencyFactory);
         ApplicationDeploymentClasspathBuilder devClasspath = new ApplicationDeploymentClasspathBuilder(project,
-                LaunchMode.DEVELOPMENT);
+                LaunchMode.DEVELOPMENT, taskDependencyFactory);
 
         TaskProvider<QuarkusApplicationModelTask> quarkusGenerateTestAppModelTask = tasks.register(
                 "quarkusGenerateTestAppModel",

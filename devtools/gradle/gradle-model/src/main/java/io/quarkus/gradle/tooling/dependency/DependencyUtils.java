@@ -28,6 +28,7 @@ import org.gradle.api.internal.artifacts.DefaultModuleVersionIdentifier;
 import org.gradle.api.internal.artifacts.dependencies.DefaultExternalModuleDependency;
 import org.gradle.api.internal.artifacts.dependencies.DefaultProjectDependency;
 import org.gradle.api.internal.project.ProjectInternal;
+import org.gradle.api.internal.tasks.TaskDependencyFactory;
 import org.gradle.api.provider.ListProperty;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.SourceSetContainer;
@@ -376,6 +377,12 @@ public class DependencyUtils {
         } else {
             return handler.create(handler.project(Map.of("path", ped.getDeploymentModule().getPath())));
         }
+    }
+
+    public static Dependency createDeploymentProjectDependency(Project project, String configurationName,
+            TaskDependencyFactory taskDependencyFactory) {
+        return project.getDependencies().create(
+                new DefaultProjectDependency((ProjectInternal) project, configurationName, true, taskDependencyFactory));
     }
 
     private static Dependency createArtifactDeploymentDependency(DependencyHandler handler,

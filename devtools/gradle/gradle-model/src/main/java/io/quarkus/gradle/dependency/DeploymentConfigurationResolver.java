@@ -16,6 +16,7 @@ import org.gradle.api.artifacts.ResolvedArtifact;
 import org.gradle.api.artifacts.ResolvedConfiguration;
 import org.gradle.api.artifacts.ResolvedDependency;
 import org.gradle.api.attributes.Attribute;
+import org.gradle.api.internal.tasks.TaskDependencyFactory;
 import org.gradle.api.provider.ListProperty;
 
 import io.quarkus.gradle.tooling.dependency.DependencyUtils;
@@ -32,18 +33,22 @@ public class DeploymentConfigurationResolver {
         return Attribute.of("quarkusDeploymentDependency", String.class);
     }
 
-    public static void registerDeploymentConfiguration(Project project, LaunchMode mode, String configurationName) {
+    public static void registerDeploymentConfiguration(Project project, LaunchMode mode, String configurationName,
+            TaskDependencyFactory taskDependencyFactory) {
         project.getConfigurations().register(configurationName,
-                config -> new DeploymentConfigurationResolver(project, config, mode));
+                config -> new DeploymentConfigurationResolver(project, config, mode, taskDependencyFactory));
     }
 
     private final Project project;
+    private TaskDependencyFactory taskDependencyFactory;
     private final String depVariantValue;
     private final Attribute<String> quarkusDepAttr = getQuarkusDeploymentAttribute();
     private byte walkingFlags;
 
-    private DeploymentConfigurationResolver(Project project, Configuration deploymentConfig, LaunchMode mode) {
+    private DeploymentConfigurationResolver(Project project, Configuration deploymentConfig, LaunchMode mode,
+            TaskDependencyFactory taskDependencyFactory) {
         this.project = project;
+        this.taskDependencyFactory = taskDependencyFactory;
         this.depVariantValue = deploymentConfig.getName();
 
         System.out.println("registerDeploymentConfiguration " + project.getPath() + " " + deploymentConfig.getName());
@@ -52,10 +57,6 @@ public class DeploymentConfigurationResolver {
         deploymentConfig.setCanBeConsumed(false);
         deploymentConfig.extendsFrom(baseRuntimeConfig);
         deploymentConfig.shouldResolveConsistentlyWith(baseRuntimeConfig);
-        deploymentConfig.attributes(attrs -> {
-            attrs.attribute(quarkusDepAttr, depVariantValue);
-            attrs.attribute(ConditionalDependencyResolver.getQuarkusConditionalDependencyAttribute(), depVariantValue);
-        });
 
         ListProperty<Dependency> dependencyListProperty = project.getObjects().listProperty(Dependency.class);
         final AtomicReference<Collection<Dependency>> directDeploymentDeps = new AtomicReference<>();
@@ -73,7 +74,10 @@ public class DeploymentConfigurationResolver {
             }
             return directDeps;
         })));
-
+        deploymentConfig.attributes(attrs -> {
+            attrs.attribute(quarkusDepAttr, depVariantValue);
+            attrs.attribute(ConditionalDependencyResolver.getQuarkusConditionalDependencyAttribute(), depVariantValue);
+        });
     }
 
     private Collection<Dependency> resolveDeploymentDeps(ResolvedConfiguration baseConfig) {
@@ -110,14 +114,12 @@ public class DeploymentConfigurationResolver {
                 System.out.println(
                         "Extension " + DependencyUtils.getKey(processedDep.dep) + ", direct=" + (processedDep.parent == null));
                 if (processedDep.parent == null) {
-                    directDeploymentDeps
-                            .add(DependencyUtils.createDeploymentDependency(project.getDependencies(), processedDep.ext));
+                    directDeploymentDeps.add(getDeploymentDependency(processedDep.ext));
                 } else if (projectKeys.contains(
                         ArtifactKey.ga(processedDep.parent.getModuleGroup(), processedDep.parent.getModuleName()))) {
                     // this is unfortunate but the ComponentMetadataDetails approach doesn't work for local projects
                     // these deployment dependencies will be added as direct application dependencies
-                    directDeploymentDeps
-                            .add(DependencyUtils.createDeploymentDependency(project.getDependencies(), processedDep.ext));
+                    directDeploymentDeps.add(getDeploymentDependency(processedDep.ext));
                 } else {
                     project.getDependencies().getComponents().withModule(processedDep.parent.getModule().getId().getModule(),
                             compDetails -> {
@@ -136,8 +138,8 @@ public class DeploymentConfigurationResolver {
                                             }
                                         }
                                         if (!alreadyAdded) {
-                                            directDeps.add(DependencyUtils.asDependencyNotation(DependencyUtils
-                                                    .createDeploymentDependency(project.getDependencies(), processedDep.ext)));
+                                            directDeps.add(DependencyUtils
+                                                    .asDependencyNotation(getDeploymentDependency(processedDep.ext)));
                                         }
                                     });
                                 });
@@ -146,6 +148,14 @@ public class DeploymentConfigurationResolver {
             }
         }
         return directDeploymentDeps;
+    }
+
+    private Dependency getDeploymentDependency(ExtensionDependency<?> ext) {
+        if (ext.isProjectDependency()) {
+            return DependencyUtils.createDeploymentProjectDependency((Project) ext.getDeploymentModule(), "runtimeElements",
+                    taskDependencyFactory);
+        }
+        return DependencyUtils.createDeploymentDependency(project.getDependencies(), ext);
     }
 
     private void processDependency(ResolvedDependency parent, ResolvedDependency dep,

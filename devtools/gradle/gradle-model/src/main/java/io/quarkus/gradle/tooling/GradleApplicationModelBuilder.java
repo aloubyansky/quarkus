@@ -29,6 +29,7 @@ import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.FileTree;
 import org.gradle.api.initialization.IncludedBuild;
+import org.gradle.api.internal.tasks.TaskDependencyFactory;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.SourceSetContainer;
 import org.gradle.api.tasks.TaskCollection;
@@ -77,6 +78,16 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
     private static final byte COLLECT_RELOADABLE_MODULES =          0b100;
     /* @formatter:on */
 
+    private final TaskDependencyFactory taskDepFactory;
+
+    public GradleApplicationModelBuilder() {
+        taskDepFactory = null;
+    }
+
+    public GradleApplicationModelBuilder(TaskDependencyFactory taskDepFactory) {
+        this.taskDepFactory = taskDepFactory;
+    }
+
     @Override
     public boolean canBuild(String modelName) {
         return modelName.equals(ApplicationModel.class.getName());
@@ -98,7 +109,8 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
     public Object buildAll(String modelName, ModelParameter parameter, Project project) {
         final LaunchMode mode = LaunchMode.valueOf(parameter.getMode());
 
-        final ApplicationDeploymentClasspathBuilder classpathBuilder = new ApplicationDeploymentClasspathBuilder(project, mode);
+        final ApplicationDeploymentClasspathBuilder classpathBuilder = new ApplicationDeploymentClasspathBuilder(project, mode,
+                taskDepFactory);
         final Configuration classpathConfig = classpathBuilder.getRuntimeConfiguration();
         final Configuration deploymentConfig = classpathBuilder.getDeploymentConfiguration();
         final PlatformImports platformImports = classpathBuilder.getPlatformImports();
@@ -225,11 +237,6 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
             ApplicationModelBuilder modelBuilder) {
         final ResolvedConfiguration rc = deploymentConfiguration.getResolvedConfiguration();
         for (var dep : rc.getFirstLevelModuleDependencies()) {
-            System.out.println("Direct deployment " + dep + " " + dep.getModuleGroup() + ":" + dep.getModuleName() + " "
-                    + dep.getClass());
-            for (var a : dep.getModuleArtifacts()) {
-                System.out.println("- " + a);
-            }
             processDeploymentDependency(project, dep, modelBuilder, false);
         }
         //for (ResolvedArtifact a : rc.getResolvedArtifacts()) {
