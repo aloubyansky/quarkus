@@ -64,18 +64,17 @@ public class ConditionalDependencyResolver {
                     final AtomicInteger invocations = new AtomicInteger();
                     config.getDependencies().addAllLater(dependencyListProperty.value(project.provider(() -> {
                         if (invocations.getAndIncrement() == 0) {
-                            activateConditionalDeps(baseConfig, deploymentConfigurationName, config);
+                            activateConditionalDeps(baseConfig, deploymentConfigurationName);
                         }
                         return Set.of();
                     })));
                 });
     }
 
-    private void activateConditionalDeps(Configuration baseConfig, String deploymentConfigurationName, Configuration config) {
-        boolean satisfiedConditions;
+    private void activateConditionalDeps(Configuration baseConfig, String deploymentConfigurationName) {
         processConfiguration(baseConfig.copyRecursive());
         while (!dependencyVariantQueue.isEmpty()) {
-            satisfiedConditions = false;
+            boolean satisfiedConditions = false;
             var i = dependencyVariantQueue.iterator();
             while (i.hasNext()) {
                 var conditionalVariant = i.next();
@@ -83,7 +82,7 @@ public class ConditionalDependencyResolver {
                     satisfiedConditions = true;
                     // TODO add
                     System.out.println(
-                            "Conditional variant (" + config.getName() + ": "
+                            "Conditional variant "
                                     + conditionalVariant.parent.getExtensionId() + " -> "
                                     + conditionalVariant.conditionalDep.artifact + ", satisfied="
                                     + conditionalVariant.conditionalDep.isConditionSatisfied());
