@@ -33,9 +33,9 @@ public class ConditionalDependencyResolver {
     }
 
     public static void resolve(Project project, LaunchMode mode, String deploymentConfigurationName) {
-        final Configuration baseRuntimeConfig = project.getConfigurations()
-                .getByName(ApplicationDeploymentClasspathBuilder.getBaseRuntimeConfigName(mode));
-        new ConditionalDependencyResolver(project, mode).resolve(baseRuntimeConfig, mode, deploymentConfigurationName);
+        new ConditionalDependencyResolver(project, mode).resolve(
+                project.getConfigurations().getByName(ApplicationDeploymentClasspathBuilder.getBaseRuntimeConfigName(mode)),
+                mode, deploymentConfigurationName);
     }
 
     private final Attribute<String> quarkusDepAttr = getQuarkusConditionalDependencyAttribute();
@@ -57,7 +57,12 @@ public class ConditionalDependencyResolver {
                 configName,
                 config -> {
                     config.extendsFrom(baseConfig);
-                    config.attributes(attrs -> attrs.attribute(quarkusDepAttr, deploymentConfigurationName));
+                    config.attributes(attrs -> {
+                        attrs.attribute(quarkusDepAttr, deploymentConfigurationName);
+                        //attrs.attribute(Attribute.of("org.gradle.libraryelements", String.class), LibraryElements.JAR);
+                        //attrs.attribute(Attribute.of("org.gradle.dependency.bundling", String.class), Bundling.EXTERNAL);
+                        //attrs.attribute(Attribute.of("org.gradle.usage", String.class), Usage.JAVA_RUNTIME);
+                    });
 
                     System.out.println("resolveConditionalDeps " + project.getPath() + " for " + config.getName());
                     ListProperty<Dependency> dependencyListProperty = project.getObjects().listProperty(Dependency.class);
@@ -94,7 +99,7 @@ public class ConditionalDependencyResolver {
                                 && compDetails.getId().getVersion()
                                         .equals(conditionalVariant.parent.getVersion())) {
                             compDetails.addVariant(
-                                    "quarkusConditionalDependencyVariant" + deploymentConfigurationName,
+                                    "quarkusConditionalDependency" + deploymentConfigurationName,
                                     "compile",
                                     variant -> {
                                         variant.attributes(attrs -> {
@@ -127,6 +132,13 @@ public class ConditionalDependencyResolver {
                                                                 a.getClassifier(), a.getExtension())));
                                             }
                                         });
+                                        /* @formatter:off
+                                        variant.withFiles(files -> {
+                                            //files.removeAllFiles();
+                                            files.addFile(compDetails.getId().getName() + "-" + compDetails.getId().getVersion()
+                                                    + ".jar");
+                                        });
+                                         @formatter:on */
                                     });
                         }
                     });
@@ -144,7 +156,7 @@ public class ConditionalDependencyResolver {
     }
 
     private void processConfiguration(Configuration config) {
-        System.out.println("processConfiguration " + config.getName());
+        System.out.println("ConditionalDependencyResolver.processConfiguration " + config.getName());
         for (var dep : config.getResolvedConfiguration().getFirstLevelModuleDependencies()) {
             processDependency(dep);
         }
@@ -152,15 +164,20 @@ public class ConditionalDependencyResolver {
 
     private void processDependency(ResolvedDependency dep) {
         boolean processChildren = false;
-        for (var a : dep.getModuleArtifacts()) {
-            var depKey = DependencyUtils.getKey(a);
-            if (processedDeps.containsKey(depKey)) {
-                continue;
-            }
+        var artifacts = dep.getModuleArtifacts();
+        if (artifacts.isEmpty()) {
             processChildren = true;
-            var processedDep = new ProcessedDependency(depKey, DependencyUtils.getExtensionInfoOrNull(project, a));
-            processedDeps.put(depKey, processedDep);
-            processedDep.queueConditionalDeps();
+        } else {
+            for (var a : dep.getModuleArtifacts()) {
+                var depKey = DependencyUtils.getKey(a);
+                if (processedDeps.containsKey(depKey)) {
+                    continue;
+                }
+                processChildren = true;
+                var processedDep = new ProcessedDependency(depKey, DependencyUtils.getExtensionInfoOrNull(project, a));
+                processedDeps.put(depKey, processedDep);
+                processedDep.queueConditionalDeps();
+            }
         }
         if (processChildren) {
             for (var c : dep.getChildren()) {

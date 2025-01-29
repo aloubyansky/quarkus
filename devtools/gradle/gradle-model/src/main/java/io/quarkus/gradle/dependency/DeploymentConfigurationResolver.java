@@ -21,6 +21,7 @@ import org.gradle.api.provider.ListProperty;
 
 import io.quarkus.gradle.tooling.dependency.DependencyUtils;
 import io.quarkus.gradle.tooling.dependency.ExtensionDependency;
+import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.maven.dependency.DependencyFlags;
 import io.quarkus.runtime.LaunchMode;
@@ -77,6 +78,9 @@ public class DeploymentConfigurationResolver {
         deploymentConfig.attributes(attrs -> {
             attrs.attribute(quarkusDepAttr, depVariantValue);
             attrs.attribute(ConditionalDependencyResolver.getQuarkusConditionalDependencyAttribute(), depVariantValue);
+            //attrs.attribute(Attribute.of("org.gradle.libraryelements", String.class), LibraryElements.CLASSES_AND_RESOURCES);
+            //attrs.attribute(Attribute.of("org.gradle.dependency.bundling", String.class), Bundling.EXTERNAL);
+            //attrs.attribute(Attribute.of("org.gradle.usage", String.class), Usage.JAVA_RUNTIME);
         });
     }
 
@@ -110,7 +114,11 @@ public class DeploymentConfigurationResolver {
         final List<Dependency> directDeploymentDeps = new ArrayList<>();
         var projectKeys = getProjectKeys(project.getRootProject());
         for (var processedDep : allDeps.values()) {
-            if (processedDep.ext != null) {
+            if (processedDep.ext != null &&
+            // if it's an extension and its deployment artifact is not a runtime dependency (e.g. deployment tests)
+                    !allDeps.containsKey(
+                            ArtifactKey.of(processedDep.ext.getDeploymentGroup(), processedDep.ext.getDeploymentName(),
+                                    ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_JAR))) {
                 System.out.println(
                         "Extension " + DependencyUtils.getKey(processedDep.dep) + ", direct=" + (processedDep.parent == null));
                 if (processedDep.parent == null) {
@@ -123,7 +131,7 @@ public class DeploymentConfigurationResolver {
                 } else {
                     project.getDependencies().getComponents().withModule(processedDep.parent.getModule().getId().getModule(),
                             compDetails -> {
-                                compDetails.addVariant("quarkus.variant." + depVariantValue, "compile", variant -> {
+                                compDetails.addVariant("quarkusDeploymentDependency" + depVariantValue, "compile", variant -> {
                                     variant.attributes(attrs -> {
                                         attrs.attribute(quarkusDepAttr, depVariantValue);
                                         System.out.println("Adding variant " + depVariantValue + " of " + compDetails.getId());
@@ -162,21 +170,26 @@ public class DeploymentConfigurationResolver {
             Map<ArtifactKey, ProcessedDependency> allDeps) {
         boolean processChildren = false;
         int depFlags = 0;
-        for (var artifact : dep.getModuleArtifacts()) {
-            var processedDep = allDeps.computeIfAbsent(DependencyUtils.getKey(artifact), key -> {
-                final ProcessedDependency pd = new ProcessedDependency(parent, artifact);
-                if (!isWalkingFlagsOn(COLLECT_TOP_EXTENSIONS)) {
-                    pd.ext = DependencyUtils.getExtensionInfoOrNull(project, artifact);
-                    if (pd.ext != null) {
-                        pd.flags |= DependencyFlags.TOP_LEVEL_RUNTIME_EXTENSION_ARTIFACT;
-                        setWalkingFlags(COLLECT_TOP_EXTENSIONS);
+        var artifacts = dep.getModuleArtifacts();
+        if (artifacts.isEmpty()) {
+            processChildren = true;
+        } else {
+            for (var artifact : artifacts) {
+                var processedDep = allDeps.computeIfAbsent(DependencyUtils.getKey(artifact), key -> {
+                    final ProcessedDependency pd = new ProcessedDependency(parent, artifact);
+                    if (!isWalkingFlagsOn(COLLECT_TOP_EXTENSIONS)) {
+                        pd.ext = DependencyUtils.getExtensionInfoOrNull(project, artifact);
+                        if (pd.ext != null) {
+                            pd.flags |= DependencyFlags.TOP_LEVEL_RUNTIME_EXTENSION_ARTIFACT;
+                            setWalkingFlags(COLLECT_TOP_EXTENSIONS);
+                        }
                     }
+                    return pd;
+                });
+                if (processedDep.setFlags(DependencyFlags.VISITED)) {
+                    processChildren = true;
+                    depFlags |= processedDep.flags;
                 }
-                return pd;
-            });
-            if (processedDep.setFlags(DependencyFlags.VISITED)) {
-                processChildren = true;
-                depFlags |= processedDep.flags;
             }
         }
         if (processChildren) {
