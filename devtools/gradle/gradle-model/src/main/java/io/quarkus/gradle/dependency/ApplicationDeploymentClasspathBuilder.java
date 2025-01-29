@@ -341,7 +341,9 @@ public class ApplicationDeploymentClasspathBuilder {
      */
     public Configuration getRuntimeConfiguration() {
         this.getDeploymentConfiguration().resolve();
-        return project.getConfigurations().getByName(this.runtimeConfigurationName);
+        return isLegacyConfig(project) ? project.getConfigurations().getByName(this.runtimeConfigurationName)
+                : project.getConfigurations().findByName(ConditionalDependencyResolver.getConfigurationName(mode));
+        //return project.getConfigurations().getByName(this.runtimeConfigurationName);
     }
 
     public Configuration getRuntimeConfigurationWithoutResolvingDeployment() {

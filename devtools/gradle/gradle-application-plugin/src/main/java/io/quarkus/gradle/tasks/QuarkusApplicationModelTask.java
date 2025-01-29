@@ -41,6 +41,10 @@ import org.gradle.api.artifacts.result.ResolvedArtifactResult;
 import org.gradle.api.artifacts.result.ResolvedComponentResult;
 import org.gradle.api.artifacts.result.ResolvedDependencyResult;
 import org.gradle.api.artifacts.type.ArtifactTypeDefinition;
+import org.gradle.api.attributes.Attribute;
+import org.gradle.api.attributes.Bundling;
+import org.gradle.api.attributes.LibraryElements;
+import org.gradle.api.attributes.Usage;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.ProjectLayout;
@@ -564,6 +568,9 @@ public abstract class QuarkusApplicationModelTask extends DefaultTask {
                             configuration.getName());
                     attributes.attribute(ConditionalDependencyResolver.getQuarkusConditionalDependencyAttribute(),
                             configuration.getName());
+                    //attributes.attribute(Attribute.of("org.gradle.libraryelements", String.class), LibraryElements.JAR);
+                    //attributes.attribute(Attribute.of("org.gradle.dependency.bundling", String.class), Bundling.EXTERNAL);
+                    //attributes.attribute(Attribute.of("org.gradle.usage", String.class), Usage.JAVA_RUNTIME);
                 });
             }).getFiles());
         }

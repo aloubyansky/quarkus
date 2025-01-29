@@ -44,6 +44,7 @@ import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.bootstrap.model.ApplicationModelBuilder;
 import io.quarkus.bootstrap.model.CapabilityContract;
+import io.quarkus.bootstrap.model.DefaultApplicationModel;
 import io.quarkus.bootstrap.model.PlatformImports;
 import io.quarkus.bootstrap.model.gradle.ModelParameter;
 import io.quarkus.bootstrap.model.gradle.impl.ModelParameterImpl;
@@ -140,7 +141,20 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
         }
         addCompileOnly(project, classpathBuilder, modelBuilder);
 
-        return modelBuilder.build();
+        DefaultApplicationModel model = modelBuilder.build();
+        /* @formatter:off
+        var deps = model.getDependencies();
+        List<String> list = new ArrayList<>(deps.size());
+        for (var d : deps) {
+            list.add(d.toCompactCoords() + " " + d.getFlags());
+        }
+        Collections.sort(list);
+        System.out.println(mode + " dependencies");
+        for (int i = 0; i < list.size(); ++i) {
+            System.out.println(i + 1 + ") " + list.get(i));
+        }
+        @formatter:on */
+        return model;
     }
 
     private static void addCompileOnly(Project project, ApplicationDeploymentClasspathBuilder classpathBuilder,
@@ -329,6 +343,10 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
         final Set<File> artifactFiles = getArtifactFilesOrNull(configuration);
 
         for (ResolvedDependency d : configuration.getFirstLevelModuleDependencies()) {
+            System.out.println("GradleApplicationModelBuilder direct dep " + d.getModuleArtifacts());
+            for (var a : d.getModuleArtifacts()) {
+                System.out.println("- " + a.getFile() + " " + a.getFile().exists());
+            }
             collectDependencies(d, workspaceDiscovery, project, artifactFiles, new HashSet<>(),
                     modelBuilder,
                     wsModule,
