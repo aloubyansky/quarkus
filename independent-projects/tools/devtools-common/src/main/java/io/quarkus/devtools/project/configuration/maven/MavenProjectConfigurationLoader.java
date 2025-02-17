@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Model;
@@ -52,7 +51,7 @@ import io.quarkus.devtools.project.configuration.ResolvedValue;
 import io.quarkus.devtools.project.configuration.ValueSource;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
-import io.quarkus.paths.PathTree;
+import io.quarkus.paths.*;
 import io.quarkus.registry.util.PlatformArtifacts;
 
 public class MavenProjectConfigurationLoader {
@@ -185,6 +184,7 @@ public class MavenProjectConfigurationLoader {
                                 resolveValue(d.getClassifier(), moduleWrapper)),
                         ConfiguredValue.of(d.getType(), resolveValue(type, moduleWrapper)),
                         version,
+                        moduleWrapper.getPomFile(),
                         !version.isEffectivelyNull()
                                 && isLocal(groupId.getEffectiveValue(), artifactId.getEffectiveValue(),
                                         version.getEffectiveValue()));
@@ -221,6 +221,7 @@ public class MavenProjectConfigurationLoader {
                             c = ConfiguredArtifact.of(c.getGroupId(), c.getArtifactId(), c.getClassifier(),
                                     c.getType(),
                                     ConfiguredValue.of(c.getVersion().getRawValue(), managedVersion),
+                                    c.getConfigurationFile(),
                                     isLocal(a.getGroupId(), a.getArtifactId(), a.getVersion()));
                         }
                         moduleWrapper.getConfiguredModule().addDirectExtensionDep(c);
@@ -483,12 +484,12 @@ public class MavenProjectConfigurationLoader {
         return managed;
     }
 
-    private ResolvedValue getManagedPluginVersion(ModuleWrapper moduleDeps, ArtifactKey pluginKey) {
-        final ConfiguredArtifact configured = moduleDeps.getPluginVersionConstraint(pluginKey);
+    private ResolvedValue getManagedPluginVersion(ModuleWrapper moduleWrapper, ArtifactKey pluginKey) {
+        final ConfiguredArtifact configured = moduleWrapper.getPluginVersionConstraint(pluginKey);
         if (configured != null) {
             return configured.getVersion().getResolvedValue();
         }
-        final LocalProject parent = moduleDeps.project.getLocalParent();
+        final LocalProject parent = moduleWrapper.project.getLocalParent();
         if (parent != null) {
             return getManagedPluginVersion(getModuleWrapper(parent), pluginKey);
         }
@@ -517,6 +518,7 @@ public class MavenProjectConfigurationLoader {
                             ConfiguredValue.of(classifier, resolveValue(classifier, moduleWrapper)),
                             ConfiguredValue.of(d.getType(), resolveValue(d.getType(), moduleWrapper)),
                             version,
+                            moduleWrapper.getPomFile(),
                             isLocal(groupId.getEffectiveValue(), artifactId.getEffectiveValue(), version.getEffectiveValue()));
                     moduleWrapper.managedDeps.put(artifact.getKey(), artifact);
                 }
@@ -549,7 +551,8 @@ public class MavenProjectConfigurationLoader {
                 moduleWrapper.setQuarkusPlugin(ConfiguredArtifact.jar(
                         ConfiguredValue.of(rawPlugin.getGroupId(), resolveValue(rawPlugin.getGroupId(), moduleWrapper)),
                         ConfiguredValue.of(rawPlugin.getArtifactId(), artifactId),
-                        ConfiguredValue.of(rawPlugin.getVersion(), resolveValue(rawPlugin.getVersion(), moduleWrapper))));
+                        ConfiguredValue.of(rawPlugin.getVersion(), resolveValue(rawPlugin.getVersion(), moduleWrapper)),
+                        moduleWrapper.getPomFile()));
                 break;
             }
         }
@@ -845,7 +848,7 @@ public class MavenProjectConfigurationLoader {
                         } catch (IOException e) {
                             throw new RuntimeException("Failed to parse " + getPomFile(), e);
                         }
-                        var activeIds = effectiveProfiles.stream().map(Profile::getId).collect(Collectors.toList());
+                        var activeIds = effectiveProfiles.stream().map(Profile::getId).toList();
                         activePomProfiles = new ArrayList<>(effectiveProfiles.size());
                         for (Profile p : model.getProfiles()) {
                             if (activeIds.contains(p.getId())) {
@@ -884,14 +887,14 @@ public class MavenProjectConfigurationLoader {
                 return managedQuarkusPlugin;
             }
             final Plugin plugin = managedPlugins.get(key);
-            if (plugin == null) {
-                return null;
+            if (plugin != null) {
+                managedQuarkusPlugin = ConfiguredArtifact.jar(
+                        ConfiguredValue.of(plugin.getGroupId(), plugin.getGroupId()),
+                        ConfiguredValue.of(plugin.getArtifactId(), plugin.getArtifactId()),
+                        ConfiguredValue.of(plugin.getVersion(), resolveValue(plugin.getVersion(), this)),
+                        getPomFile());
+                getConfiguredModule().setManagedQuarkusPlugin(managedQuarkusPlugin);
             }
-            managedQuarkusPlugin = ConfiguredArtifact.jar(
-                    ConfiguredValue.of(plugin.getGroupId(), plugin.getGroupId()),
-                    ConfiguredValue.of(plugin.getArtifactId(), plugin.getArtifactId()),
-                    ConfiguredValue.of(plugin.getVersion(), resolveValue(plugin.getVersion(), this)));
-            getConfiguredModule().setManagedQuarkusPlugin(managedQuarkusPlugin);
             return managedQuarkusPlugin;
         }
 
