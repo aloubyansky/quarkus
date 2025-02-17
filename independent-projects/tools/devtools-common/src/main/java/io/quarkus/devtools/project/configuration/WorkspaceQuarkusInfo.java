@@ -70,11 +70,11 @@ public class WorkspaceQuarkusInfo {
         var registryInfo = RegistryProjectInfo.fromCatalogWithKeys(extensionCatalog, projectExtDeps.keySet());
 
         var updateSteps = UpdateSteps.getUpdateSteps(quarkusApp, registryInfo);
-        if(updateSteps.isEmpty()) {
+        if (updateSteps.isEmpty()) {
             log.info("No updates recommended");
         } else {
             log.info("Recommended updates:");
-            for(var updateStep : updateSteps) {
+            for (var updateStep : updateSteps) {
                 log.info(updateStep.toString());
             }
         }
