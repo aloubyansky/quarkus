@@ -15,13 +15,11 @@ import io.quarkus.registry.catalog.ExtensionCatalog;
 
 class BomMapper {
 
-    private final ConfiguredModule module;
     private final List<BomUpdateDetails> bomUpdateDetails;
     private final Map<ArtifactKey, ArtifactCoords> recommendedBomsByGa;
     private Map<String, ArtifactCoords> recommendedBomsByArtifactId = null;
 
     BomMapper(ConfiguredModule module, RegistryProjectInfo registryProjectInfo) {
-        this.module = module;
         final List<ExtensionCatalog> extensionOrigins = registryProjectInfo.getExtensionOrigins();
         bomUpdateDetails = new ArrayList<>(extensionOrigins.size());
         recommendedBomsByGa = mapToGa(extensionOrigins, registryProjectInfo.getPrimaryPlatformBom());

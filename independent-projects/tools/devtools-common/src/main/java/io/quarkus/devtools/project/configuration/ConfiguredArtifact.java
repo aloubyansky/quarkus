@@ -1,5 +1,6 @@
 package io.quarkus.devtools.project.configuration;
 
+import java.nio.file.Path;
 import java.util.Objects;
 
 import io.quarkus.maven.dependency.ArtifactCoords;
@@ -7,33 +8,35 @@ import io.quarkus.maven.dependency.ArtifactKey;
 
 public class ConfiguredArtifact {
 
-    public static ConfiguredArtifact jar(ConfiguredValue groupId, ConfiguredValue artifactId, ConfiguredValue version) {
-        return jar(groupId, artifactId, version, false);
+    public static ConfiguredArtifact jar(ConfiguredValue groupId, ConfiguredValue artifactId, ConfiguredValue version,
+            Path configurationFile) {
+        return jar(groupId, artifactId, version, configurationFile, false);
     }
 
     public static ConfiguredArtifact jar(ConfiguredValue groupId, ConfiguredValue artifactId, ConfiguredValue version,
-            boolean local) {
+            Path configurationFile, boolean local) {
         return of(groupId, artifactId, ConfiguredValue.of(ArtifactCoords.DEFAULT_CLASSIFIER),
-                ConfiguredValue.of(ArtifactCoords.TYPE_JAR), version, local);
-    }
-
-    public static ConfiguredArtifact pom(ConfiguredValue groupId, ConfiguredValue artifactId, ConfiguredValue version) {
-        return pom(groupId, artifactId, version, false);
+                ConfiguredValue.of(ArtifactCoords.TYPE_JAR), version, configurationFile, local);
     }
 
     public static ConfiguredArtifact pom(ConfiguredValue groupId, ConfiguredValue artifactId, ConfiguredValue version,
-            boolean local) {
+            Path configurationFile) {
+        return pom(groupId, artifactId, version, configurationFile, false);
+    }
+
+    public static ConfiguredArtifact pom(ConfiguredValue groupId, ConfiguredValue artifactId, ConfiguredValue version,
+            Path configurationFile, boolean local) {
         return of(groupId, artifactId, ConfiguredValue.of(ArtifactCoords.DEFAULT_CLASSIFIER),
-                ConfiguredValue.of(ArtifactCoords.TYPE_POM), version, local);
+                ConfiguredValue.of(ArtifactCoords.TYPE_POM), version, configurationFile, local);
     }
 
     public static ConfiguredArtifact of(ConfiguredValue groupId, ConfiguredValue artifactId, ConfiguredValue classifier,
-            ConfiguredValue type, ConfiguredValue version) {
-        return of(groupId, artifactId, classifier, type, version, false);
+            ConfiguredValue type, ConfiguredValue version, Path configurationFile) {
+        return of(groupId, artifactId, classifier, type, version, configurationFile, false);
     }
 
     public static ConfiguredArtifact of(ConfiguredValue groupId, ConfiguredValue artifactId, ConfiguredValue classifier,
-            ConfiguredValue type, ConfiguredValue version, boolean local) {
+            ConfiguredValue type, ConfiguredValue version, Path configurationFile, boolean local) {
         return new ConfiguredArtifact(groupId, artifactId, classifier, type, version, local);
     }
 
@@ -42,17 +45,19 @@ public class ConfiguredArtifact {
     private final ConfiguredValue classifier;
     private final ConfiguredValue type;
     private final ConfiguredValue version;
+    private final Path configurationFile;
     private final boolean local;
     private ArtifactKey key;
 
     private ConfiguredArtifact(ConfiguredValue groupId, ConfiguredValue artifactId, ConfiguredValue classifier,
-            ConfiguredValue type, ConfiguredValue version, boolean local) {
+            ConfiguredValue type, ConfiguredValue version, Path configurationFile, boolean local) {
         super();
         this.groupId = groupId;
         this.artifactId = artifactId;
         this.classifier = classifier;
         this.type = type;
         this.version = version;
+        this.configurationFile = configurationFile;
         this.local = local;
     }
 
@@ -74,6 +79,10 @@ public class ConfiguredArtifact {
 
     public ConfiguredValue getVersion() {
         return version;
+    }
+
+    public Path getConfigurationFile() {
+        return configurationFile;
     }
 
     public boolean isLocal() {
