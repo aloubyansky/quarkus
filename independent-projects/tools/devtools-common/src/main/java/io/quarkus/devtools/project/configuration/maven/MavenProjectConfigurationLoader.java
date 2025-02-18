@@ -163,7 +163,8 @@ public class MavenProjectConfigurationLoader {
                 if (managedVersion != null) {
                     plugin = ConfiguredArtifact.of(plugin.getGroupId(), plugin.getArtifactId(),
                             plugin.getClassifier(), plugin.getType(),
-                            ConfiguredValue.of(plugin.getVersion().getRawValue(), managedVersion));
+                            ConfiguredValue.of(plugin.getVersion().getRawValue(), managedVersion),
+                            plugin.getConfigurationFile());
                     moduleWrapper.setQuarkusPlugin(plugin);
                 }
             }
@@ -226,13 +227,15 @@ public class MavenProjectConfigurationLoader {
                         }
                         moduleWrapper.getConfiguredModule().addDirectExtensionDep(c);
                     } else {
+                        final ResolvedValue resolvedVersion = getInheritedDependencyVersion(moduleWrapper, a);
                         c = ConfiguredArtifact.of(ConfiguredValue.of(a.getGroupId()),
                                 ConfiguredValue.of(a.getArtifactId()),
                                 ConfiguredValue.of(a.getClassifier()),
                                 ConfiguredValue.of(a.getExtension()),
-                                ConfiguredValue.of(null, getInheritedDependencyVersion(moduleWrapper, a)),
+                                ConfiguredValue.of(null, resolvedVersion),
+                                resolvedVersion.getSource().getPath(),
                                 isLocal(a.getGroupId(), a.getArtifactId(), a.getVersion()));
-                        moduleWrapper.getConfiguredModule().addTopTransitiveExtensionDep(c);
+                        moduleWrapper.getConfiguredModule().addDirectExtensionDep(c);
                     }
                 });
     }
@@ -422,6 +425,7 @@ public class MavenProjectConfigurationLoader {
                                 ResolvedValue.of(bom.getArtifactId(), ValueSource.external(externalId, null))),
                         ConfiguredValue.of(bom.getVersion(),
                                 ResolvedValue.of(bom.getVersion(), ValueSource.external(externalId, null))),
+                        null,
                         false);
             }
         }
@@ -448,6 +452,7 @@ public class MavenProjectConfigurationLoader {
                                 ResolvedValue.of(bom.getArtifactId(), ValueSource.external(externalId, null))),
                         ConfiguredValue.of(bom.getVersion(),
                                 ResolvedValue.of(bom.getVersion(), ValueSource.external(externalId, null))),
+                        null,
                         false);
             }
         }
@@ -509,6 +514,7 @@ public class MavenProjectConfigurationLoader {
                             artifactId.getEffectiveValue(), version.getEffectiveValue());
                     moduleWrapper.bomImports.put(effectiveCoords,
                             ConfiguredBom.imported(groupId, artifactId, version,
+                                    moduleWrapper.getPomFile(),
                                     isLocal(groupId.getEffectiveValue(), artifactId.getEffectiveValue(),
                                             version.getEffectiveValue())));
                 } else {
@@ -538,6 +544,7 @@ public class MavenProjectConfigurationLoader {
                                     ConfiguredValue.of(enforced.getGroupId()),
                                     ConfiguredValue.of(enforced.getArtifactId()),
                                     ConfiguredValue.of(enforced.getVersion()),
+                                    null,
                                     isLocal(enforced.getGroupId(), enforced.getArtifactId(), enforced.getVersion())));
                 } else {
                     moduleWrapper.getConfiguredModule().addPlatformBom(ConfiguredBom.enforced(platformBom.getArtifact()));
@@ -802,7 +809,6 @@ public class MavenProjectConfigurationLoader {
                             rawPlugins.addAll(p.getBuild().getPlugins());
                         }
                     }
-
                 }
             }
             return rawPlugins;

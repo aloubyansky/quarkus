@@ -37,7 +37,7 @@ public class ConfiguredArtifact {
 
     public static ConfiguredArtifact of(ConfiguredValue groupId, ConfiguredValue artifactId, ConfiguredValue classifier,
             ConfiguredValue type, ConfiguredValue version, Path configurationFile, boolean local) {
-        return new ConfiguredArtifact(groupId, artifactId, classifier, type, version, local);
+        return new ConfiguredArtifact(groupId, artifactId, classifier, type, version, configurationFile, local);
     }
 
     private final ConfiguredValue groupId;
@@ -151,7 +151,7 @@ public class ConfiguredArtifact {
         final StringBuilder sb = new StringBuilder()
                 .append(groupId).append(':')
                 .append(artifactId).append(':')
-                .append(classifier).append(':')
+                .append(classifier == null || classifier.getRawValue() == null ? "" : classifier).append(':')
                 .append(type).append(':')
                 .append(version);
         if (local) {
