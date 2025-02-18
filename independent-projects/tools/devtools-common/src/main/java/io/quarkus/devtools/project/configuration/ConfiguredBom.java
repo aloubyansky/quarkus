@@ -1,5 +1,6 @@
 package io.quarkus.devtools.project.configuration;
 
+import java.nio.file.Path;
 import java.util.Objects;
 
 public class ConfiguredBom {
@@ -9,13 +10,13 @@ public class ConfiguredBom {
     }
 
     public static ConfiguredBom enforced(ConfiguredValue groupId, ConfiguredValue artifactId, ConfiguredValue version,
-            boolean local) {
-        return new ConfiguredBom(ConfiguredArtifact.pom(groupId, artifactId, version, local), false);
+            Path configurationFile, boolean local) {
+        return new ConfiguredBom(ConfiguredArtifact.pom(groupId, artifactId, version, configurationFile, local), false);
     }
 
     public static ConfiguredBom imported(ConfiguredValue groupId, ConfiguredValue artifactId, ConfiguredValue version,
-            boolean local) {
-        return new ConfiguredBom(ConfiguredArtifact.pom(groupId, artifactId, version, local), true);
+            Path configurationFile, boolean local) {
+        return new ConfiguredBom(ConfiguredArtifact.pom(groupId, artifactId, version, configurationFile, local), true);
     }
 
     private final ConfiguredArtifact bom;

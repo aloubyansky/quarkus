@@ -33,7 +33,8 @@ public class WorkspaceQuarkusInfo {
         //MavenProjectConfigurationLoader.load(Path.of("/home/aloubyansky/git/keycloak"));
         //generateUpdateRecipe(Path.of("/home/aloubyansky/git/camel-quarkus"));
         //load(Path.of("/home/aloubyansky/git/quarkus-copy"));
-        loadAndLog(Path.of("/home/aloubyansky/git/quarkus-super-heroes/rest-fights"));
+        //loadAndLog(Path.of("/home/aloubyansky/git/quarkus-super-heroes/rest-fights"));
+        loadAndLog(Path.of("/home/aloubyansky/playground/quarkus-update-projects/parent-direct-extension-dep/app"));
         //generateUpdateRecipe(Path.of("/home/aloubyansky/playground/code-with-quarkus"));
         //load(Path.of("/home/aloubyansky/git/quarkus-todo-app/quarkus-todo-reactive"));
         //generateUpdateRecipe(Path.of("/home/aloubyansky/git/keycloak"));
@@ -78,26 +79,13 @@ public class WorkspaceQuarkusInfo {
                 log.info(updateStep.toString());
             }
         }
-        /* @formatter:off
-        for (var catalogExt : registryInfo.getExtensions()) {
-            var projectExtDep = projectExtDeps.remove(catalogExt.getArtifact().getKey());
-            if (projectExtDep != null) {
-                var sb = new StringBuilder().append(projectExtDep.toCompactString());
-                sb.append(" (").append(projectExtDep.getVersion().getResolvedValue().getSource().getModule()).append(") ");
-                if (!projectExtDep.getVersion().getEffectiveValue().equals(catalogExt.getArtifact().getVersion())) {
-                    sb.append(" -> ").append(catalogExt.getArtifact().getVersion());
-                }
-                log.info(sb.toString());
-            }
+        /* @formatter:off */
+        for(var e : quarkusApp.getDirectExtensionDeps()) {
+            log.info("- " + e.toCompactString() + " " + e.getConfigurationFile());
         }
-        if (!projectExtDeps.isEmpty()) {
-            log.info("Not found in the catalog:");
-            for (var projectExtDep : projectExtDeps.values()) {
-                log.info("- " + projectExtDep.getEffectiveCoords().toCompactCoords());
-            }
-        }
-        @formatter:on
- */
+        var quarkusPlugin = quarkusApp.getQuarkusPlugin();
+        log.info("Plugin " + quarkusPlugin.toCompactString() + " " + quarkusPlugin.getConfigurationFile());
+        /* @formatter:on */
     }
 
     private static Map<ArtifactKey, ConfiguredArtifact> getTopExtensionMap(ConfiguredModule quarkusApp) {
