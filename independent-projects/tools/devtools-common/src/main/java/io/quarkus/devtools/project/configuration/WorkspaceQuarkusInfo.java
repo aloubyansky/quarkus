@@ -11,6 +11,7 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.devtools.commands.handlers.RegistryProjectInfo;
 import io.quarkus.devtools.messagewriter.MessageWriter;
+import io.quarkus.devtools.project.configuration.maven.MavenConfiguredApplicationResolver;
 import io.quarkus.devtools.project.configuration.maven.MavenProjectConfigurationLoader;
 import io.quarkus.devtools.project.configuration.step.UpdateSteps;
 import io.quarkus.devtools.project.update.ProjectUpdateInfos;
@@ -54,7 +55,8 @@ public class WorkspaceQuarkusInfo {
         var mavenCtx = MavenProjectConfigurationLoader.getBootstrapMavenContext(projectDir);
         var project = MavenProjectConfigurationLoader.load(projectDir, mavenCtx, log);
         //logConfiguredProject(project, projectDir, log);
-        logInfo(project, mavenCtx, log);
+        //logInfo(project, mavenCtx, log);
+        MavenConfiguredApplicationResolver.load(projectDir, mavenCtx, log);
     }
 
     private static void logInfo(ConfiguredProject project, BootstrapMavenContext mavenCtx, MessageWriter log) throws Exception {
