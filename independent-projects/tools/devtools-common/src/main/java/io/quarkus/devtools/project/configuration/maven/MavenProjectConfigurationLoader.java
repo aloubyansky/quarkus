@@ -577,14 +577,14 @@ public class MavenProjectConfigurationLoader {
         return resolveValue(expr, null, rawModel);
     }
 
-    private ResolvedValue resolveValue(String expr, String wrappingExpr, PomWrapper rawModel) {
+    private ResolvedValue resolveValue(String expr, String wrappingExpr, PomWrapper pomWrapper) {
 
         if (!ConfiguredValue.isPropertyExpression(expr)) {
-            final LocalProject project = mavenContext.getWorkspace().getProject(rawModel.getGroupId(),
-                    rawModel.getArtifactId());
+            final LocalProject project = mavenContext.getWorkspace().getProject(pomWrapper.getGroupId(),
+                    pomWrapper.getArtifactId());
             final ValueSource source = project == null
-                    ? ValueSource.external(rawModel.getId(), wrappingExpr, rawModel.getPomFile())
-                    : ValueSource.local(rawModel.getId(), wrappingExpr, rawModel.getPomFile());
+                    ? ValueSource.external(pomWrapper.getId(), wrappingExpr, pomWrapper.getPomFile())
+                    : ValueSource.local(pomWrapper.getId(), wrappingExpr, pomWrapper.getPomFile());
             return ResolvedValue.of(expr, source);
         }
         final String name = ConfiguredValue.getPropertyName(expr);
@@ -592,21 +592,21 @@ public class MavenProjectConfigurationLoader {
             final String projectProp = name.substring("project.".length());
             switch (projectProp) {
                 case "version":
-                    return ResolvedValue.of(rawModel.getVersion(),
-                            ValueSource.local(rawModel.getId(), name, rawModel.getPomFile()));
+                    return ResolvedValue.of(pomWrapper.getVersion(),
+                            ValueSource.local(pomWrapper.getId(), name, pomWrapper.getPomFile()));
                 case "groupId":
-                    return ResolvedValue.of(rawModel.getGroupId(),
-                            ValueSource.local(rawModel.getId(), name, rawModel.getPomFile()));
+                    return ResolvedValue.of(pomWrapper.getGroupId(),
+                            ValueSource.local(pomWrapper.getId(), name, pomWrapper.getPomFile()));
                 case "artifactId":
-                    return ResolvedValue.of(rawModel.getArtifactId(),
-                            ValueSource.local(rawModel.getId(), name, rawModel.getPomFile()));
+                    return ResolvedValue.of(pomWrapper.getArtifactId(),
+                            ValueSource.local(pomWrapper.getId(), name, pomWrapper.getPomFile()));
             }
         }
-        final String value = rawModel.getRawProperties().getProperty(name);
+        final String value = pomWrapper.getRawProperties().getProperty(name);
         if (value != null) {
-            return resolveValue(value, name, rawModel);
+            return resolveValue(value, name, pomWrapper);
         }
-        final PomWrapper parent = rawModel.getParentWrapper();
+        final PomWrapper parent = pomWrapper.getParentWrapper();
         if (parent == null) {
             return ResolvedValue.of(expr);
         }

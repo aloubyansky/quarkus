@@ -32,10 +32,11 @@ public class WorkspaceQuarkusInfo {
         //MavenProjectConfigurationLoader.load(Path.of("/home/aloubyansky/git/camel-quarkus"));
         //MavenProjectConfigurationLoader.load(Path.of("/home/aloubyansky/git/insights-runtimes-inventory"));
         //MavenProjectConfigurationLoader.load(Path.of("/home/aloubyansky/git/keycloak"));
-        //generateUpdateRecipe(Path.of("/home/aloubyansky/git/camel-quarkus"));
+        //loadAndLog(Path.of("/home/aloubyansky/git/camel-quarkus"));
+        loadAndLog(Path.of("/home/aloubyansky/git/camel-quarkus/integration-tests/jira"));
         //load(Path.of("/home/aloubyansky/git/quarkus-copy"));
         //loadAndLog(Path.of("/home/aloubyansky/git/quarkus-super-heroes/rest-fights"));
-        loadAndLog(Path.of("/home/aloubyansky/playground/quarkus-update-projects/parent-direct-extension-dep/app"));
+        //loadAndLog(Path.of("/home/aloubyansky/playground/quarkus-update-projects/parent-direct-extension-dep/app"));
         //generateUpdateRecipe(Path.of("/home/aloubyansky/playground/code-with-quarkus"));
         //load(Path.of("/home/aloubyansky/git/quarkus-todo-app/quarkus-todo-reactive"));
         //generateUpdateRecipe(Path.of("/home/aloubyansky/git/keycloak"));
@@ -53,7 +54,7 @@ public class WorkspaceQuarkusInfo {
     private static void loadAndLog(Path projectDir) throws Exception {
         var log = MessageWriter.info();
         var mavenCtx = MavenProjectConfigurationLoader.getBootstrapMavenContext(projectDir);
-        var project = MavenProjectConfigurationLoader.load(projectDir, mavenCtx, log);
+        //var project = MavenProjectConfigurationLoader.load(projectDir, mavenCtx, log);
         //logConfiguredProject(project, projectDir, log);
         //logInfo(project, mavenCtx, log);
         MavenConfiguredApplicationResolver.load(projectDir, mavenCtx, log);
