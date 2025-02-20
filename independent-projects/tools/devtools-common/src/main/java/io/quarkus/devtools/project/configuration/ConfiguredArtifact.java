@@ -139,7 +139,7 @@ public class ConfiguredArtifact {
         if (type.isEffectivelyNull() && !ArtifactCoords.TYPE_JAR.equals(type.getEffectiveValue())) {
             sb.append(type).append(':');
         }
-        sb.append(version.getEffectiveValue());
+        sb.append(version);
         if (local) {
             sb.append("[local]");
         }

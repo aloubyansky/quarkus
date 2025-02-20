@@ -56,13 +56,31 @@ public class MavenConfiguredApplicationResolver {
     private ConfiguredProject loadInternal(Path projectDir) {
         for (var module : mavenContext.getWorkspace().getProjects().values()) {
             if (module.getDir().startsWith(projectDir)) {
-                log.info("Module " + module.getDir());
-                var mc = new ModuleContainer(module, this);
+                var mc = new ProjectModuleContainer(module, this);
                 modules.put(mc.getId(), mc);
                 mc.collectApplicationConfiguration();
             }
         }
         return null;
+    }
+
+    ModuleContainer resolveModuleContainer(WorkspaceModuleId id) {
+        return modules.computeIfAbsent(id, this::newModuleContainer);
+    }
+
+    boolean isProjectModule(ArtifactCoords coords) {
+        return mavenContext.getWorkspace().getProject(coords.getGroupId(), coords.getArtifactId()) != null;
+    }
+
+    private ModuleContainer newModuleContainer(WorkspaceModuleId gav) {
+        var localModule = mavenContext.getWorkspace().getProject(gav.getGroupId(), gav.getArtifactId());
+        if (gav.getGroupId().equals("org.apache.camel.quarkus") && localModule == null) {
+            System.out.println("Failed to locate " + gav);
+        }
+        return localModule == null
+                ? new ExternalModuleContainer(gav,
+                        doResolveEffectiveModel(ArtifactCoords.pom(gav.getGroupId(), gav.getArtifactId(), gav.getVersion())))
+                : new ProjectModuleContainer(localModule, this);
     }
 
     Model resolveEffectiveModel(LocalProject project) {

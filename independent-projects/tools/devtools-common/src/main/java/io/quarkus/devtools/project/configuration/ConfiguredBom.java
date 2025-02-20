@@ -16,7 +16,11 @@ public class ConfiguredBom {
 
     public static ConfiguredBom imported(ConfiguredValue groupId, ConfiguredValue artifactId, ConfiguredValue version,
             Path configurationFile, boolean local) {
-        return new ConfiguredBom(ConfiguredArtifact.pom(groupId, artifactId, version, configurationFile, local), true);
+        return imported(ConfiguredArtifact.pom(groupId, artifactId, version, configurationFile, local));
+    }
+
+    public static ConfiguredBom imported(ConfiguredArtifact pom) {
+        return new ConfiguredBom(pom, true);
     }
 
     private final ConfiguredArtifact bom;
@@ -55,6 +59,14 @@ public class ConfiguredBom {
 
     @Override
     public String toString() {
-        return (imported ? "imported " : "enforced ") + bom.toCompactString();
+        if (imported) {
+            return "imports " + bom.toCompactString();
+        }
+        if (bom.getGroupId().isRawEffective() &&
+                bom.getArtifactId().isRawEffective() &&
+                bom.getVersion().isRawEffective() && bom.getVersion().getResolvedValue().hasSource()) {
+            return "enforced " + bom.toCompactString() + " from " + bom.getVersion().getResolvedValue().getSource();
+        }
+        return "enforced " + bom.toCompactString();
     }
 }
