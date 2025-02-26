@@ -1,10 +1,14 @@
 package io.quarkus.devtools.project.configuration.maven;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Model;
+import org.eclipse.aether.repository.RemoteRepository;
+import org.eclipse.aether.repository.RepositoryPolicy;
 
 import io.quarkus.bootstrap.workspace.WorkspaceModuleId;
 import io.quarkus.devtools.project.configuration.ConfiguredValue;
@@ -18,6 +22,7 @@ abstract class AbstractModuleContainer implements ModuleContainer {
     protected final WorkspaceModuleId id;
     protected Model effectiveModel;
     private Map<ArtifactKey, Dependency> allEffectiveManagedDeps;
+    private List<RemoteRepository> effectiveRepos;
 
     public AbstractModuleContainer(WorkspaceModuleId id) {
         this.id = id;
@@ -65,4 +70,31 @@ abstract class AbstractModuleContainer implements ModuleContainer {
     protected abstract ResolvedValue doResolvePropertyValue(String propertyName, String expr);
 
     protected abstract Path getPomFile();
+
+    List<RemoteRepository> getEffectiveRepositories() {
+        if (effectiveRepos == null) {
+            final Model effectiveModel = getEffectiveModel();
+            effectiveRepos = new ArrayList<>(effectiveModel.getRepositories().size());
+            for (org.apache.maven.model.Repository r : effectiveModel.getRepositories()) {
+                final RemoteRepository.Builder rb = new RemoteRepository.Builder(r.getId(), r.getLayout(), r.getUrl())
+                        .setContentType(r.getLayout());
+                var rp = r.getReleases();
+                if (rp != null) {
+                    rb.setReleasePolicy(new RepositoryPolicy(Boolean.parseBoolean(rp.getEnabled()),
+                            rp.getUpdatePolicy() == null ? RepositoryPolicy.UPDATE_POLICY_NEVER : rp.getUpdatePolicy(),
+                            rp.getChecksumPolicy() == null ? RepositoryPolicy.CHECKSUM_POLICY_WARN
+                                    : rp.getChecksumPolicy()));
+                }
+                rp = r.getSnapshots();
+                if (rp != null) {
+                    rb.setSnapshotPolicy(new RepositoryPolicy(Boolean.parseBoolean(rp.getEnabled()),
+                            rp.getUpdatePolicy() == null ? RepositoryPolicy.UPDATE_POLICY_DAILY : rp.getUpdatePolicy(),
+                            rp.getChecksumPolicy() == null ? RepositoryPolicy.CHECKSUM_POLICY_WARN
+                                    : rp.getChecksumPolicy()));
+                }
+                effectiveRepos.add(rb.build());
+            }
+        }
+        return effectiveRepos;
+    }
 }

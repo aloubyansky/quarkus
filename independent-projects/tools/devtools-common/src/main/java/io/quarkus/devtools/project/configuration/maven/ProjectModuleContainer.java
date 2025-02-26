@@ -9,8 +9,12 @@ import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Plugin;
 import org.apache.maven.model.Profile;
+import org.eclipse.aether.artifact.Artifact;
+import org.eclipse.aether.graph.DependencyNode;
 import org.jboss.logging.Logger;
 
+import io.quarkus.bootstrap.BootstrapConstants;
+import io.quarkus.bootstrap.resolver.maven.ModelResolutionTaskRunner;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
 import io.quarkus.bootstrap.workspace.WorkspaceModuleId;
 import io.quarkus.devtools.project.configuration.ConfiguredArtifact;
@@ -19,6 +23,8 @@ import io.quarkus.devtools.project.configuration.ConfiguredValue;
 import io.quarkus.devtools.project.configuration.ResolvedValue;
 import io.quarkus.devtools.project.configuration.ValueSource;
 import io.quarkus.maven.dependency.ArtifactCoords;
+import io.quarkus.paths.PathTree;
+import io.quarkus.paths.PathVisit;
 import io.quarkus.registry.util.PlatformArtifacts;
 
 class ProjectModuleContainer extends AbstractModuleContainer {
@@ -29,6 +35,7 @@ class ProjectModuleContainer extends AbstractModuleContainer {
     private final MavenConfiguredApplicationResolver appConfigResolver;
     private List<Profile> activePomProfiles;
     private List<Dependency> rawManagedDeps;
+    private List<Dependency> rawDirectDeps;
     private Properties rawProperties;
 
     private Boolean isQuarkusApp;
@@ -92,11 +99,81 @@ class ProjectModuleContainer extends AbstractModuleContainer {
             return;
         }
         System.out.println("Quarkus application " + id);
+        collectPlatformBoms();
+        collectTopExtensionDeps();
+    }
+
+    private void collectTopExtensionDeps() {
+        System.out.println("  Top level extensions:");
+        var taskRunner = ModelResolutionTaskRunner.getNonBlockingTaskRunner();
+        visitDependencies(appConfigResolver.collectDependencies(this), taskRunner);
+        taskRunner.waitForCompletion();
+    }
+
+    private void visitDependencies(List<DependencyNode> nodes, ModelResolutionTaskRunner taskRunner) {
+        for (var node : nodes) {
+            if (isMaybeExtension(node.getArtifact())) {
+                visitDependency(node, taskRunner);
+            }
+        }
+    }
+
+    private void visitDependency(DependencyNode node, ModelResolutionTaskRunner taskRunner) {
+        taskRunner.run(() -> PathTree.ofDirectoryOrArchive(appConfigResolver.resolveArtifact(node).getFile().toPath())
+                .accept(BootstrapConstants.DESCRIPTOR_PATH, visit -> visitExtensionDependency(node, taskRunner, visit)));
+    }
+
+    private void visitExtensionDependency(DependencyNode node, ModelResolutionTaskRunner taskRunner, PathVisit visit) {
+        if (visit == null || appConfigResolver.isProjectModule(node.getArtifact())) {
+            visitDependencies(node.getChildren(), taskRunner);
+            return;
+        }
+
+        var a = node.getArtifact();
+        System.out.println("- " + a);
+        /* @formatter:off
+                    final ArtifactKey key = ArtifactKey.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(),
+                            a.getExtension());
+                    ConfiguredArtifact c = rawDeps.get(key);
+                    if (c != null) {
+                        if (c.getVersion().isEffectivelyNull()) {
+                            ResolvedValue managedVersion = getManagedDependencyVersion(moduleWrapper, key);
+                            if (managedVersion == null) {
+                                managedVersion = ResolvedValue.of(a.getVersion());
+                            }
+                            c = ConfiguredArtifact.of(c.getGroupId(), c.getArtifactId(), c.getClassifier(),
+                                    c.getType(),
+                                    ConfiguredValue.of(c.getVersion().getRawValue(), managedVersion),
+                                    c.getConfigurationFile(),
+                                    isLocal(a.getGroupId(), a.getArtifactId(), a.getVersion()));
+                        }
+                        moduleWrapper.getConfiguredModule().addDirectExtensionDep(c);
+                    } else {
+                        final ResolvedValue resolvedVersion = getInheritedDependencyVersion(moduleWrapper, a);
+                        c = ConfiguredArtifact.of(ConfiguredValue.of(a.getGroupId()),
+                                ConfiguredValue.of(a.getArtifactId()),
+                                ConfiguredValue.of(a.getClassifier()),
+                                ConfiguredValue.of(a.getExtension()),
+                                ConfiguredValue.of(null, resolvedVersion),
+                                resolvedVersion.getSource().getPath(),
+                                isLocal(a.getGroupId(), a.getArtifactId(), a.getVersion()));
+                        moduleWrapper.getConfiguredModule().addDirectExtensionDep(c);
+                    }
+                    @formatter:on */
+    }
+
+    private void collectPlatformBoms() {
         System.out.println("  Platform BOMs:");
         var configuredPlatforms = getConfiguredPlatforms(getEffectiveModel());
         for (var p : configuredPlatforms) {
             var configuredBom = locateBomImport(p, false);
             System.out.println("  - " + configuredBom);
+        }
+    }
+
+    private void locateDependencyConfig(Artifact extension) {
+        for (var directDep : getRawDirectDeps()) {
+
         }
     }
 
@@ -141,6 +218,22 @@ class ProjectModuleContainer extends AbstractModuleContainer {
                     false);
         }
         throw new RuntimeException("Failed to locate the source of " + platformBom.toCompactCoords() + " import");
+    }
+
+    private List<Dependency> getRawDirectDeps() {
+        if (rawDirectDeps == null) {
+            final List<Profile> profiles = getActivePomProfiles();
+            if (profiles.isEmpty()) {
+                rawDirectDeps = module.getRawModel().getDependencies();
+            } else {
+                rawDirectDeps = new ArrayList<>();
+                rawDirectDeps.addAll(module.getRawModel().getDependencies());
+                for (Profile p : profiles) {
+                    rawDirectDeps.addAll(p.getDependencies());
+                }
+            }
+        }
+        return rawDirectDeps;
     }
 
     private Properties getRawProperties() {
@@ -206,6 +299,18 @@ class ProjectModuleContainer extends AbstractModuleContainer {
     @Override
     protected Path getPomFile() {
         return module.getRawModel().getPomFile().toPath();
+    }
+
+    private static boolean isMaybeExtension(Artifact a) {
+        var type = a.getExtension();
+        var classifier = a.getClassifier();
+        return (type == null
+                || type.isEmpty()
+                || type.equals(ArtifactCoords.TYPE_JAR))
+                && (classifier == null
+                        || classifier.isEmpty()
+                        || !classifier.equals("sources")
+                                && !classifier.equals("javadoc"));
     }
 
     private static List<ArtifactCoords> getConfiguredPlatforms(Model effectiveModel) {
