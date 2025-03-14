@@ -24,6 +24,7 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.EffectiveModelResolver;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
+import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
 import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.bootstrap.workspace.WorkspaceModuleId;
 import io.quarkus.devtools.messagewriter.MessageWriter;
@@ -68,7 +69,11 @@ public class MavenConfiguredApplicationResolver {
     }
 
     private ConfiguredProject loadInternal(Path projectDir) {
-        final Collection<LocalProject> modules = mavenContext.getWorkspace().getProjects().values();
+        final LocalWorkspace workspace = mavenContext.getWorkspace();
+        if (workspace == null) {
+            throw new RuntimeException("Failed to load workspace from " + projectDir);
+        }
+        final Collection<LocalProject> modules = workspace.getProjects().values();
         final List<Path> createdDirs = ensureResolvable(modules);
         try {
             int i = 1;

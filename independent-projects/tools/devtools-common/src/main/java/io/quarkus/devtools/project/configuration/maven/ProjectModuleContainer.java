@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.apache.maven.model.BuildBase;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Plugin;
@@ -283,17 +284,58 @@ class ProjectModuleContainer extends AbstractModuleContainer {
         throw new RuntimeException("Failed to locate the source of " + platformBom.toCompactCoords() + " import");
     }
 
+    private void getManagedPluginVersion(ArtifactKey pluginKey) {
+        var managedPlugins = getRawManagedPlugins();
+
+    }
+
+    private List<Plugin> getRawManagedPlugins() {
+        List<Plugin> managedPlugins = getRawManagedPlugins(module.getRawModel().getBuild());
+        final List<Profile> profiles = getActivePomProfiles();
+        if (profiles.isEmpty()) {
+            return managedPlugins;
+        }
+        List<Plugin> combined = null;
+        for (Profile p : profiles) {
+            var profileManagedPlugins = getRawManagedPlugins(p.getBuild());
+            if (!profileManagedPlugins.isEmpty()) {
+                if (combined == null) {
+                    combined = new ArrayList<>();
+                    combined.addAll(managedPlugins);
+                }
+                combined.addAll(profileManagedPlugins);
+            }
+        }
+        return combined == null ? managedPlugins : combined;
+    }
+
+    private static List<Plugin> getRawManagedPlugins(BuildBase build) {
+        if (build == null) {
+            return List.of();
+        }
+        var pm = build.getPluginManagement();
+        return pm == null ? List.of() : pm.getPlugins();
+    }
+
     private List<Dependency> getRawDirectDeps() {
         if (rawDirectDeps == null) {
             final List<Profile> profiles = getActivePomProfiles();
             if (profiles.isEmpty()) {
                 rawDirectDeps = module.getRawModel().getDependencies();
             } else {
-                rawDirectDeps = new ArrayList<>();
-                rawDirectDeps.addAll(module.getRawModel().getDependencies());
+                List<Dependency> combined = null;
                 for (Profile p : profiles) {
-                    rawDirectDeps.addAll(p.getDependencies());
+                    final List<Dependency> profileDeps = p.getDependencies();
+                    if (!profileDeps.isEmpty()) {
+                        if (combined == null) {
+                            combined = new ArrayList<>();
+                            combined.addAll(module.getRawModel().getDependencies());
+                        }
+                        combined.addAll(profileDeps);
+                    }
+
                 }
+                rawDirectDeps = combined == null ? module.getRawModel().getDependencies() : combined;
             }
         }
         return rawDirectDeps;
@@ -305,11 +347,17 @@ class ProjectModuleContainer extends AbstractModuleContainer {
             if (profiles.isEmpty()) {
                 rawProperties = module.getRawModel().getProperties();
             } else {
-                rawProperties = new Properties();
-                rawProperties.putAll(module.getRawModel().getProperties());
-                for (Profile p : profiles) {
-                    rawProperties.putAll(p.getProperties());
+                Properties combined = null;
+                for (Profile profile : profiles) {
+                    if (!profile.getProperties().isEmpty()) {
+                        if (combined == null) {
+                            combined = new Properties();
+                            combined.putAll(module.getRawModel().getProperties());
+                        }
+                        combined.putAll(profile.getProperties());
+                    }
                 }
+                rawProperties = combined == null ? module.getRawModel().getProperties() : combined;
             }
         }
         return rawProperties;
@@ -317,20 +365,24 @@ class ProjectModuleContainer extends AbstractModuleContainer {
 
     private List<Dependency> getRawManagedDeps() {
         if (rawManagedDeps == null) {
+            final List<Dependency> mainManagedDeps = module.getRawModel().getDependencyManagement() == null ? List.of()
+                    : module.getRawModel().getDependencyManagement().getDependencies();
             final List<Profile> profiles = getActivePomProfiles();
             if (profiles.isEmpty()) {
-                rawManagedDeps = module.getRawModel().getDependencyManagement() == null ? List.of()
-                        : module.getRawModel().getDependencyManagement().getDependencies();
+                rawManagedDeps = mainManagedDeps;
             } else {
-                rawManagedDeps = new ArrayList<>();
-                if (module.getRawModel().getDependencyManagement() != null) {
-                    rawManagedDeps.addAll(module.getRawModel().getDependencyManagement().getDependencies());
-                }
-                for (Profile p : profiles) {
-                    if (p.getDependencyManagement() != null) {
-                        rawManagedDeps.addAll(p.getDependencyManagement().getDependencies());
+                List<Dependency> combined = null;
+                for (Profile profile : profiles) {
+                    final List<Dependency> profileManagedDeps = profile.getDependencyManagement() == null ? List.of()
+                            : profile.getDependencyManagement().getDependencies();
+                    if (!profileManagedDeps.isEmpty()) {
+                        if (combined == null) {
+                            combined = new ArrayList<>(mainManagedDeps);
+                        }
+                        combined.addAll(profileManagedDeps);
                     }
                 }
+                rawManagedDeps = combined == null ? mainManagedDeps : combined;
             }
         }
         return rawManagedDeps;
