@@ -27,10 +27,10 @@ public class WorkspaceQuarkusInfo {
 
     public static void main(String[] args) throws Exception {
         //MavenProjectConfigurationLoader.load(Path.of("/home/aloubyansky/git/insights-runtimes-inventory"));
-        //MavenProjectConfigurationLoader.load(Path.of("/home/aloubyansky/git/keycloak"));
+        loadAndLog(Path.of("/home/aloubyansky/git/hyades"));
         //loadAndLog(Path.of("/home/aloubyansky/git/camel-quarkus"));
         //loadAndLog(Path.of("/home/aloubyansky/git/camel-quarkus/integration-tests/sql"));
-        loadAndLog(Path.of("/home/aloubyansky/git/quarkus-super-heroes/"));
+        //loadAndLog(Path.of("/home/aloubyansky/git/quarkus-super-heroes/"));
         //loadAndLog(Path.of("/home/aloubyansky/playground/quarkus-update-projects/parent-direct-extension-dep/app"));
         //generateUpdateRecipe(Path.of("/home/aloubyansky/playground/code-with-quarkus"));
         //load(Path.of("/home/aloubyansky/git/quarkus-todo-app/quarkus-todo-reactive"));

@@ -403,6 +403,30 @@ class ProjectModuleContainer extends AbstractModuleContainer {
         return build == null ? List.of() : build.getPlugins();
     }
 
+    private ConfiguredArtifact getDirectDependencyOrNull(ArtifactKey key) {
+        var directDeps = getRawDirectDeps();
+        for (var directDep : directDeps) {
+            if (directDep.getVersion() != null) {
+                var artifactIdValue = resolveValue(directDep.getArtifactId());
+                if ("quarkus-maven-plugin".equals(artifactIdValue.getValue())) {
+                    return ConfiguredArtifact.jar(
+                            ConfiguredValue.of(directDep.getGroupId(), resolveValue(directDep.getGroupId())),
+                            ConfiguredValue.of(directDep.getArtifactId(), artifactIdValue),
+                            ConfiguredValue.of(directDep.getVersion(), resolveValue(directDep.getVersion())),
+                            getPomFile());
+                }
+            }
+        }
+        var parentModule = getParentModuleContainer();
+        if (parentModule == null) {
+            return null;
+        }
+        if (parentModule.isProjectModule()) {
+            return ((ProjectModuleContainer) parentModule).getBuildQuarkusPluginOrNull();
+        }
+        return getExternallyConfiguredQuarkusPluginOrNull(parentModule.getEffectiveModel());
+    }
+
     private List<Dependency> getRawDirectDeps() {
         if (rawDirectDeps == null) {
             final List<Profile> profiles = getActivePomProfiles();
