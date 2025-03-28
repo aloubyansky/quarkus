@@ -5,8 +5,10 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import io.quarkus.devtools.commands.data.QuarkusCommandException;
+import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.registry.CatalogMergeUtility;
 import io.quarkus.registry.catalog.Extension;
@@ -26,16 +28,41 @@ public class RegistryProjectInfo {
                 extensions);
 
         ExtensionCatalog primaryCatalog = registryCatalog;
+        Map<?, ?> projectProperties;
         if (!extensionOrigins.isEmpty()) {
             // necessary to set the versions from the selected origins
             final ExtensionCatalog mergedCatalog = CatalogMergeUtility.merge(extensionOrigins);
             extensions = syncWithCatalog(mergedCatalog, extensions);
             primaryCatalog = getPrimaryCatalog(extensionOrigins);
+            projectProperties = getProjectProperties(mergedCatalog);
         } else {
             extensions = syncWithCatalog(primaryCatalog, extensions);
+            projectProperties = getProjectProperties(primaryCatalog);
         }
 
-        return new RegistryProjectInfo(primaryCatalog, extensionOrigins, extensions);
+        return new RegistryProjectInfo(primaryCatalog, extensionOrigins, extensions, projectProperties);
+    }
+
+    private static Map<?, ?> getProjectProperties(ExtensionCatalog catalog) {
+        var o = catalog.getMetadata().get("project");
+        if(o instanceof Map projectMetadata) {
+            o = projectMetadata.get("properties");
+            if(o instanceof Map projectProperties) {
+                return projectProperties;
+            } else {
+                throw new RuntimeException("Project properties are not a Map but " + o);
+            }
+        } else {
+            throw new RuntimeException("Project metadata is not a Map but " + o);
+        }
+    }
+
+    private static String getRequiredProperty(Map<?, ?> map, String propName) {
+        var o = map.get(propName);
+        if(o == null) {
+            throw new RuntimeException("Required project property " + propName + " is missing from the platform metadata");
+        }
+        return String.valueOf(o);
     }
 
     private static ExtensionCatalog getPrimaryCatalog(List<ExtensionCatalog> extensionOrigins) {
@@ -88,12 +115,14 @@ public class RegistryProjectInfo {
     private final ExtensionCatalog primaryPlatformBom;
     private final List<ExtensionCatalog> extensionOrigins;
     private final List<Extension> extensions;
+    private final Map<?, ?> projectProperties;
 
     public RegistryProjectInfo(ExtensionCatalog primaryPlatformBom, List<ExtensionCatalog> extensionOrigins,
-            List<Extension> extensions) {
-        this.primaryPlatformBom = primaryPlatformBom;
-        this.extensionOrigins = extensionOrigins;
-        this.extensions = extensions;
+            List<Extension> extensions, Map<?, ?> projectProperties) {
+        this.primaryPlatformBom = Objects.requireNonNull(primaryPlatformBom, "Primary platform BOM is null");
+        this.extensionOrigins = Objects.requireNonNull(extensionOrigins, "Extension origins are null");
+        this.extensions = Objects.requireNonNull(extensions, "Extensions are null");
+        this.projectProperties = Objects.requireNonNull(projectProperties, "Project properties are null");
     }
 
     public ExtensionCatalog getPrimaryPlatformBom() {
@@ -106,5 +135,11 @@ public class RegistryProjectInfo {
 
     public List<Extension> getExtensions() {
         return extensions;
+    }
+
+    public ArtifactCoords getQuarkusMavenPlugin() {
+        return ArtifactCoords.jar(getRequiredProperty(projectProperties, "maven-plugin-groupId"),
+                getRequiredProperty(projectProperties, "maven-plugin-artifactId"),
+                getRequiredProperty(projectProperties, "maven-plugin-version"));
     }
 }

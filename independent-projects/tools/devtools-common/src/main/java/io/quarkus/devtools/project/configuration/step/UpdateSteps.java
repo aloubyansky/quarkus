@@ -9,6 +9,7 @@ import java.util.Map;
 
 import io.quarkus.devtools.commands.handlers.RegistryProjectInfo;
 import io.quarkus.devtools.project.configuration.ConfiguredApplication;
+import io.quarkus.devtools.project.configuration.ConfiguredValue;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.registry.catalog.Extension;
 import io.quarkus.registry.catalog.ExtensionCatalog;
@@ -30,9 +31,48 @@ public class UpdateSteps {
         return allUpdateSteps;
     }
 
-    public static void addUpdateSteps(ConfiguredApplication app, RegistryProjectInfo registryProjectInfo, UpdateSteps allUpdateSteps) {
-        new BomMapper(app, registryProjectInfo).addSteps(allUpdateSteps);
+    public static void addUpdateSteps(ConfiguredApplication app, RegistryProjectInfo registryProjectInfo,
+            UpdateSteps updateSteps) {
+        new BomMapper(app, registryProjectInfo).addSteps(updateSteps);
+        addDependencyUpdateSteps(app, registryProjectInfo, updateSteps);
 
+        System.out.println("Project Maven plugin " + app.getQuarkusPlugin());
+        System.out.println("Registry Maven plugin " + registryProjectInfo.getQuarkusMavenPlugin());
+
+        var configuredPlugin = app.getQuarkusPlugin();
+        var recommendedPlugin = registryProjectInfo.getQuarkusMavenPlugin();
+
+        final ConfiguredValue specificGroupId = updatePropertyOrReturnConfiguredValue(updateSteps, recommendedPlugin.getGroupId(), configuredPlugin.getGroupId());
+        final ConfiguredValue specificArtifactId = updatePropertyOrReturnConfiguredValue(updateSteps, recommendedPlugin.getArtifactId(), configuredPlugin.getArtifactId());
+        final ConfiguredValue specificVersion = updatePropertyOrReturnConfiguredValue(updateSteps, recommendedPlugin.getVersion(), configuredPlugin.getVersion());
+
+        if(specificGroupId != null || specificArtifactId != null || specificVersion != null) {
+            // TODO set specific plugin values
+            System.out.println("Update Maven plugin:");
+            if(specificGroupId != null) {
+                System.out.println("  groupId: " + specificGroupId + " -> " + recommendedPlugin.getGroupId() + ", file=" + specificGroupId.getResolvedValue().getSource().getPath());
+            }
+            if(specificArtifactId != null) {
+                System.out.println("  artifactId: " + specificArtifactId + " -> " + recommendedPlugin.getArtifactId() + ", file=" + specificArtifactId.getResolvedValue().getSource().getPath());
+            }
+            if(specificVersion != null) {
+                System.out.println("  version: " + specificVersion + " -> " + recommendedPlugin.getVersion() + ", file=" + specificVersion.getResolvedValue().getSource().getPath());
+            }
+        }
+    }
+
+    private static ConfiguredValue updatePropertyOrReturnConfiguredValue(UpdateSteps updateSteps, String recommendedValue, ConfiguredValue configuredValue) {
+        if(!recommendedValue.equals(configuredValue.getEffectiveValue())) {
+            if(configuredValue.getResolvedValue().getSource().isProperty()) {
+                updateSteps.addStep(PomPropertyUpdateStep.of(configuredValue.getResolvedValue(), recommendedValue));
+            } else {
+                return configuredValue;
+            }
+        }
+        return null;
+    }
+
+    private static void addDependencyUpdateSteps(ConfiguredApplication app, RegistryProjectInfo registryProjectInfo, UpdateSteps updateSteps) {
         final Map<ArtifactKey, String> recommendedExtensions = getRecommendedExtensionVersions(registryProjectInfo);
         for (var configuredExt : app.getTopExtensionDependencies()) {
             final String recommendedVersion = recommendedExtensions.remove(configuredExt.getKey());
@@ -49,7 +89,7 @@ public class UpdateSteps {
             } else if (!recommendedVersion.equals(configuredExt.getVersion().getEffectiveValue())) {
                 var configuredVersionValue = configuredExt.getVersion().getResolvedValue();
                 if (configuredVersionValue.getSource().isProperty()) {
-                    allUpdateSteps.addStep(PomPropertyUpdateStep.of(configuredVersionValue, recommendedVersion));
+                    updateSteps.addStep(PomPropertyUpdateStep.of(configuredVersionValue, recommendedVersion));
                 } else {
                     // TODO set specific version
                     System.out.println("set version " + configuredExt.toCompactString() + " -> " + recommendedVersion + " in "

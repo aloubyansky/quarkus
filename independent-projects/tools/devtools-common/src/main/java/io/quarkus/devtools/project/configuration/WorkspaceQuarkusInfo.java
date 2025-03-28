@@ -30,11 +30,11 @@ public class WorkspaceQuarkusInfo {
     public static void main(String[] args) throws Exception {
         //loadAndLog(Path.of("/home/aloubyansky/playground/code-with-quarkus"));
         //MavenProjectConfigurationLoader.load(Path.of("/home/aloubyansky/git/insights-runtimes-inventory"));
-        //loadAndLog(Path.of("/home/aloubyansky/git/hyades"));
+        loadAndLog(Path.of("/home/aloubyansky/git/hyades"));
         //loadAndLog(Path.of("/home/aloubyansky/git/camel-quarkus"));
         //loadAndLog(Path.of("/home/aloubyansky/git/camel-quarkus/integration-tests/sql"));
         //loadAndLog(Path.of("/home/aloubyansky/git/quarkus-super-heroes/"));
-        loadAndLog(Path.of("/home/aloubyansky/git/quarkus-mcp-servers/"));
+        //loadAndLog(Path.of("/home/aloubyansky/git/quarkus-mcp-servers/"));
         //loadAndLog(Path.of("/home/aloubyansky/playground/quarkus-update-projects/parent-direct-extension-dep/app"));
         //load(Path.of("/home/aloubyansky/git/quarkus-todo-app/quarkus-todo-reactive"));
         //generateUpdateRecipe(Path.of("/home/aloubyansky/git/keycloak"));
@@ -77,7 +77,7 @@ public class WorkspaceQuarkusInfo {
     }
 
     private static void logUpdateSteps(Collection<ConfiguredApplication> apps, BootstrapMavenContext mavenCtx,
-                                       MessageWriter log) {
+            MessageWriter log) {
         var extensionCatalog = getCatalogFromRegistry(apps, mavenCtx, log);
         var updateSteps = new UpdateSteps();
         for (var app : apps) {
@@ -94,7 +94,8 @@ public class WorkspaceQuarkusInfo {
         }
     }
 
-    private static void addUpdateSteps(UpdateSteps updateSteps, ConfiguredApplication app, ExtensionCatalog extensionCatalog, MessageWriter log) {
+    private static void addUpdateSteps(UpdateSteps updateSteps, ConfiguredApplication app, ExtensionCatalog extensionCatalog,
+            MessageWriter log) {
         log.info("Quarkus application " + app.getId());
         var extDeps = getTopExtensionMap(app);
         final RegistryProjectInfo registryInfo;
