@@ -67,8 +67,6 @@
                 <executions>
                     <execution>
                         <goals>
-                            <goal>generate-code</goal>
-                            <goal>generate-code-tests</goal>
                             <goal>build</goal>
                         </goals>
                     </execution>
@@ -83,6 +81,10 @@
                     <dependenciesToScan>
                         <dependency>org.acme:independent-tests</dependency>
                     </dependenciesToScan>
+                    <systemPropertyVariables>
+                        <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+                        <maven.home>\${maven.home}</maven.home>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
         </plugins>
