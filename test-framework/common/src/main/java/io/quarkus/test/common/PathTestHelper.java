@@ -8,7 +8,6 @@ import java.net.URI;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -247,7 +246,7 @@ public final class PathTestHelper {
 
         if (testClassLocation.endsWith(".jar")) {
             if (testClassLocation.endsWith("-tests.jar")) {
-                return Paths.get(new StringBuilder()
+                return Path.of(new StringBuilder()
                         .append(testClassLocation, 0, testClassLocation.length() - "-tests.jar".length())
                         .append(".jar")
                         .toString());

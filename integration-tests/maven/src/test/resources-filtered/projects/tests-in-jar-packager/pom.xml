@@ -29,6 +29,11 @@
         </dependencies>
     </dependencyManagement>
     <dependencies>
+        <!-- this is to compile the ThirdpartyResource -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest</artifactId>
+        </dependency>
         <!-- insert test dependencies here -->
         <dependency>
             <groupId>io.quarkus</groupId>

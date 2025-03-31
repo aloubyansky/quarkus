@@ -8,15 +8,15 @@ import org.junit.jupiter.api.Test;
 import io.quarkus.test.junit.QuarkusTest;
 
 @QuarkusTest
-public class HelloResourceTest {
+public class ThirdpartyResourceFromJarTest {
 
     @Test
     public void testHelloEndpoint() {
         given()
-                .when().get("/hello")
+                .when().get("/thirdparty")
                 .then()
                 .statusCode(200)
-                .body(is("hello jar friends"));
+                .body(is("Hello from thirdparty"));
     }
 
 }

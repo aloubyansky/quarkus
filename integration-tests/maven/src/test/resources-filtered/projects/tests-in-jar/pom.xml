@@ -39,6 +39,14 @@
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
+        <!-- This dependency includes the ThirdpartyResource tested by tests included in the above dependency.
+             This is how the Quarkus platform testsuite is setup -->
+        <dependency>
+            <groupId>org.acme</groupId>
+            <artifactId>independent-tests</artifactId>
+            <version>1.0-SNAPSHOT</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-junit5</artifactId>

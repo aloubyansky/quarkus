@@ -40,7 +40,10 @@ class VerifyIT extends MojoTestBase {
                 .execute(List.of("clean", "verify"), Map.of());
         assertThat(result.getProcess().waitFor()).isZero();
         // Hardcode a check to make sure some tests ran
-        assertThat(running.log().contains("Tests run: 1, Failures: 0, Errors: 0, Skipped: 0"));
+        String log = running.log();
+        assertThat(log).contains("[INFO] Running org.acme.HelloResourceFromJarTest");
+        assertThat(log).contains("[INFO] Running org.acme.ThirdpartyResourceFromJarTest");
+        assertThat(log).contains("Tests run: 2, Failures: 0, Errors: 0, Skipped: 0");
     }
 
 }
