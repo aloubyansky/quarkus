@@ -384,7 +384,7 @@ public class DependencyUtils {
     public static Dependency createDeploymentProjectDependency(Project project, String configurationName,
             TaskDependencyFactory taskDependencyFactory) {
         return project.getDependencies().create(
-                new DefaultProjectDependency((ProjectInternal) project, configurationName, true, taskDependencyFactory));
+                new DefaultProjectDependency((ProjectInternal) project, true, taskDependencyFactory));
     }
 
     private static Dependency createArtifactDeploymentDependency(DependencyHandler handler,
