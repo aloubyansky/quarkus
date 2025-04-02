@@ -25,7 +25,6 @@ import org.junit.jupiter.api.extension.ExecutionCondition;
 import org.junit.jupiter.api.extension.ExtensionContext;
 
 import io.quarkus.bootstrap.BootstrapException;
-import io.quarkus.bootstrap.app.AugmentAction;
 import io.quarkus.bootstrap.app.CuratedApplication;
 import io.quarkus.bootstrap.app.RunningQuarkusApplication;
 import io.quarkus.bootstrap.classloading.QuarkusClassLoader;
@@ -56,13 +55,13 @@ public class AbstractJvmQuarkusTestExtension extends AbstractQuarkusTestWithCont
     protected static Class<?> currentJUnitTestClass;
 
     // TODO only used by QuarkusMainTest, fix that class and delete this
-    protected PrepareResult createAugmentor(ExtensionContext context, Class<? extends QuarkusTestProfile> profile,
+    protected QuarkusTestPrepareResult createAugmentor(ExtensionContext context, Class<? extends QuarkusTestProfile> profile,
             Collection<Runnable> shutdownTasks) throws Exception {
 
         originalCl = Thread.currentThread().getContextClassLoader();
         final Class<?> requiredTestClass = context.getRequiredTestClass();
 
-        CuratedApplication curatedApplication = getCuratedApplication(requiredTestClass, context, shutdownTasks);
+        CuratedApplication curatedApplication = getCuratedApplication(requiredTestClass, context.getDisplayName());
 
         // TODO need to handle the gradle case - can we put it in that method?
         Path testClassLocation = getTestClassesLocation(requiredTestClass, curatedApplication);
@@ -90,17 +89,15 @@ public class AbstractJvmQuarkusTestExtension extends AbstractQuarkusTestWithCont
             props.put(TEST_PROFILE, profile.getName());
         }
         quarkusTestProfile = profile;
-        return new PrepareResult(curatedApplication
+        return new QuarkusTestPrepareResult(curatedApplication
                 .createAugmentor(TestBuildChainFunction.class.getName(), props), profileInstance,
-                curatedApplication, testClassLocation);
+                curatedApplication);
     }
 
-    protected CuratedApplication getCuratedApplication(Class<?> requiredTestClass, ExtensionContext context,
-            Collection<Runnable> shutdownTasks) throws BootstrapException, AppModelResolverException, IOException {
+    protected CuratedApplication getCuratedApplication(Class<?> requiredTestClass, String displayName)
+            throws AppModelResolverException, IOException, BootstrapException {
         // TODO make this abstract, push this implementation down to QuarkusTestExtension, since that is the only place it will work
-        CuratedApplication curatedApplication = ((QuarkusClassLoader) requiredTestClass.getClassLoader())
-                .getCuratedApplication();
-        return curatedApplication;
+        return ((QuarkusClassLoader) requiredTestClass.getClassLoader()).getCuratedApplication();
     }
 
     protected static QuarkusTestProfile getQuarkusTestProfile(Class<? extends QuarkusTestProfile> profile,
@@ -297,20 +294,5 @@ public class AbstractJvmQuarkusTestExtension extends AbstractQuarkusTestWithCont
         }
         return ConditionEvaluationResult.disabled("Test '" + context.getRequiredTestClass()
                 + "' disabled because 'quarkus.profile.test.tags' don't match the tags of '" + testProfile + "'");
-    }
-
-    protected static class PrepareResult {
-        protected final AugmentAction augmentAction;
-        protected final QuarkusTestProfile profileInstance;
-        protected final CuratedApplication curatedApplication;
-        protected final Path testClassLocation;
-
-        public PrepareResult(AugmentAction augmentAction, QuarkusTestProfile profileInstance,
-                CuratedApplication curatedApplication, Path testClassLocation) {
-            this.augmentAction = augmentAction;
-            this.profileInstance = profileInstance;
-            this.curatedApplication = curatedApplication;
-            this.testClassLocation = testClassLocation;
-        }
     }
 }
