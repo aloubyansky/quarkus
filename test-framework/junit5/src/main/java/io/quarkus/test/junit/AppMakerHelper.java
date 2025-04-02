@@ -10,6 +10,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -89,7 +90,8 @@ public class AppMakerHelper {
         return getPrepareResult(requiredTestClass, curatedApplication, profile, testClassLocation);
     }
 
-    private QuarkusTestProfile getQuarkusTestProfile(Class<? extends QuarkusTestProfile> profile)
+    static QuarkusTestProfile getQuarkusTestProfile(Class<? extends QuarkusTestProfile> profile,
+            Collection<Runnable> shutdownTasks)
             throws InstantiationException, IllegalAccessException, InvocationTargetException, NoSuchMethodException {
         if (profile == null) {
             return null;
@@ -100,8 +102,7 @@ public class AppMakerHelper {
         // TODO we make this twice, also in abstractjvmextension can we streamline that?
         // TODO We can't get rid of the one here because config needs to be set before augmentation, but maybe we can get rid of it on the test side?
         additional.putAll(profileInstance.getConfigOverrides());
-        if (!profileInstance.getEnabledAlternatives()
-                .isEmpty()) {
+        if (!profileInstance.getEnabledAlternatives().isEmpty()) {
             additional.put("quarkus.arc.selected-alternatives", profileInstance.getEnabledAlternatives()
                     .stream()
                     .peek((c) -> {
@@ -130,14 +131,19 @@ public class AppMakerHelper {
         //it's a lot simpler
         // TODO this is really ugly, set proper config on the app
         // Sadly, I don't think #42715 helps, because it kicks in after this code
-        configCleanup = RestorableSystemProperties.setProperties(additional)::close;
+        shutdownTasks.add(RestorableSystemProperties.setProperties(additional)::close);
         return profileInstance;
     }
 
     private QuarkusTestPrepareResult getPrepareResult(Class<?> requiredTestClass, CuratedApplication curatedApplication,
             Class<? extends QuarkusTestProfile> profile, Path testClassLocation)
             throws InvocationTargetException, InstantiationException, IllegalAccessException, NoSuchMethodException {
-        QuarkusTestProfile profileInstance = getQuarkusTestProfile(profile);
+        QuarkusTestProfile profileInstance = null;
+        if (profile != null) {
+            var shutdownTasks = new ArrayList<Runnable>(1);
+            profileInstance = getQuarkusTestProfile(profile, shutdownTasks);
+            configCleanup = shutdownTasks.get(0);
+        }
         Timing.staticInitStarted(curatedApplication
                 .getOrCreateBaseRuntimeClassLoader(),
                 curatedApplication

@@ -3,7 +3,6 @@ package io.quarkus.test.junit;
 import static io.quarkus.test.common.PathTestHelper.getTestClassesLocation;
 
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.Collection;
@@ -14,9 +13,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.ServiceConfigurationError;
 import java.util.Set;
-import java.util.stream.Collectors;
-
-import jakarta.enterprise.inject.Alternative;
 
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.junit.jupiter.api.Nested;
@@ -32,8 +28,6 @@ import io.quarkus.bootstrap.resolver.AppModelResolverException;
 import io.quarkus.bootstrap.runner.Timing;
 import io.quarkus.deployment.dev.testing.TestConfig;
 import io.quarkus.logging.Log;
-import io.quarkus.runtime.LaunchMode;
-import io.quarkus.test.common.RestorableSystemProperties;
 import io.smallrye.config.SmallRyeConfig;
 
 public class AbstractJvmQuarkusTestExtension extends AbstractQuarkusTestWithContextExtension
@@ -59,6 +53,7 @@ public class AbstractJvmQuarkusTestExtension extends AbstractQuarkusTestWithCont
             Collection<Runnable> shutdownTasks) throws Exception {
 
         originalCl = Thread.currentThread().getContextClassLoader();
+        quarkusTestProfile = profile;
         final Class<?> requiredTestClass = context.getRequiredTestClass();
 
         CuratedApplication curatedApplication = getCuratedApplication(requiredTestClass, context.getDisplayName());
@@ -81,14 +76,12 @@ public class AbstractJvmQuarkusTestExtension extends AbstractQuarkusTestWithCont
 
         // clear the test.url system property as the value leaks into the run when using different profiles
         System.clearProperty("test.url");
-        Map<String, String> additional = new HashMap<>();
 
-        QuarkusTestProfile profileInstance = getQuarkusTestProfile(profile, shutdownTasks, additional);
+        QuarkusTestProfile profileInstance = AppMakerHelper.getQuarkusTestProfile(profile, shutdownTasks);
 
         if (profile != null) {
             props.put(TEST_PROFILE, profile.getName());
         }
-        quarkusTestProfile = profile;
         return new QuarkusTestPrepareResult(curatedApplication
                 .createAugmentor(TestBuildChainFunction.class.getName(), props), profileInstance,
                 curatedApplication);
@@ -98,37 +91,6 @@ public class AbstractJvmQuarkusTestExtension extends AbstractQuarkusTestWithCont
             throws AppModelResolverException, IOException, BootstrapException {
         // TODO make this abstract, push this implementation down to QuarkusTestExtension, since that is the only place it will work
         return ((QuarkusClassLoader) requiredTestClass.getClassLoader()).getCuratedApplication();
-    }
-
-    protected static QuarkusTestProfile getQuarkusTestProfile(Class<? extends QuarkusTestProfile> profile,
-            Collection<Runnable> shutdownTasks, Map<String, String> additional)
-            throws InstantiationException, IllegalAccessException, InvocationTargetException, NoSuchMethodException {
-        QuarkusTestProfile profileInstance = null;
-        if (profile != null) {
-            profileInstance = profile.getConstructor().newInstance();
-            // TODO the stuff below here is unique to this class - TODO what does this comment even mean?
-            additional.putAll(profileInstance.getConfigOverrides());
-            if (!profileInstance.getEnabledAlternatives().isEmpty()) {
-                additional.put("quarkus.arc.selected-alternatives", profileInstance.getEnabledAlternatives().stream()
-                        .peek((c) -> {
-                            if (!c.isAnnotationPresent(Alternative.class)) {
-                                throw new RuntimeException(
-                                        "Enabled alternative " + c + " is not annotated with @Alternative");
-                            }
-                        })
-                        .map(Class::getName).collect(Collectors.joining(",")));
-            }
-            if (profileInstance.disableApplicationLifecycleObservers()) {
-                additional.put("quarkus.arc.test.disable-application-lifecycle-observers", "true");
-            }
-            if (profileInstance.getConfigProfile() != null) {
-                additional.put(LaunchMode.TEST.getProfileKey(), profileInstance.getConfigProfile());
-            }
-            //we just use system properties for now
-            //it's a lot simpler
-            shutdownTasks.add(RestorableSystemProperties.setProperties(additional)::close);
-        }
-        return profileInstance;
     }
 
     // TODO is it nicer to pass in the test class, or invoke the getter twice?
