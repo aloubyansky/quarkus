@@ -244,10 +244,17 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
 
         private volatile boolean open = true;
 
+        Throwable closeStacktrace;
+
         protected OpenArchivePathTree(FileSystem fs) {
             super(ArchivePathTree.this.pathFilter, ArchivePathTree.this);
             this.fs = fs;
             this.rootPath = fs.getPath("/");
+        }
+
+        @Override
+        public Throwable getCloseStacktrace() {
+            return closeStacktrace;
         }
 
         @Override
@@ -393,6 +400,7 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
                 open = false;
                 rootPath = null;
                 fs.close();
+                closeStacktrace = new Exception("CLOSE ArchivePathTree");
             } catch (IOException e) {
                 throw e;
             } finally {

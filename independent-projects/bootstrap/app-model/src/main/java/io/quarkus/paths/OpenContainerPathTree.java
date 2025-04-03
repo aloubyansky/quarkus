@@ -91,9 +91,23 @@ public abstract class OpenContainerPathTree extends PathTreeWithManifest impleme
         return this;
     }
 
+    public Throwable getCloseStacktrace() {
+        return null;
+    }
+
     @Override
     public Collection<Path> getRoots() {
-        return List.of(getRootPath());
+        final Path rootPath = getRootPath();
+        if (rootPath == null) {
+            String msg = "rootPath is null for " + getContainerPath();
+            if (getCloseStacktrace() != null) {
+                getCloseStacktrace().printStackTrace();
+            } else {
+                msg += " no trace";
+            }
+            throw new RuntimeException(msg);
+        }
+        return List.of(rootPath);
     }
 
     @Override
