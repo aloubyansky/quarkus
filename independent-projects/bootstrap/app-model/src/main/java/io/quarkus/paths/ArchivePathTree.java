@@ -400,7 +400,7 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
                 open = false;
                 rootPath = null;
                 fs.close();
-                closeStacktrace = new Exception("CLOSE ArchivePathTree");
+                closeStacktrace = new Exception("CLOSE ArchivePathTree " + getContainerPath());
             } catch (IOException e) {
                 throw e;
             } finally {

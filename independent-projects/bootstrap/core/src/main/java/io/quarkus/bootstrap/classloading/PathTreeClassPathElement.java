@@ -201,6 +201,10 @@ public class PathTreeClassPathElement extends AbstractClassPathElement {
     public void close() throws IOException {
         lock.writeLock().lock();
         resources = null;
+        if (getDependencyKey() != null
+                && getDependencyKey().getArtifactId().equals("camel-quarkus-integration-tests-support-certificate-generator")) {
+            new Exception("CLOSE " + getDependencyKey()).printStackTrace();
+        }
         try {
             pathTree.close();
         } finally {
