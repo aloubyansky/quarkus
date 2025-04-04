@@ -53,8 +53,11 @@ class SharedArchivePathTree extends ArchivePathTree {
     @Override
     public OpenPathTree open() {
         var lastOpen = this.lastOpen;
-        if (lastOpen != null && lastOpen.acquire()) {
-            return new CallerOpenPathTree(lastOpen);
+        if (lastOpen != null) {
+            var acquired = lastOpen.acquire();
+            if (acquired != null) {
+                return acquired;
+            }
         }
         try {
             this.lastOpen = new SharedOpenArchivePathTree(openFs());
@@ -73,14 +76,18 @@ class SharedArchivePathTree extends ArchivePathTree {
             openCount.incrementAndGet();
         }
 
-        private boolean acquire() {
+        private CallerOpenPathTree acquire() {
             readLock().lock();
-            final boolean result = lastOpen == this && isOpen();
-            if (result) {
-                users.incrementAndGet();
+            try {
+                final boolean result = lastOpen == this && isOpen();
+                if (result) {
+                    users.incrementAndGet();
+                    return new CallerOpenPathTree(this);
+                }
+            } finally {
+                readLock().unlock();
             }
-            readLock().unlock();
-            return result;
+            return null;
         }
 
         @Override
