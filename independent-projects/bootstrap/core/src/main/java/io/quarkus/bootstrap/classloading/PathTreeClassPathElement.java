@@ -61,6 +61,10 @@ public class PathTreeClassPathElement extends AbstractClassPathElement {
         return resolvedDependency;
     }
 
+    public OpenPathTree getPathTree() {
+        return pathTree;
+    }
+
     @Override
     public Path getRoot() {
         return pathTree.getOriginalTree().getRoots().iterator().next();

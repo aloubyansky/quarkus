@@ -33,6 +33,7 @@ import io.quarkus.bootstrap.app.CuratedApplication;
 import io.quarkus.bootstrap.app.QuarkusBootstrap;
 import io.quarkus.bootstrap.app.SbomResult;
 import io.quarkus.bootstrap.classloading.ClassLoaderEventListener;
+import io.quarkus.bootstrap.classloading.PathTreeClassPathElement;
 import io.quarkus.bootstrap.classloading.QuarkusClassLoader;
 import io.quarkus.bootstrap.util.PropertyUtils;
 import io.quarkus.builder.BuildChainBuilder;
@@ -284,10 +285,29 @@ public class AugmentActionImpl implements AugmentAction {
         if (launchMode == LaunchMode.NORMAL) {
             throw new IllegalStateException("Cannot launch a runtime application with NORMAL launch mode");
         }
+        StartupActionImpl sa = null;
         try (QuarkusClassLoader classLoader = curatedApplication.createDeploymentClassLoader()) {
             @SuppressWarnings("unchecked")
             BuildResult result = runAugment(true, Collections.emptySet(), null, classLoader, NON_NORMAL_MODE_OUTPUTS);
-            return new StartupActionImpl(curatedApplication, result);
+            sa = new StartupActionImpl(curatedApplication, result);
+            logCPE(sa, " in try");
+            return sa;
+        } finally {
+            if (sa != null) {
+                logCPE(sa, " in finally");
+            }
+        }
+    }
+
+    private static void logCPE(StartupActionImpl sa, String phase) {
+        var cpes = sa.getClassLoader().getElementsWithResource(
+                "org/apache/camel/quarkus/test/support/certificate/TestCertificateGenerationExtension.class", false);
+        if (cpes.isEmpty()) {
+            System.out.println("AugmentActionImpl.logCPE is empty");
+        } else {
+            var pathTreeCpe = ((PathTreeClassPathElement) cpes.get(0));
+            System.out.println("AugmentActionImpl.logCPE " + pathTreeCpe.getDependencyKey() + " open="
+                    + pathTreeCpe.getPathTree().isOpen() + phase);
         }
     }
 
