@@ -300,8 +300,9 @@ public class AugmentActionImpl implements AugmentAction {
     }
 
     private static void logCPE(StartupActionImpl sa, String phase) {
-        var cpes = sa.getClassLoader().getElementsWithResource(
-                "org/apache/camel/quarkus/test/support/certificate/TestCertificateGenerationExtension.class", false);
+        //final String name = "org/apache/camel/quarkus/test/support/certificate/TestCertificateGenerationExtension.class";
+        final String name = "io/quarkus/runtime/Application.class";
+        var cpes = sa.getClassLoader().getElementsWithResource(name, false);
         if (cpes.isEmpty()) {
             System.out.println("AugmentActionImpl.logCPE is empty");
         } else {
