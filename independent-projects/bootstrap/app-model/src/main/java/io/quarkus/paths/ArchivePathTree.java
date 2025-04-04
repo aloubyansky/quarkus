@@ -402,7 +402,7 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
                 fs.close();
                 if (getContainerPath().getFileName().toString()
                         .contains("camel-quarkus-integration-tests-support-certificate-generator")) {
-                    System.out.println("OpenArchivePathTree.close " + getContainerPath());
+                    new Exception("OpenArchivePathTree.close " + getContainerPath()).printStackTrace();
                 }
                 closeStacktrace = new Exception("CLOSE ArchivePathTree " + getContainerPath());
             } catch (IOException e) {
