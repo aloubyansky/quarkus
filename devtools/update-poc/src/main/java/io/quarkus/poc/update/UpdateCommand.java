@@ -32,6 +32,7 @@ public class UpdateCommand implements Runnable {
     @Override
     public void run() {
         var log = MessageWriter.info();
+        final Path projectDir = Utils.getProjectDir(this.projectDir);
         var mavenCtx = initMavenContext(projectDir);
         logUpdateSteps(readAppConfig(projectDir, mavenCtx, log), mavenCtx, log);
     }
