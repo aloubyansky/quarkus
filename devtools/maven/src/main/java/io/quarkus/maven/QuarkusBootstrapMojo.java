@@ -2,12 +2,14 @@ package io.quarkus.maven;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -158,7 +160,10 @@ public abstract class QuarkusBootstrapMojo extends AbstractMojo {
      * Whether to close the bootstrapped applications after the execution
      */
     @Parameter(property = "quarkusCloseBootstrappedApp")
-    private Boolean closeBootstrappedApp;
+    Boolean closeBootstrappedApp;
+
+    @Parameter(property = "reloadPoms")
+    Set<File> reloadPoms = Set.of();
 
     private ArtifactKey projectId;
 
@@ -282,6 +287,10 @@ public abstract class QuarkusBootstrapMojo extends AbstractMojo {
 
     protected String bootstrapId() {
         return bootstrapId == null ? mojoExecution.getExecutionId() : bootstrapId;
+    }
+
+    protected Collection<File> reloadPoms() {
+        return reloadPoms == null ? List.of() : reloadPoms;
     }
 
     protected ArtifactKey projectId() {

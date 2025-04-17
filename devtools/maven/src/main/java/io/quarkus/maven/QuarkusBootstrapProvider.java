@@ -7,6 +7,7 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -21,7 +22,6 @@ import javax.inject.Named;
 import javax.inject.Singleton;
 
 import org.apache.maven.artifact.Artifact;
-import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.project.MavenProject;
@@ -80,13 +80,17 @@ public class QuarkusBootstrapProvider implements Closeable {
         return ArtifactKey.ga(project.getGroupId(), project.getArtifactId());
     }
 
-    static Map<Path, Model> getProjectMap(MavenSession session) {
-        final List<MavenProject> allProjects = session.getAllProjects();
+    static Map<Path, Model> getProjectMap(QuarkusBootstrapMojo mojo) {
+        final List<MavenProject> allProjects = mojo.mavenSession().getAllProjects();
         if (allProjects == null) {
             return Map.of();
         }
+        final Collection<File> reloadPoms = mojo.reloadPoms();
         final Map<Path, Model> projectModels = new HashMap<>(allProjects.size());
         for (MavenProject mp : allProjects) {
+            if (reloadPoms.contains(mp.getFile())) {
+                continue;
+            }
             final Model model = getRawModel(mp);
             projectModels.put(mp.getFile().toPath(), model);
             // The Maven Model API determines the project directory as the directory containing the POM file.
@@ -234,7 +238,7 @@ public class QuarkusBootstrapProvider implements Closeable {
                                     .setUserSettings(mojo.mavenSession().getRequest().getUserSettingsFile())
                                     .setCurrentProject(mojo.mavenProject().getFile().toString())
                                     .setPreferPomsFromWorkspace(true)
-                                    .setProjectModelProvider(getProjectMap(mojo.mavenSession()))
+                                    .setProjectModelProvider(getProjectMap(mojo))
                                     // pass the repositories since Maven extensions could manipulate repository configs
                                     .setRemoteRepositories(mojo.remoteRepositories())
                                     .setEffectiveModelBuilder(BootstrapMavenContextConfig
