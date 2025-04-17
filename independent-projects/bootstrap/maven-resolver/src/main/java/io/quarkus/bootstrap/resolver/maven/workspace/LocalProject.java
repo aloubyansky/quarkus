@@ -352,6 +352,11 @@ public class LocalProject {
             }
             if (project.rawModel.getBuild() != null) {
                 dir = f.apply(project.rawModel.getBuild());
+                // in case the "raw" model is passed in from the reactor by the QuarkusBootstrapProvider,
+                // the Build will contain an effective config, so we need to take the relative path
+                if (dir != null) {
+                    // TODO
+                }
             }
         }
         return dir;

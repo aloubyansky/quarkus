@@ -2,7 +2,6 @@ package io.quarkus.maven;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,7 +37,10 @@ import io.quarkus.runtime.LaunchMode;
 
 public abstract class QuarkusBootstrapMojo extends AbstractMojo {
 
-    static final String CLOSE_BOOTSTRAPPED_APP = "closeBootstrappedApp";
+    static final String BOOTSTRAP_ID_PARAM = "bootstrapId";
+    static final String CLOSE_BOOTSTRAPPED_APP_PARAM = "closeBootstrappedApp";
+    static final String MODE_PARAM = "mode";
+    static final String RELOAD_POMS_PARAM = "reloadPoms";
 
     static final String NATIVE_PROFILE_NAME = "native";
 
@@ -162,6 +164,10 @@ public abstract class QuarkusBootstrapMojo extends AbstractMojo {
     @Parameter(property = "quarkusCloseBootstrappedApp")
     Boolean closeBootstrappedApp;
 
+    /**
+     * POM files from the workspace that should be reloaded from the disk instead of taken from the Maven reactor.
+     * This parameter is not supposed to be configured by a user.
+     */
     @Parameter(property = "reloadPoms")
     Set<File> reloadPoms = Set.of();
 
@@ -287,10 +293,6 @@ public abstract class QuarkusBootstrapMojo extends AbstractMojo {
 
     protected String bootstrapId() {
         return bootstrapId == null ? mojoExecution.getExecutionId() : bootstrapId;
-    }
-
-    protected Collection<File> reloadPoms() {
-        return reloadPoms == null ? List.of() : reloadPoms;
     }
 
     protected ArtifactKey projectId() {

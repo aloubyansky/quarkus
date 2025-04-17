@@ -1,6 +1,8 @@
 package io.quarkus.maven;
 
 import static io.quarkus.analytics.dto.segment.TrackEventType.DEV_MODE;
+import static io.quarkus.maven.QuarkusBootstrapMojo.CLOSE_BOOTSTRAPPED_APP_PARAM;
+import static io.quarkus.maven.QuarkusBootstrapMojo.MODE_PARAM;
 import static io.smallrye.common.expression.Expression.Flag.LENIENT_SYNTAX;
 import static io.smallrye.common.expression.Expression.Flag.NO_TRIM;
 import static java.util.Collections.emptyMap;
@@ -665,7 +667,15 @@ public class DevMojo extends AbstractMojo {
         return handleAutoCompile(List.of());
     }
 
-    private String handleAutoCompile(List<String> changedPoms) throws MojoExecutionException {
+    /**
+     * Invokes Maven project goals that are meant to be executed before quarkus:dev,
+     * unless they have already been executed.
+     *
+     * @param reloadPoms a list of POM files that should be reloaded from disk instead of read from the reactor
+     * @return bootstrap id
+     * @throws MojoExecutionException in case of an error
+     */
+    private String handleAutoCompile(List<String> reloadPoms) throws MojoExecutionException {
         List<String> goals = session.getGoals();
         // check for default goal(s) if none were specified explicitly,
         // see also org.apache.maven.lifecycle.internal.DefaultLifecycleTaskSegmentCalculator
@@ -788,7 +798,7 @@ public class DevMojo extends AbstractMojo {
                 for (String goal : pe.execution.getGoals()) {
                     if (!executedGoals.contains(goal)) {
                         if (quarkusGoalParams == null) {
-                            quarkusGoalParams = getQuarkusGoalParams(bootstrapId, changedPoms);
+                            quarkusGoalParams = getQuarkusGoalParams(bootstrapId, reloadPoms);
                         }
                         try {
                             executeGoal(pe, goal,
@@ -809,11 +819,18 @@ public class DevMojo extends AbstractMojo {
         return bootstrapId;
     }
 
+    /**
+     * Returns a map of parameters for the Quarkus plugin goals to be invoked.
+     *
+     * @param bootstrapId bootstrap id
+     * @param reloadPoms POM files to be reloaded from disk instead of taken from the reactor
+     * @return map of parameters for the Quarkus plugin goals
+     */
     private static Map<String, String> getQuarkusGoalParams(String bootstrapId, List<String> reloadPoms) {
         final Map<String, String> result = new HashMap<>(4);
-        result.put("mode", LaunchMode.DEVELOPMENT.name());
-        result.put(QuarkusBootstrapMojo.CLOSE_BOOTSTRAPPED_APP, "false");
-        result.put("bootstrapId", bootstrapId);
+        result.put(QuarkusBootstrapMojo.MODE_PARAM, LaunchMode.DEVELOPMENT.name());
+        result.put(QuarkusBootstrapMojo.CLOSE_BOOTSTRAPPED_APP_PARAM, "false");
+        result.put(QuarkusBootstrapMojo.BOOTSTRAP_ID_PARAM, bootstrapId);
         if (reloadPoms != null && !reloadPoms.isEmpty()) {
             String reloadPomsStr;
             if (reloadPoms.size() == 1) {
@@ -826,7 +843,7 @@ public class DevMojo extends AbstractMojo {
                 }
                 reloadPomsStr = sb.toString();
             }
-            result.put("reloadPoms", reloadPomsStr);
+            result.put(QuarkusBootstrapMojo.RELOAD_POMS_PARAM, reloadPomsStr);
         }
         return result;
     }
@@ -1042,7 +1059,7 @@ public class DevMojo extends AbstractMojo {
             }
         }
 
-        if ((Xpp3Dom) plugin.getConfiguration() != null) {
+        if (plugin.getConfiguration() != null) {
             mergedConfig = mergedConfig == null ? (Xpp3Dom) plugin.getConfiguration()
                     : Xpp3Dom.mergeXpp3Dom(mergedConfig, (Xpp3Dom) plugin.getConfiguration(), true);
         }

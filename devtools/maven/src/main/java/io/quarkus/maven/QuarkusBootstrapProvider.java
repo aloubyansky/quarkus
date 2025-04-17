@@ -7,7 +7,6 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -85,10 +84,9 @@ public class QuarkusBootstrapProvider implements Closeable {
         if (allProjects == null) {
             return Map.of();
         }
-        final Collection<File> reloadPoms = mojo.reloadPoms();
         final Map<Path, Model> projectModels = new HashMap<>(allProjects.size());
         for (MavenProject mp : allProjects) {
-            if (reloadPoms.contains(mp.getFile())) {
+            if (mojo.reloadPoms.contains(mp.getFile())) {
                 continue;
             }
             final Model model = getRawModel(mp);
