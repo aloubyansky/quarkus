@@ -55,9 +55,7 @@ public class ConditionalDependencyResolver {
     }
 
     public static void resolve(Project project, LaunchMode mode, TaskDependencyFactory taskDependencyFactory) {
-        new ConditionalDependencyResolver(project, mode, taskDependencyFactory).resolve(
-                project.getConfigurations().getByName(ApplicationDeploymentClasspathBuilder.getBaseRuntimeConfigName(mode)),
-                mode);
+        new ConditionalDependencyResolver(project, mode, taskDependencyFactory).resolve();
     }
 
     private final Attribute<String> quarkusDepAttr;
@@ -75,19 +73,21 @@ public class ConditionalDependencyResolver {
         this.taskDependencyFactory = taskDependencyFactory;
     }
 
-    private void resolve(Configuration baseConfig, LaunchMode mode) {
+    private Configuration getBaseConfiguration() {
+        return project.getConfigurations().getByName(ApplicationDeploymentClasspathBuilder.getBaseRuntimeConfigName(mode));
+    }
 
-        final String configName = getConfigurationName(mode);
+    private void resolve() {
         project.getConfigurations().register(
-                configName,
+                getConfigurationName(mode),
                 config -> {
-                    config.extendsFrom(baseConfig);
+                    config.extendsFrom(getBaseConfiguration());
                     config.attributes(this::selectConditionalAttribute);
                     final ListProperty<Dependency> dependencyProperty = project.getObjects().listProperty(Dependency.class);
                     final AtomicInteger invocations = new AtomicInteger();
                     config.getDependencies().addAllLater(dependencyProperty.value(project.provider(() -> {
                         if (invocations.getAndIncrement() == 0) {
-                            activateConditionalDeps(baseConfig);
+                            activateConditionalDeps(getBaseConfiguration());
                         }
                         return Set.of();
                     })));
