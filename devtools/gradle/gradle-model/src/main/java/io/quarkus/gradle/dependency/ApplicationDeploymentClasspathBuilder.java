@@ -40,7 +40,6 @@ import io.quarkus.runtime.LaunchMode;
 public class ApplicationDeploymentClasspathBuilder {
 
     public static final String QUARKUS_BOOTSTRAP_RESOLVER_CONFIGURATION = "quarkusBootstrapResolverConfiguration";
-    private static final String ON = "on";
 
     public static String getLaunchModeAlias(LaunchMode mode) {
         if (mode == LaunchMode.DEVELOPMENT) {
@@ -77,8 +76,8 @@ public class ApplicationDeploymentClasspathBuilder {
         configContainer.register(ToolingUtils.DEV_MODE_CONFIGURATION_NAME, config -> {
             config.extendsFrom(configContainer.getByName(JavaPlugin.IMPLEMENTATION_CONFIGURATION_NAME));
             config.setCanBeConsumed(false);
-            config.attributes(attrs -> attrs.attribute(ConditionalDependencyResolver
-                    .getQuarkusConditionalDependencyAttribute(project.getName(), LaunchMode.TEST), ON));
+            config.attributes(attrs -> ConditionalDependencyResolver.setConditionalAttributes(
+                    attrs, project.getName(), LaunchMode.TEST));
         });
 
         // Base runtime configurations for every launch mode
@@ -86,16 +85,16 @@ public class ApplicationDeploymentClasspathBuilder {
                 .register(ApplicationDeploymentClasspathBuilder.getBaseRuntimeConfigName(LaunchMode.TEST), config -> {
                     config.extendsFrom(configContainer.getByName(JavaPlugin.TEST_RUNTIME_CLASSPATH_CONFIGURATION_NAME));
                     config.setCanBeConsumed(false);
-                    config.attributes(attrs -> attrs.attribute(ConditionalDependencyResolver
-                            .getQuarkusConditionalDependencyAttribute(project.getName(), LaunchMode.TEST), ON));
+                    config.attributes(attrs -> ConditionalDependencyResolver.setConditionalAttributes(
+                            attrs, project.getName(), LaunchMode.TEST));
                 });
 
         configContainer
                 .register(ApplicationDeploymentClasspathBuilder.getBaseRuntimeConfigName(LaunchMode.NORMAL), config -> {
                     config.extendsFrom(configContainer.getByName(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME));
                     config.setCanBeConsumed(false);
-                    config.attributes(attrs -> attrs.attribute(ConditionalDependencyResolver
-                            .getQuarkusConditionalDependencyAttribute(project.getName(), LaunchMode.NORMAL), ON));
+                    config.attributes(attrs -> ConditionalDependencyResolver.setConditionalAttributes(
+                            attrs, project.getName(), LaunchMode.NORMAL));
                 });
 
         configContainer
@@ -105,8 +104,8 @@ public class ApplicationDeploymentClasspathBuilder {
                             configContainer.getByName(JavaPlugin.COMPILE_CLASSPATH_CONFIGURATION_NAME),
                             configContainer.getByName(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME));
                     config.setCanBeConsumed(false);
-                    config.attributes(attrs -> attrs.attribute(ConditionalDependencyResolver
-                            .getQuarkusConditionalDependencyAttribute(project.getName(), LaunchMode.DEVELOPMENT), ON));
+                    config.attributes(attrs -> ConditionalDependencyResolver.setConditionalAttributes(
+                            attrs, project.getName(), LaunchMode.DEVELOPMENT));
                 });
     }
 
@@ -232,8 +231,8 @@ public class ApplicationDeploymentClasspathBuilder {
                 configuration.extendsFrom(
                         project.getConfigurations()
                                 .getByName(ApplicationDeploymentClasspathBuilder.getBaseRuntimeConfigName(mode)));
-                configuration.attributes(attrs -> attrs.attribute(
-                        ConditionalDependencyResolver.getQuarkusConditionalDependencyAttribute(project.getName(), mode), ON));
+                configuration.attributes(
+                        attrs -> ConditionalDependencyResolver.setConditionalAttributes(attrs, project.getName(), mode));
             });
             if (!isLegacyConfig(project)) {
                 ConditionalDependencyResolver.resolve(project, mode, taskDependencyFactory);
