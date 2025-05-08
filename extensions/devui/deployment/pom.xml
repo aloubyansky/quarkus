@@ -1,60 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
-        <artifactId>quarkus-vertx-http-parent</artifactId>
+        <artifactId>quarkus-devui-parent</artifactId>
         <groupId>io.quarkus</groupId>
         <version>999-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>quarkus-vertx-http-deployment</artifactId>
-    <name>Quarkus - Vert.x - HTTP - Deployment</name>
-
-    <properties>
-        <apacheds-protocol-dns.version>2.0.0-M23</apacheds-protocol-dns.version>
-    </properties>
+    <artifactId>quarkus-devui-deployment</artifactId>
+    <name>Quarkus - Dev UI - Deployment</name>
 
     <dependencies>
         <dependency>
             <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-vertx-deployment</artifactId>
+            <artifactId>quarkus-devui</artifactId>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-vertx-http</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-vertx-http-dev</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-vertx-http-deployment-spi</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-mutiny-deployment</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-tls-registry-deployment</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-credentials-deployment</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-kubernetes-spi</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-security-spi</artifactId>
+            <artifactId>quarkus-vertx-http-deployment</artifactId>
         </dependency>
 
-        <!-- Dev UI
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-vertx-http-dev-ui-spi</artifactId>
@@ -67,7 +34,7 @@
             <groupId>io.mvnpm</groupId>
             <artifactId>importmap</artifactId>
         </dependency>
-        < ! - - Used for the dev ui. Note that there is no corresponding runtime dependency - - >
+        <!-- Used for the dev ui. Note that there is no corresponding runtime dependency -->
         <dependency>
             <groupId>io.quarkus.qute</groupId>
             <artifactId>qute-core</artifactId>
@@ -94,24 +61,15 @@
                 </exclusion>
             </exclusions>
         </dependency>
-        -->
 
-        <!-- Test dependencies -->
-        <!--
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-vertx-http-dev-ui-tests</artifactId>
             <scope>test</scope>
         </dependency>
-        -->
         <dependency>
             <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-security-deployment</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-security-test-utils</artifactId>
+            <artifactId>quarkus-junit5</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -120,8 +78,8 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-junit5</artifactId>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-web-client</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -139,38 +97,10 @@
             <artifactId>assertj-core</artifactId>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>io.vertx</groupId>
-            <artifactId>vertx-web-client</artifactId>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>io.smallrye.certs</groupId>
-            <artifactId>smallrye-certificate-generator-junit5</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.directory.server</groupId>
-            <artifactId>apacheds-protocol-dns</artifactId>
-            <version>${apacheds-protocol-dns.version}</version>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
 
     <build>
         <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-failsafe-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>integration-test</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
             <plugin>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <executions>
@@ -188,12 +118,6 @@
                     </execution>
                 </executions>
             </plugin>
-
-            <plugin>
-                <groupId>de.thetaphi</groupId>
-                <artifactId>forbiddenapis</artifactId>
-            </plugin>
         </plugins>
     </build>
-
 </project>

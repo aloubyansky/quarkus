@@ -118,6 +118,7 @@
                     </capabilities>
                     <conditionalDevDependencies>
                         <artifact>${project.groupId}:${project.artifactId}-dev:${project.version}</artifact>
+                        <artifact>${project.groupId}:quarkus-devui:${project.version}</artifact>
                     </conditionalDevDependencies>
                 </configuration>
             </plugin>
