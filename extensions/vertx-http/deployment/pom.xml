@@ -54,7 +54,7 @@
             <artifactId>quarkus-security-spi</artifactId>
         </dependency>
 
-        <!-- Dev UI -->
+        <!-- Dev UI
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-vertx-http-dev-ui-spi</artifactId>
@@ -67,7 +67,7 @@
             <groupId>io.mvnpm</groupId>
             <artifactId>importmap</artifactId>
         </dependency>
-        <!-- Used for the dev ui. Note that there is no corresponding runtime dependency -->
+        < ! - - Used for the dev ui. Note that there is no corresponding runtime dependency - - >
         <dependency>
             <groupId>io.quarkus.qute</groupId>
             <artifactId>qute-core</artifactId>
@@ -94,13 +94,16 @@
                 </exclusion>
             </exclusions>
         </dependency>
-        
+        -->
+
         <!-- Test dependencies -->
+        <!--
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-vertx-http-dev-ui-tests</artifactId>
             <scope>test</scope>
         </dependency>
+        -->
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-security-deployment</artifactId>
