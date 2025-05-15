@@ -3,6 +3,9 @@ package io.quarkus.gradle.workspace.descriptors;
 import java.io.File;
 import java.util.Set;
 
+import io.quarkus.bootstrap.workspace.WorkspaceModule;
+import io.quarkus.bootstrap.workspace.WorkspaceModuleId;
+
 public interface ProjectDescriptor {
 
     public enum TaskType {
@@ -24,4 +27,7 @@ public interface ProjectDescriptor {
 
     public TaskType getTaskType(String task);
 
+    WorkspaceModule.Mutable getWorkspaceModule();
+
+    WorkspaceModule.Mutable getWorkspaceModuleOrNull(WorkspaceModuleId moduleId);
 }

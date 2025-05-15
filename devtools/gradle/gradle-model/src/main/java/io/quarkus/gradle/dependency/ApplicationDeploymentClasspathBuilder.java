@@ -1,5 +1,6 @@
 package io.quarkus.gradle.dependency;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -18,6 +19,7 @@ import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.ModuleDependency;
 import org.gradle.api.artifacts.ModuleIdentifier;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
+import org.gradle.api.artifacts.ModuleVersionSelector;
 import org.gradle.api.artifacts.ResolvedArtifact;
 import org.gradle.api.artifacts.ResolvedDependency;
 import org.gradle.api.artifacts.dsl.DependencyHandler;
@@ -34,11 +36,13 @@ import io.quarkus.bootstrap.resolver.AppModelResolverException;
 import io.quarkus.gradle.tooling.ToolingUtils;
 import io.quarkus.gradle.tooling.dependency.DependencyUtils;
 import io.quarkus.gradle.tooling.dependency.ExtensionDependency;
+import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.runtime.LaunchMode;
 
 public class ApplicationDeploymentClasspathBuilder {
 
     public static final String QUARKUS_BOOTSTRAP_RESOLVER_CONFIGURATION = "quarkusBootstrapResolverConfiguration";
+    private static final String QUARKUS_PLATFORM_PROPERTIES = "quarkusPlatformProperties";
 
     private static String getLaunchModeAlias(LaunchMode mode) {
         if (mode == LaunchMode.DEVELOPMENT) {
@@ -137,11 +141,8 @@ public class ApplicationDeploymentClasspathBuilder {
      * have a place to be stored in the project, they're stored here. The way that extensions are
      * tracked and conditional dependencies needs some attention, which will likely resolve this.
      */
-    private static final HashMap<String, PlatformImportsImpl> platformImports = new HashMap<>();
-    /**
-     * The key used to look up the correct PlatformImports that matches the platformConfigurationName
-     */
-    private final String platformImportName;
+    private final PlatformImportsImpl platformImports;
+    private final List<Dependency> platformDataDeps = new ArrayList<>();
 
     public ApplicationDeploymentClasspathBuilder(Project project, LaunchMode mode) {
         this.project = project;
@@ -149,10 +150,11 @@ public class ApplicationDeploymentClasspathBuilder {
         this.runtimeConfigurationName = getFinalRuntimeConfigName(mode);
         this.platformConfigurationName = ToolingUtils.toPlatformConfigurationName(this.runtimeConfigurationName);
         this.deploymentConfigurationName = ToolingUtils.toDeploymentConfigurationName(this.runtimeConfigurationName);
-        this.platformImportName = project.getPath() + ":" + this.platformConfigurationName;
         this.compileOnlyConfigurationName = "quarkus" + getLaunchModeAlias(mode) + "CompileOnlyConfiguration";
+        this.platformImports = new PlatformImportsImpl();
 
         setUpPlatformConfiguration();
+        setUpPlatformPropertiesConfiguration();
         setUpRuntimeConfiguration();
         setUpDeploymentConfiguration();
         setUpCompileOnlyConfiguration();
@@ -160,9 +162,6 @@ public class ApplicationDeploymentClasspathBuilder {
 
     private void setUpPlatformConfiguration() {
         if (project.getConfigurations().findByName(this.platformConfigurationName) == null) {
-            PlatformImportsImpl platformImports = ApplicationDeploymentClasspathBuilder.platformImports
-                    .computeIfAbsent(this.platformImportName, (ignored) -> new PlatformImportsImpl());
-
             project.getConfigurations().register(this.platformConfigurationName, configuration -> {
                 configuration.setCanBeConsumed(false);
                 // Platform configuration is just implementation, filtered to platform dependencies
@@ -177,27 +176,22 @@ public class ApplicationDeploymentClasspathBuilder {
                                 .collect(Collectors.toList()))));
                 // Configures PlatformImportsImpl once the platform configuration is resolved
                 configuration.getResolutionStrategy().eachDependency(d -> {
-                    ModuleIdentifier identifier = d.getTarget().getModule();
-                    final String group = identifier.getGroup();
+                    final ModuleIdentifier identifier = d.getTarget().getModule();
                     final String name = identifier.getName();
                     if (name.endsWith(BootstrapConstants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX)) {
-                        platformImports.addPlatformDescriptor(group, name, d.getTarget().getVersion(), "json",
+                        platformDataDeps.add(toDependency(d.getTarget(), d.getTarget().getVersion(), "json"));
+                        platformImports.addPlatformDescriptor(identifier.getGroup(), name, d.getTarget().getVersion(), "json",
                                 d.getTarget().getVersion());
                     } else if (name.endsWith(BootstrapConstants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX)) {
-                        final DefaultDependencyArtifact dep = new DefaultDependencyArtifact();
-                        dep.setExtension("properties");
-                        dep.setType("properties");
-                        dep.setName(name);
-
-                        final DefaultExternalModuleDependency gradleDep = new DefaultExternalModuleDependency(
-                                group, name, d.getTarget().getVersion(), null);
-                        gradleDep.addArtifact(dep);
+                        final Dependency gradleDep = toDependency(d.getTarget(), ArtifactCoords.DEFAULT_CLASSIFIER,
+                                "properties");
+                        platformDataDeps.add(gradleDep);
 
                         for (ResolvedArtifact a : project.getConfigurations().detachedConfiguration(gradleDep)
                                 .getResolvedConfiguration().getResolvedArtifacts()) {
                             if (a.getName().equals(name)) {
                                 try {
-                                    platformImports.addPlatformProperties(group, name, null, "properties",
+                                    platformImports.addPlatformProperties(identifier.getGroup(), name, null, "properties",
                                             d.getTarget().getVersion(),
                                             a.getFile().toPath());
                                 } catch (AppModelResolverException e) {
@@ -210,6 +204,37 @@ public class ApplicationDeploymentClasspathBuilder {
                 });
             });
         }
+    }
+
+    private static Dependency toDependency(ModuleVersionSelector versionSelector, String classifier, String type) {
+        final DefaultDependencyArtifact dep = new DefaultDependencyArtifact();
+        dep.setExtension(type);
+        dep.setType(type);
+        if (classifier != null) {
+            dep.setClassifier(classifier);
+        }
+        dep.setName(versionSelector.getName());
+        final DefaultExternalModuleDependency gradleDep = new DefaultExternalModuleDependency(
+                versionSelector.getGroup(), versionSelector.getName(), versionSelector.getVersion(), null);
+        gradleDep.addArtifact(dep);
+        return gradleDep;
+    }
+
+    private void setUpPlatformPropertiesConfiguration() {
+        if (!project.getConfigurations().getNames().contains(QUARKUS_PLATFORM_PROPERTIES)) {
+            project.getConfigurations().register(QUARKUS_PLATFORM_PROPERTIES, config -> {
+                config.setCanBeConsumed(false);
+                config.setTransitive(false);
+                ListProperty<Dependency> dependencyListProperty = project.getObjects().listProperty(Dependency.class);
+                config.getDependencies()
+                        .addAllLater(dependencyListProperty.value(project.provider(this::resolvePlatformDependencies)));
+            });
+        }
+    }
+
+    private List<Dependency> resolvePlatformDependencies() {
+        getPlatformConfiguration().resolve();
+        return platformDataDeps;
     }
 
     private void setUpRuntimeConfiguration() {
@@ -286,6 +311,10 @@ public class ApplicationDeploymentClasspathBuilder {
         return project.getConfigurations().getByName(this.platformConfigurationName);
     }
 
+    public Configuration getPlatformPropertiesConfiguration() {
+        return project.getConfigurations().getByName(QUARKUS_PLATFORM_PROPERTIES);
+    }
+
     public Configuration getRawRuntimeConfiguration() {
         return project.getConfigurations().getByName(this.runtimeConfigurationName);
     }
@@ -319,11 +348,7 @@ public class ApplicationDeploymentClasspathBuilder {
      */
     public PlatformImports getPlatformImports() {
         this.getPlatformConfiguration().getResolvedConfiguration();
-        return platformImports.get(this.platformImportName);
-    }
-
-    public PlatformImportsImpl getPlatformImportsWithoutResolvingPlatform() {
-        return platformImports.get(this.platformImportName);
+        return platformImports;
     }
 
     private Set<ExtensionDependency<?>> collectFirstMetQuarkusExtensions(Configuration configuration,

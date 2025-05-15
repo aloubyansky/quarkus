@@ -5,8 +5,9 @@ import java.io.Serializable;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
-import java.util.stream.Collectors;
+
+import io.quarkus.bootstrap.workspace.WorkspaceModule;
+import io.quarkus.bootstrap.workspace.WorkspaceModuleId;
 
 public class DefaultProjectDescriptor implements Serializable, ProjectDescriptor {
 
@@ -19,15 +20,18 @@ public class DefaultProjectDescriptor implements Serializable, ProjectDescriptor
     private final Map<String, QuarkusTaskDescriptor> tasks;
     private final Map<String, Set<String>> sourceSetTasks;
     private final Map<String, Set<String>> sourceSetTasksRaw;
+    private WorkspaceModule.Mutable module;
 
     public DefaultProjectDescriptor(File projectDir, File buildDir, File buildFile, Map<String, QuarkusTaskDescriptor> tasks,
-            Map<String, Set<String>> sourceSetTasks, Map<String, Set<String>> sourceSetTasksRaw) {
+            Map<String, Set<String>> sourceSetTasks, Map<String, Set<String>> sourceSetTasksRaw,
+            WorkspaceModule.Mutable module) {
         this.projectDir = projectDir;
         this.buildDir = buildDir;
         this.buildFile = buildFile;
         this.tasks = tasks;
         this.sourceSetTasks = sourceSetTasks;
         this.sourceSetTasksRaw = sourceSetTasksRaw;
+        this.module = module;
     }
 
     @Override
@@ -77,18 +81,18 @@ public class DefaultProjectDescriptor implements Serializable, ProjectDescriptor
         return tasks.get(task).getTaskType();
     }
 
-    /**
-     * Returns a new {@link DefaultProjectDescriptor} with only the given source sets.
-     */
-    public DefaultProjectDescriptor withSourceSetView(Set<String> acceptedSourceSets) {
-        Map<String, Set<String>> filteredSourceSets = sourceSetTasks.entrySet().stream()
-                .filter(e -> acceptedSourceSets.contains(e.getKey()))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> a, TreeMap::new));
-        Map<String, QuarkusTaskDescriptor> filteredTasks = tasks.entrySet().stream()
-                .filter(e -> filteredSourceSets.values().stream().anyMatch(tasks -> tasks.contains(e.getKey())))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> a, TreeMap::new));
-        return new DefaultProjectDescriptor(projectDir, buildDir, buildFile, filteredTasks, filteredSourceSets,
-                sourceSetTasksRaw);
+    @Override
+    public WorkspaceModule.Mutable getWorkspaceModule() {
+        return module;
+    }
+
+    public void setWorkspaceModule(WorkspaceModule.Mutable module) {
+        this.module = module;
+    }
+
+    @Override
+    public WorkspaceModule.Mutable getWorkspaceModuleOrNull(WorkspaceModuleId moduleId) {
+        return module.getId().equals(moduleId) ? module : null;
     }
 
     @Override
