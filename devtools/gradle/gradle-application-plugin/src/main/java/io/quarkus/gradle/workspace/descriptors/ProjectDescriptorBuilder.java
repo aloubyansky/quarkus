@@ -1,5 +1,7 @@
 package io.quarkus.gradle.workspace.descriptors;
 
+import static io.quarkus.gradle.tooling.ToolingUtils.getClassesOutputDir;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -42,7 +44,7 @@ public class ProjectDescriptorBuilder {
         final ProjectDescriptorBuilder builder = new ProjectDescriptorBuilder(project);
         project.afterEvaluate(evaluated -> {
             evaluated.getTasks().withType(AbstractCompile.class).configureEach(builder::readConfigurationFor);
-            builder.withKotlinJvmCompileType(evaluated);
+            builder.maybeConfigureKotlinJvmCompile(evaluated);
             evaluated.getTasks().withType(ProcessResources.class).configureEach(builder::readConfigurationFor);
 
             // For now, the main sources should always be represented even if their empty.
@@ -94,6 +96,40 @@ public class ProjectDescriptorBuilder {
                     fileVisitDetails.stopVisiting();
                 }
             });
+        }
+    }
+
+    private void maybeConfigureKotlinJvmCompile(Project project) {
+        for (var task : project.getTasks()) {
+            if (task.getName().contains("compileKotlin") && task.getEnabled()) {
+                int originalSourceDirsSize = classifiedSources.size();
+
+                // This "try/catch" is needed because of the way the "quarkus-cli" Gradle tests work. Without it, the tests fail.
+                try {
+                    Class.forName("org.jetbrains.kotlin.gradle.tasks.KotlinCompileTool");
+                    withKotlinJvmCompileType(project);
+                } catch (ClassNotFoundException e) {
+                    // ignore
+                }
+                // if the above failed, there could still be a KotlinCompile task that's not easily discoverable
+                if (originalSourceDirsSize == classifiedSources.size()) {
+                    final File outputDir = getClassesOutputDir(task);
+                    if (outputDir != null && task.getInputs().getHasInputs()) {
+                        task.getInputs().getSourceFiles().getAsFileTree().visit(visitor -> {
+                            if (visitor.getRelativePath().getSegments().length == 1) {
+                                SourceSetContainer sourceSets = task.getProject().getExtensions()
+                                        .getByType(SourceSetContainer.class);
+                                sourceSets.stream()
+                                        .filter(sourceSet -> sourceSet.getOutput().getClassesDirs().contains(outputDir))
+                                        .forEach(sourceSet -> classifiedSources
+                                                .computeIfAbsent(getClassifier(sourceSet), ClassifiedSources::new)
+                                                .addSources(visitor.getFile().getParentFile(), outputDir));
+                            }
+                        });
+                    }
+                    break;
+                }
+            }
         }
     }
 
