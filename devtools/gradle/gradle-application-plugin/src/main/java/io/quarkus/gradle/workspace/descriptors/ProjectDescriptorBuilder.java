@@ -17,7 +17,7 @@ import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.SourceSetContainer;
 import org.gradle.api.tasks.compile.AbstractCompile;
 import org.gradle.language.jvm.tasks.ProcessResources;
-import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile;
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompileTool;
 
 import io.quarkus.bootstrap.workspace.ArtifactSources;
 import io.quarkus.bootstrap.workspace.DefaultArtifactSources;
@@ -75,7 +75,7 @@ public class ProjectDescriptorBuilder {
                     sourceSets.stream().filter(sourceSet -> sourceSet.getOutput().getClassesDirs().contains(destDir))
                             .forEach(sourceSet -> classifiedSources
                                     .computeIfAbsent(getClassifier(sourceSet), ClassifiedSources::new)
-                                    .addSources(srcDir, destDir));
+                                    .addSources(srcDir, destDir, findGeneratedSourceDir(destDir, sourceSet)));
                     fileVisitDetails.stopVisiting();
                 }
             });
@@ -123,7 +123,8 @@ public class ProjectDescriptorBuilder {
                                         .filter(sourceSet -> sourceSet.getOutput().getClassesDirs().contains(outputDir))
                                         .forEach(sourceSet -> classifiedSources
                                                 .computeIfAbsent(getClassifier(sourceSet), ClassifiedSources::new)
-                                                .addSources(visitor.getFile().getParentFile(), outputDir));
+                                                .addSources(visitor.getFile().getParentFile(), outputDir,
+                                                        findGeneratedSourceDir(outputDir, sourceSet)));
                             }
                         });
                     }
@@ -134,15 +135,10 @@ public class ProjectDescriptorBuilder {
     }
 
     private void withKotlinJvmCompileType(Project project) {
-        try {
-            Class.forName("org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile");
-            project.getTasks().withType(KotlinJvmCompile.class).configureEach(this::readConfigurationFor);
-        } catch (ClassNotFoundException e) {
-            // Ignore
-        }
+        project.getTasks().withType(KotlinCompileTool.class).configureEach(this::readConfigurationFor);
     }
 
-    private void readConfigurationFor(KotlinJvmCompile task) {
+    private void readConfigurationFor(KotlinCompileTool task) {
         if (task.getEnabled() && !task.getSources().isEmpty()) {
             File destDir = task.getDestinationDirectory().getAsFile().get();
             AtomicReference<File> srcDir = new AtomicReference<>();
@@ -156,8 +152,29 @@ public class ProjectDescriptorBuilder {
             sourceSets.stream().filter(sourceSet -> sourceSet.getOutput().getClassesDirs().contains(destDir))
                     .forEach(sourceSet -> classifiedSources
                             .computeIfAbsent(getClassifier(sourceSet), ClassifiedSources::new)
-                            .addSources(srcDir.get(), destDir));
+                            .addSources(srcDir.get(), destDir, findGeneratedSourceDir(destDir, sourceSet)));
         }
+    }
+
+    private static File findGeneratedSourceDir(File destDir, SourceSet sourceSet) {
+        // destDir appears to be build/classes/java/main
+        if (destDir.getParentFile() == null) {
+            return null;
+        }
+        String language = destDir.getParentFile().getName(); // java
+        String sourceSetName = destDir.getName(); // main
+        // find the corresponding generated sources, same pattern, but under build/generated/sources/annotationProcessor/java/main
+        File result = null;
+        for (File generatedDir : sourceSet.getOutput().getGeneratedSourcesDirs().getFiles()) {
+            if (generatedDir.getParentFile() == null) {
+                continue;
+            }
+            if (generatedDir.getName().equals(sourceSetName)
+                    && generatedDir.getParentFile().getName().equals(language)) {
+                result = generatedDir;
+            }
+        }
+        return result;
     }
 
     private static String getClassifier(SourceSet sourceSet) {
@@ -178,12 +195,12 @@ public class ProjectDescriptorBuilder {
             this.classifier = classifier;
         }
 
-        private void addSources(File src, File output) {
-            addIfNotPresent(sources, src, output);
+        private void addSources(File src, File output, File generatedSrcDir) {
+            addIfNotPresent(sources, src, output, generatedSrcDir);
         }
 
         private void addResources(File src, File output) {
-            addIfNotPresent(resources, src, output);
+            addIfNotPresent(resources, src, output, null);
         }
 
         private static Collection<SourceDir> toSourceDir(List<SourceOutputDir> dirs) {
@@ -205,23 +222,23 @@ public class ProjectDescriptorBuilder {
             return new DefaultArtifactSources(classifier, toSourceDir(sources), toSourceDir(resources));
         }
 
-        private static void addIfNotPresent(List<SourceOutputDir> resources, File src, File output) {
+        private static void addIfNotPresent(List<SourceOutputDir> resources, File src, File output, File generatedSrcDir) {
             if (resources.isEmpty()) {
-                resources.add(new SourceOutputDir(src, output));
+                resources.add(new SourceOutputDir(src, output, generatedSrcDir));
             } else {
                 for (var added : resources) {
                     if (added.src().equals(src)) {
                         return;
                     }
                 }
-                resources.add(new SourceOutputDir(src, output));
+                resources.add(new SourceOutputDir(src, output, generatedSrcDir));
             }
         }
     }
 
-    private record SourceOutputDir(File src, File output) {
+    private record SourceOutputDir(File src, File output, File generatedSrcDir) {
         private SourceDir toSourceDir() {
-            return SourceDir.of(src.toPath(), output.toPath());
+            return SourceDir.of(src.toPath(), output.toPath(), generatedSrcDir == null ? null : generatedSrcDir.toPath());
         }
     };
 }
