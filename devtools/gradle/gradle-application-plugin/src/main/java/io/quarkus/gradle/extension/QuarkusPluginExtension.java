@@ -3,8 +3,6 @@ package io.quarkus.gradle.extension;
 import static io.quarkus.runtime.LaunchMode.*;
 
 import java.io.File;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -15,15 +13,12 @@ import org.gradle.api.Action;
 import org.gradle.api.Project;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
-import org.gradle.api.file.RegularFile;
-import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.MapProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.SourceSetContainer;
-import org.gradle.jvm.tasks.Jar;
 import org.gradle.process.JavaForkOptions;
 
 import io.quarkus.bootstrap.model.ApplicationModel;
@@ -31,7 +26,6 @@ import io.quarkus.bootstrap.resolver.AppModelResolver;
 import io.quarkus.gradle.AppModelGradleResolver;
 import io.quarkus.gradle.dsl.Manifest;
 import io.quarkus.gradle.tasks.AbstractQuarkusExtension;
-import io.quarkus.gradle.tasks.QuarkusGradleUtils;
 import io.quarkus.gradle.tooling.ToolingUtils;
 import io.quarkus.runtime.LaunchMode;
 
@@ -217,32 +211,6 @@ public abstract class QuarkusPluginExtension extends AbstractQuarkusExtension {
      */
     private SourceSetContainer getSourceSets() {
         return project.getExtensions().getByType(SourceSetContainer.class);
-    }
-
-    public Path appJarOrClasses() {
-        final Jar jarTask = (Jar) project.getTasks().findByName(JavaPlugin.JAR_TASK_NAME);
-        if (jarTask == null) {
-            throw new RuntimeException("Failed to locate task 'jar' in the project.");
-        }
-        final Provider<RegularFile> jarProvider = jarTask.getArchiveFile();
-        Path classesDir = null;
-        if (jarProvider.isPresent()) {
-            final File f = jarProvider.get().getAsFile();
-            if (f.exists()) {
-                classesDir = f.toPath();
-            }
-        }
-        if (classesDir == null) {
-            final SourceSet mainSourceSet = getSourceSets().getByName(SourceSet.MAIN_SOURCE_SET_NAME);
-            final String classesPath = QuarkusGradleUtils.getClassesDir(mainSourceSet, jarTask.getTemporaryDir(), false);
-            if (classesPath != null) {
-                classesDir = Paths.get(classesPath);
-            }
-        }
-        if (classesDir == null) {
-            throw new RuntimeException("Failed to locate project's classes directory");
-        }
-        return classesDir;
     }
 
     @SuppressWarnings("unused")

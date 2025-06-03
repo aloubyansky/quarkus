@@ -121,6 +121,7 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
                 .addReloadableWorkspaceModule(appArtifact.getKey())
                 .setPlatformImports(platformImports);
 
+        System.out.println("GradleApplicationModelBuilder.buildAll " + classpathConfig.getName());
         collectDependencies(classpathConfig.getResolvedConfiguration(), workspaceDiscovery,
                 project, modelBuilder, appArtifact.getWorkspaceModule().mutable());
         collectExtensionDependencies(project, deploymentConfig, modelBuilder);
@@ -278,6 +279,7 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
 
         configuration.getFirstLevelModuleDependencies()
                 .forEach(d -> {
+                    System.out.println("Direct dep " + d);
                     collectDependencies(d, workspaceDiscovery, project, artifactFiles, new HashSet<>(),
                             modelBuilder,
                             wsModule,

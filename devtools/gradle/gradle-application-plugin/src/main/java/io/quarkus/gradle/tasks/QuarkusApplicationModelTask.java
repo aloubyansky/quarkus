@@ -55,15 +55,18 @@ import org.gradle.api.tasks.TaskAction;
 import org.gradle.internal.component.external.model.ModuleComponentArtifactIdentifier;
 
 import io.quarkus.bootstrap.BootstrapConstants;
+import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.bootstrap.model.ApplicationModelBuilder;
 import io.quarkus.bootstrap.model.CapabilityContract;
 import io.quarkus.bootstrap.model.DefaultApplicationModel;
 import io.quarkus.bootstrap.model.PlatformImportsImpl;
+import io.quarkus.bootstrap.model.gradle.impl.ModelParameterImpl;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
 import io.quarkus.bootstrap.workspace.SourceDir;
 import io.quarkus.bootstrap.workspace.WorkspaceModule;
 import io.quarkus.bootstrap.workspace.WorkspaceModuleId;
 import io.quarkus.fs.util.ZipUtils;
+import io.quarkus.gradle.tooling.GradleApplicationModelBuilder;
 import io.quarkus.gradle.tooling.ToolingUtils;
 import io.quarkus.gradle.workspace.descriptors.DefaultProjectDescriptor;
 import io.quarkus.gradle.workspace.descriptors.ProjectDescriptor;
@@ -73,6 +76,7 @@ import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.maven.dependency.DependencyFlags;
 import io.quarkus.maven.dependency.GACT;
 import io.quarkus.maven.dependency.GACTV;
+import io.quarkus.maven.dependency.ResolvedDependency;
 import io.quarkus.maven.dependency.ResolvedDependencyBuilder;
 import io.quarkus.paths.PathList;
 import io.quarkus.runtime.LaunchMode;
@@ -139,6 +143,22 @@ public abstract class QuarkusApplicationModelTask extends DefaultTask {
 
     @TaskAction
     public void execute() throws IOException {
+        if (getName().contains("quarkusGenerateTestAppModel")) {
+            System.out.println("QuarkusApplicationModelTask " + getName());
+            final ModelParameterImpl modelParameter = new ModelParameterImpl();
+            modelParameter.setMode(LaunchMode.TEST.toString());
+
+            ApplicationModel prevModel = (ApplicationModel) new GradleApplicationModelBuilder().buildAll(LaunchMode.TEST.name(),
+                    modelParameter, getProject());
+            for (ResolvedDependency dependency : prevModel.getDependencies()) {
+                if (dependency.getGroupId().contains("acme")) {
+                    System.out.println("  dependency " + dependency.toCompactCoords());
+                }
+            }
+            ToolingUtils.serializeAppModel(prevModel, getApplicationModel().get().getAsFile().toPath());
+            return;
+        }
+
         final DefaultProjectDescriptor projectDescriptor = getProjectDescriptor().get();
 
         final ResolvedDependencyBuilder appArtifact = getProjectArtifact(projectDescriptor);
@@ -499,6 +519,8 @@ public abstract class QuarkusApplicationModelTask extends DefaultTask {
         }
 
         public void configureFrom(Configuration configuration) {
+            System.out.println("QuarkusPlugin.configureApplicationModelTask " + configuration.getName());
+
             ResolvableDependencies resolvableDependencies = configuration.getIncoming();
             getRoot().set(resolvableDependencies.getResolutionResult().getRootComponent());
             getResolvedArtifactCollection().set(resolvableDependencies.getArtifacts());
