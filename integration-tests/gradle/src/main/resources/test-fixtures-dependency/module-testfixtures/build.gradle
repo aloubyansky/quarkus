@@ -1,0 +1,13 @@
+plugins {
+    id 'java'
+    id 'io.quarkus'
+    id 'java-library'
+    id 'java-test-fixtures'
+}
+
+dependencies {
+    implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
+    implementation 'io.quarkus:quarkus-arc'
+
+    testImplementation 'io.quarkus:quarkus-junit5'
+}
