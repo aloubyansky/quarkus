@@ -62,7 +62,7 @@ public class MojoTestBase {
     }
 
     public static File initEmptyProject(String name) {
-        File tc = new File("target/test-classes/" + name);
+        File tc = new File("target/test-projects/" + name);
         if (tc.isDirectory()) {
             try {
                 FileUtils.deleteDirectory(tc);
@@ -75,16 +75,16 @@ public class MojoTestBase {
         initDotMvn();
 
         Logger.getLogger(MojoTestBase.class.getName())
-                .log(Level.FINE, "test-classes created? %s", mkdirs);
+                .log(Level.FINE, "test-projects created? %s", mkdirs);
         return tc;
     }
 
     public static File initProject(String name) {
-        File tc = new File("target/test-classes");
+        File tc = new File("target/test-projects");
         if (!tc.isDirectory()) {
             boolean mkdirs = tc.mkdirs();
             Logger.getLogger(MojoTestBase.class.getName())
-                    .log(Level.FINE, "test-classes created? %s", mkdirs);
+                    .log(Level.FINE, "test-projects created? %s", mkdirs);
         }
 
         File in = new File(tc, name);
@@ -98,15 +98,15 @@ public class MojoTestBase {
     }
 
     public static File getTargetDir(String name) {
-        return new File("target/test-classes/" + name);
+        return new File("target/test-projects/" + name);
     }
 
     public static File initProject(String name, String output) {
-        File tc = new File("target/test-classes");
+        File tc = new File("target/test-projects");
         if (!tc.isDirectory()) {
             boolean mkdirs = tc.mkdirs();
             Logger.getLogger(MojoTestBase.class.getName())
-                    .log(Level.FINE, "test-classes created? %s", mkdirs);
+                    .log(Level.FINE, "test-projects created? %s", mkdirs);
         }
 
         File in = new File(tc, name);

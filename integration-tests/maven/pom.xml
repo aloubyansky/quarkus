@@ -138,7 +138,8 @@
     <build>
         <testResources>
             <testResource>
-                <directory>src/test/resources-filtered</directory>
+                <directory>src/test/test-projects</directory>
+                <targetPath>${project.build.directory}/test-projects</targetPath>
                 <filtering>true</filtering>
                 <excludes>
                    <exclude>**/target/**</exclude>
