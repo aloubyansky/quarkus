@@ -106,9 +106,12 @@ public class DevModeMediator {
             try {
                 long time = Files.getLastModifiedTime(deploymentClassPath).toMillis();
                 if (lastModified != time) {
+                    LOGGER.info("updating lastModified");
                     lastModified = time;
                     if (closeable != null) {
+                        LOGGER.info("closing application");
                         closeable.close();
+                        LOGGER.info("closed application");
                     }
                     closeable = null;
                     final List<Path> pathsToDelete = removedFiles.pollFirst();
