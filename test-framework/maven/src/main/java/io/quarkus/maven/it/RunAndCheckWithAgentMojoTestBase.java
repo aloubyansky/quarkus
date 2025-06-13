@@ -6,6 +6,7 @@ import static org.awaitility.Awaitility.await;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -94,7 +95,12 @@ public class RunAndCheckWithAgentMojoTestBase extends MojoTestBase {
             await().pollDelay(100, TimeUnit.MILLISECONDS)
                     .pollInterval(100, TimeUnit.MILLISECONDS)
                     .atMost(1, TimeUnit.MINUTES)
-                    .until(() -> runningAgent.log().contains("Connected to remote server"));
+                    .until(() -> {
+                        System.out.println("=== remote server not yet ready start");
+                        System.out.println(Files.readString(output.toPath()));
+                        System.out.println("=== remote server not yet ready end");
+                        return runningAgent.log().contains("Connected to remote server");
+                    });
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
