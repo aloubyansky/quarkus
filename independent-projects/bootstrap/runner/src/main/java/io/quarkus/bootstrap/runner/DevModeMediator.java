@@ -82,8 +82,11 @@ public class DevModeMediator {
 
         @Override
         public void close() throws IOException {
+            LOGGER.info("Closing application " + app);
             app.close();
+            LOGGER.info("Closed application");
             baseCl.close();
+            LOGGER.info("Closed base CL");
         }
     }
 
@@ -119,9 +122,7 @@ public class DevModeMediator {
                 if (lastModified != time) {
                     lastModified = time;
                     if (closeable != null) {
-                        LOGGER.info("Closing application");
                         closeable.close();
-                        LOGGER.info("Closed application");
                         closeable = null;
                     }
                     synchronized (removedFiles) {
