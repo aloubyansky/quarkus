@@ -9,11 +9,12 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Deque;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.concurrent.LinkedBlockingDeque;
 
 import org.jboss.logging.Logger;
 
@@ -26,7 +27,17 @@ public class DevModeMediator {
 
     protected static final Logger LOGGER = Logger.getLogger(DevModeMediator.class);
 
-    public static final Deque<List<Path>> removedFiles = new LinkedBlockingDeque<>();
+    private static final Set<Path> removedFiles = new HashSet<>();
+
+    public static void scheduleDelete(Collection<Path> deletedPaths) {
+        synchronized (removedFiles) {
+            for (Path deletedPath : deletedPaths) {
+                if (removedFiles.add(deletedPath)) {
+                    LOGGER.info("Scheduled for removal " + deletedPath);
+                }
+            }
+        }
+    }
 
     static void doDevMode(Path appRoot) throws IOException, ClassNotFoundException, IllegalAccessException,
             InvocationTargetException, NoSuchMethodException {
@@ -106,17 +117,16 @@ public class DevModeMediator {
             try {
                 long time = Files.getLastModifiedTime(deploymentClassPath).toMillis();
                 if (lastModified != time) {
-                    LOGGER.info("updating lastModified");
                     lastModified = time;
                     if (closeable != null) {
-                        LOGGER.info("closing application");
+                        LOGGER.info("Closing application");
                         closeable.close();
-                        LOGGER.info("closed application");
+                        LOGGER.info("Closed application");
+                        closeable = null;
                     }
-                    closeable = null;
-                    final List<Path> pathsToDelete = removedFiles.pollFirst();
-                    if (pathsToDelete != null) {
-                        for (Path p : pathsToDelete) {
+                    synchronized (removedFiles) {
+                        LOGGER.info("REMOVED FILES " + removedFiles);
+                        for (Path p : removedFiles) {
                             var sb = new StringBuilder().append("Deleting ").append(p);
                             if (!Files.deleteIfExists(p)) {
                                 sb.append(" didn't succeed");
@@ -125,7 +135,9 @@ public class DevModeMediator {
                         }
                     }
                     try {
+                        LOGGER.info("STARTING A NEW APP");
                         closeable = doStart(appRoot, deploymentClassPath);
+                        LOGGER.info("STARTED A NEW APP");
                     } catch (Exception e) {
                         LOGGER.error("Failed to restart app after classpath changes", e);
                     }

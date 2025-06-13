@@ -673,14 +673,13 @@ public class RuntimeUpdatesProcessor implements HotReplacementContext, Closeable
                     //we have some filters, for files that we don't want to delete
                     continue;
                 }
-                log.info("Scheduled for removal " + file);
                 if (removedFiles.isEmpty()) {
                     removedFiles = new ArrayList<>();
                 }
                 removedFiles.add(applicationRoot.resolve(file));
             }
             if (!removedFiles.isEmpty()) {
-                DevModeMediator.removedFiles.addLast(removedFiles);
+                DevModeMediator.scheduleDelete(removedFiles);
             }
             return ret;
         } catch (IOException e) {
