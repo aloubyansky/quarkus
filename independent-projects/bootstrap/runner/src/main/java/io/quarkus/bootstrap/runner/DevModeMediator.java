@@ -76,7 +76,10 @@ public class DevModeMediator {
         private final URLClassLoader baseCl;
 
         public AppProcessCleanup(Closeable app, URLClassLoader baseCl) {
-            this.app = app;
+            this.app = () -> {
+                LOGGER.info("  yes, closing application " + app);
+                app.close();
+            };
             this.baseCl = baseCl;
         }
 
@@ -123,7 +126,6 @@ public class DevModeMediator {
                     lastModified = time;
                     if (closeable != null) {
                         closeable.close();
-                        closeable = null;
                     }
                     synchronized (removedFiles) {
                         LOGGER.info("REMOVED FILES " + removedFiles);
