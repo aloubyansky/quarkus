@@ -316,15 +316,18 @@ public class IsolatedDevModeMain implements BiConsumer<CuratedApplication, Map<S
     }
 
     public void close() {
+        System.out.println("IsolatedDevModeMain.close");
         //don't attempt to restart in the exit code handler
         restarting = true;
         if (codeGenWatcher != null) {
+            System.out.println("IsolatedDevModeMain.close shutting down codeGenWater");
             codeGenWatcher.shutdown();
             codeGenWatcher = null;
         }
 
         for (int i = listeners.size() - 1; i >= 0; i--) {
             try {
+                System.out.println("IsolatedDevModeMain.close beforeShutdown " + listeners.get(i));
                 listeners.get(i).beforeShutdown();
             } catch (Exception e) {
                 log.warn("Unable to invoke 'beforeShutdown' of " + listeners.get(i).getClass(), e);
@@ -333,15 +336,18 @@ public class IsolatedDevModeMain implements BiConsumer<CuratedApplication, Map<S
         listeners.clear();
 
         try {
+            System.out.println("IsolatedDevModeMain.close stopping");
             stop();
             if (RuntimeUpdatesProcessor.INSTANCE == null) {
                 throw new IllegalStateException(
                         "Hot deployment of the application is not supported when updating the Quarkus version. The application needs to be stopped and dev mode started up again");
             }
         } finally {
+            System.out.println("IsolatedDevModeMain.close finally");
             try {
                 if (RuntimeUpdatesProcessor.INSTANCE != null) {
                     try {
+                        System.out.println("IsolatedDevModeMain.close close RuntimeUpdatesProcessor");
                         RuntimeUpdatesProcessor.INSTANCE.close();
                     } catch (IOException e) {
                         log.error("Failed to close compiler", e);
@@ -350,12 +356,15 @@ public class IsolatedDevModeMain implements BiConsumer<CuratedApplication, Map<S
                     }
                 }
                 for (HotReplacementSetup i : hotReplacementSetups) {
+                    System.out.println("IsolatedDevModeMain.close close " + i);
                     i.close();
                 }
                 hotReplacementSetups.clear();
             } finally {
                 try {
+                    System.out.println("IsolatedDevModeMain.close close DevConsoleManager");
                     DevConsoleManager.close();
+                    System.out.println("IsolatedDevModeMain.close close curatedApplication");
                     curatedApplication.close();
                     curatedApplication = null;
                     augmentAction = null;
@@ -363,12 +372,14 @@ public class IsolatedDevModeMain implements BiConsumer<CuratedApplication, Map<S
                 } finally {
                     if (shutdownThread != null) {
                         try {
+                            System.out.println("IsolatedDevModeMain.close removeShutdownHook");
                             Runtime.getRuntime().removeShutdownHook(shutdownThread);
                         } catch (IllegalStateException ignore) {
 
                         }
                         shutdownThread = null;
                     }
+                    System.out.println("IsolatedDevModeMain.close coundDown");
                     shutdownLatch.countDown();
                 }
             }
