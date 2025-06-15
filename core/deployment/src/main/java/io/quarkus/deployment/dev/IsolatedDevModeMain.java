@@ -409,6 +409,7 @@ public class IsolatedDevModeMain implements BiConsumer<CuratedApplication, Map<S
                 } catch (InterruptedException ignore) {
 
                 }
+                System.out.println("IsolatedDevModeMain. keep alive thread terminates");
             }
         }, "Quarkus Devmode keep alive thread").start();
         try {

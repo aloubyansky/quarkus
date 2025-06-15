@@ -127,6 +127,7 @@ public class DevModeMediator {
                     if (closeable != null) {
                         closeable.close();
                     }
+                    LOGGER.info("About to remove files");
                     synchronized (removedFiles) {
                         LOGGER.info("REMOVED FILES " + removedFiles);
                         for (Path p : removedFiles) {
