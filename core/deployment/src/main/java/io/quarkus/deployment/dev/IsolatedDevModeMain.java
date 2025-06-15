@@ -457,6 +457,7 @@ public class IsolatedDevModeMain implements BiConsumer<CuratedApplication, Map<S
             shutdownThread = new Thread(new Runnable() {
                 @Override
                 public void run() {
+                    System.out.println("IsolatedDevModeMain " + Thread.currentThread().getName() + " run begin");
                     shutdownLatch.countDown();
                     synchronized (DevModeMain.class) {
                         if (runner != null) {
@@ -467,6 +468,7 @@ public class IsolatedDevModeMain implements BiConsumer<CuratedApplication, Map<S
                             }
                         }
                     }
+                    System.out.println("IsolatedDevModeMain " + Thread.currentThread().getName() + " run done");
                 }
             }, "Quarkus Shutdown Thread");
             Runtime.getRuntime().addShutdownHook(shutdownThread);
