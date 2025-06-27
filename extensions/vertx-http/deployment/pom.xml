@@ -62,10 +62,13 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-vertx-http-dev-ui-spi</artifactId>
         </dependency>
+        -->
+        <!-- needed for let's encrypt tests -->
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-vertx-http-dev-ui-resources</artifactId>
         </dependency>
+        <!--
         <dependency>
             <groupId>io.mvnpm</groupId>
             <artifactId>importmap</artifactId>
