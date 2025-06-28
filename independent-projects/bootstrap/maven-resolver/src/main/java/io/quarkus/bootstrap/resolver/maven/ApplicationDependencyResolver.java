@@ -10,7 +10,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -782,27 +781,26 @@ public class ApplicationDependencyResolver {
         return (flags & flag) > 0;
     }
 
-    private ExtensionInfo getExtensionInfoOrNull(Artifact artifact, List<RemoteRepository> repos)
-            throws BootstrapDependencyProcessingException {
+    private ExtensionInfo getExtensionInfoOrNull(Artifact artifact, List<RemoteRepository> repos) {
         if (!artifact.getExtension().equals(ArtifactCoords.TYPE_JAR)) {
             return null;
         }
-        final ArtifactKey extKey = getKey(artifact);
-        ExtensionInfo ext = allExtensions.get(extKey);
-        if (ext != null) {
-            return ext == EXT_INFO_NONE ? null : ext;
-        }
+        ExtensionInfo ext = allExtensions.computeIfAbsent(getKey(artifact), k -> resolveExtensionInfo(artifact, repos));
+        return ext == EXT_INFO_NONE ? null : ext;
+    }
+
+    private ExtensionInfo resolveExtensionInfo(Artifact artifact, List<RemoteRepository> repos) {
         artifact = resolve(artifact, repos);
-        final Path path = artifact.getFile().toPath();
-        final Properties descriptor = PathTree.ofDirectoryOrArchive(path).apply(BootstrapConstants.DESCRIPTOR_PATH,
-                ApplicationDependencyResolver::readExtensionProperties);
+        final Properties descriptor = PathTree.ofDirectoryOrArchive(artifact.getFile().toPath())
+                .apply(BootstrapConstants.DESCRIPTOR_PATH, ApplicationDependencyResolver::readExtensionProperties);
         if (descriptor == null) {
-            allExtensions.put(extKey, EXT_INFO_NONE);
-            return null;
+            return EXT_INFO_NONE;
         }
-        ext = new ExtensionInfo(artifact, descriptor, devMode);
-        allExtensions.put(extKey, ext);
-        return ext;
+        try {
+            return new ExtensionInfo(artifact, descriptor, devMode);
+        } catch (BootstrapDependencyProcessingException e) {
+            throw new RuntimeException("Failed to collect extension information for " + artifact, e);
+        }
     }
 
     private static Properties readExtensionProperties(PathVisit visit) {
