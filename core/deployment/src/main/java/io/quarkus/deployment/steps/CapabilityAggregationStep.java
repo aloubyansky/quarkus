@@ -100,7 +100,6 @@ public class CapabilityAggregationStep {
         Map<String, List<String>> capsProvidedByBuildSteps = Collections.emptyMap();
 
         for (CapabilityBuildItem capabilityItem : capabilities) {
-
             final String provider = capabilityItem.getProvider();
             final String capability = capabilityItem.getName();
             final Object previous = providedCapabilities.put(capability, provider);
@@ -144,7 +143,7 @@ public class CapabilityAggregationStep {
                 for (Map.Entry<String, List<String>> provider : capsProvidedByBuildSteps.entrySet()) {
                     for (String capability : provider.getValue()) {
                         writer.newLine();
-                        writer.append(" - " + capability + " provided by ").append(provider.getKey());
+                        writer.append(" - ").append(capability).append(" provided by ").append(provider.getKey());
                     }
                 }
                 writer.newLine();
@@ -162,6 +161,6 @@ public class CapabilityAggregationStep {
     }
 
     private static CapabilityErrors createIfNull(CapabilityErrors capabilityErrors) {
-        return capabilityErrors == null ? capabilityErrors = new CapabilityErrors() : capabilityErrors;
+        return capabilityErrors == null ? new CapabilityErrors() : capabilityErrors;
     }
 }
