@@ -4,9 +4,12 @@ import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.io.UncheckedIOException;
 import java.io.UnsupportedEncodingException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 
@@ -29,6 +32,7 @@ import io.quarkus.test.devmode.util.DevModeClient;
  */
 public class RunningInvoker extends MavenProcessInvoker {
 
+    private static final String QUARKUS_TEST_MVNW_VERSION = "quarkus-test-mvnw-version";
     private final boolean parallel;
     private final boolean debug;
     private MavenProcessInvocationResult result;
@@ -143,7 +147,85 @@ public class RunningInvoker extends MavenProcessInvoker {
     @Override
     public InvocationResult execute(InvocationRequest request) throws MavenInvocationException {
         MojoTestBase.passUserSettings(request);
+        configureMavenExecutable(request);
         return super.execute(request);
+    }
+
+    /**
+     * Returns requested Maven wrapper version for a test (by checking {@code quarkus-test-mvnw-version} system property
+     * or null, if none was configured.
+     *
+     * @return requested Maven wrapper version or null
+     */
+    private static String getRequestedMavenWrapperVersion() {
+        return System.getProperty(QUARKUS_TEST_MVNW_VERSION);
+    }
+
+    /**
+     * Returns the base directory for custom Maven wrapper versions.
+     *
+     * @return base directory for custom Maven wrapper versions
+     */
+    private static Path getMavenWrapperBaseDir() {
+        return Path.of("target").resolve("mvn-wrappers").toAbsolutePath();
+    }
+
+    /**
+     * Returns a directory for a specific Maven wrapper version.
+     *
+     * @param mvnwVersion requested Maven wrapper version
+     * @return directory for a Maven wrapper version
+     */
+    private static Path getMavenWrapperDir(String mvnwVersion) {
+        return getMavenWrapperBaseDir().resolve(mvnwVersion);
+    }
+
+    private String getMavenWrapperName() {
+        return System.getProperty("os.name").toLowerCase(Locale.ENGLISH).contains("windows") ? "mvnw.bat" : "mvnw";
+    }
+
+    private String getRootMavenWrapper() {
+        final String quarkusRootDir = System.getProperty("quarkus-root-dir");
+        if (quarkusRootDir == null) {
+            throw new RuntimeException("System property quarkus-root-dir is not set");
+        }
+        final Path wrapperPath = Path.of(quarkusRootDir).resolve(getMavenWrapperName());
+        if (!Files.exists(wrapperPath)) {
+            throw new RuntimeException("Failed to locate Maven wrapper at " + wrapperPath);
+        }
+        return wrapperPath.toString();
+    }
+
+    private void configureMavenExecutable(InvocationRequest request) {
+        final String mvnwVersion = getRequestedMavenWrapperVersion();
+        if (mvnwVersion == null) {
+            return;
+        }
+        final Path mvnwDir = getMavenWrapperDir(mvnwVersion);
+        if (!Files.exists(mvnwDir)) {
+            try {
+                Files.createDirectories(mvnwDir);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+
+            final List<String> command = List.of(getRootMavenWrapper(), "wrapper:wrapper", "-Dmaven=" + mvnwVersion);
+            //logCommandLine(command);
+
+            final ProcessBuilder pb = new ProcessBuilder()
+                    .directory(mvnwDir.toFile())
+                    .command(command)
+                    .redirectInput(ProcessBuilder.Redirect.INHERIT)
+                    // Should prevent "fragmented" output (parts of stdout and stderr interleaved)
+                    .redirectErrorStream(true);
+            try {
+                pb.start().waitFor();
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to install Gradle wrapper", e);
+            }
+        }
+        request.setMavenExecutable(mvnwDir.resolve(getMavenWrapperName()).toFile());
+        System.out.println("RUNNING INVOKER " + request.getMavenExecutable() + " " + request.getMavenHome());
     }
 
     public String log() throws IOException {

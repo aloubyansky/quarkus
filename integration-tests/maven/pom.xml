@@ -253,6 +253,38 @@
                 <maven.test.skip>true</maven.test.skip>
             </properties>
         </profile>
+        <profile>
+            <id>maven-4</id>
+            <!-- Adds an execution to the surefire plugin that runs selected tests with Maven 4 -->
+            <build>
+                <pluginManagement>
+                    <plugins>
+                        <plugin>
+                            <groupId>org.apache.maven.plugins</groupId>
+                            <artifactId>maven-surefire-plugin</artifactId>
+                            <executions>
+                                <execution>
+                                    <id>mvnw-4</id>
+                                    <phase>test</phase>
+                                    <goals>
+                                        <goal>test</goal>
+                                    </goals>
+                                    <configuration>
+                                        <systemPropertyVariables>
+                                            <quarkus-test-mvnw-version>4.0.0-rc-4</quarkus-test-mvnw-version>
+                                            <quarkus-root-dir>${maven.multiModuleProjectDirectory}</quarkus-root-dir>
+                                        </systemPropertyVariables>
+                                        <includes>
+                                            <include>PackageIT</include>
+                                        </includes>
+                                    </configuration>
+                                </execution>
+                            </executions>
+                        </plugin>
+                    </plugins>
+                </pluginManagement>
+            </build>
+        </profile>
     </profiles>
     <pluginRepositories>
         <pluginRepository>
