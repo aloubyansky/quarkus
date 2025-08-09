@@ -181,7 +181,7 @@ public class RunningInvoker extends MavenProcessInvoker {
     }
 
     private String getMavenWrapperName() {
-        return System.getProperty("os.name").toLowerCase(Locale.ENGLISH).contains("windows") ? "mvnw.bat" : "mvnw";
+        return System.getProperty("os.name").toLowerCase(Locale.ENGLISH).contains("windows") ? "mvnw.cmd" : "mvnw";
     }
 
     private String getRootMavenWrapper() {
