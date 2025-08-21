@@ -4,5 +4,5 @@ import java.nio.file.Path;
 
 import io.quarkus.maven.dependency.ArtifactKey;
 
-public record MavenPluginKey(Path configurationFile, ArtifactKey bomKey) implements UpdateInstructionKey {
+public record MavenPluginKey(Path configurationFile, ArtifactKey artifactKey) implements UpdateInstructionKey {
 }

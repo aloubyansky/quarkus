@@ -37,7 +37,7 @@ public class UpdateCommand implements Runnable {
     }
 
     private static void logUpdateInstructions(Collection<ConfiguredApplication> apps, BootstrapMavenContext mavenCtx,
-                                              MessageWriter log) {
+            MessageWriter log) {
         var extensionCatalog = getCatalogFromRegistry(apps, mavenCtx, log);
         var instructions = new UpdateInstructions();
         for (var app : apps) {
@@ -54,8 +54,9 @@ public class UpdateCommand implements Runnable {
         }
     }
 
-    private static void addInstructions(UpdateInstructions updateSteps, ConfiguredApplication app, ExtensionCatalog extensionCatalog,
-                                        MessageWriter log) {
+    private static void addInstructions(UpdateInstructions updateSteps, ConfiguredApplication app,
+            ExtensionCatalog extensionCatalog,
+            MessageWriter log) {
         log.info("Quarkus application " + app.getId());
         var extDeps = getTopExtensionMap(app);
         final RegistryProjectInfo registryInfo;

@@ -58,7 +58,7 @@ public class WorkspaceQuarkusInfo {
         //logUpdateInstructions(apps, mavenCtx, log);
     }
 
-    private static void logConfiguredApps(Collection<ConfiguredApplication> apps, MessageWriter log) {
+    public static void logConfiguredApps(Collection<ConfiguredApplication> apps, MessageWriter log) {
         int i = 1;
         for (var app : apps) {
             log.info(i++ + ") Quarkus application " + app.getId());
@@ -93,7 +93,7 @@ public class WorkspaceQuarkusInfo {
         }
     }
 
-    private static void addInstructions(UpdateInstructions instructions, ConfiguredApplication app,
+    public static void addInstructions(UpdateInstructions instructions, ConfiguredApplication app,
             ExtensionCatalog extensionCatalog, MessageWriter log) {
         var extDeps = getTopExtensionMap(app);
         final RegistryProjectInfo registryInfo;

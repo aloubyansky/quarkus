@@ -41,6 +41,11 @@ public class DependencyInstruction extends UpdateInstructionBase {
         return key;
     }
 
+    @Override
+    public Path getFile() {
+        return key.configurationFile();
+    }
+
     public ArtifactCoords getCurrentCoords() {
         return currentCoords;
     }

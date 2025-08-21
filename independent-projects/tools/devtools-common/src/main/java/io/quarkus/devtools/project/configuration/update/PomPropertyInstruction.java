@@ -33,7 +33,8 @@ public class PomPropertyInstruction extends UpdateInstructionBase {
         return key;
     }
 
-    public Path getConfigurationFile() {
+    @Override
+    public Path getFile() {
         return key.configurationFile();
     }
 
@@ -58,6 +59,6 @@ public class PomPropertyInstruction extends UpdateInstructionBase {
 
     @Override
     public String toString() {
-        return "Update property: " + getPropertyName() + "=" + getPropertyValue() + ", file=" + getConfigurationFile();
+        return "Update property: " + getPropertyName() + "=" + getPropertyValue() + ", file=" + getFile();
     }
 }

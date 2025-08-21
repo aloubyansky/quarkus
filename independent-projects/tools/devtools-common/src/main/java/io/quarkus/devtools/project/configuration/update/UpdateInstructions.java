@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 import io.quarkus.devtools.commands.handlers.RegistryProjectInfo;
 import io.quarkus.devtools.messagewriter.MessageWriter;
@@ -168,18 +169,18 @@ public class UpdateInstructions {
         return recommendedPlatformBomIds;
     }
 
-    private List<UpdateInstruction> updateList = new ArrayList<>();
+    private List<UpdateInstruction> instructions = new ArrayList<>();
 
     public UpdateInstructions() {
     }
 
     void add(UpdateInstruction instruction) {
         boolean skip = false;
-        for (int i = 0; i < updateList.size(); ++i) {
-            var existing = updateList.get(i);
+        for (int i = 0; i < instructions.size(); ++i) {
+            var existing = instructions.get(i);
             switch (existing.compareTo(instruction)) {
                 case SUPERSEDED:
-                    updateList.set(i, instruction);
+                    instructions.set(i, instruction);
                     break;
                 case MATCHES:
                 case SUPERSEDES:
@@ -192,11 +193,30 @@ public class UpdateInstructions {
             }
         }
         if (!skip) {
-            updateList.add(instruction);
+            instructions.add(instruction);
         }
     }
 
     public List<UpdateInstruction> asList() {
-        return updateList;
+        return instructions;
+    }
+
+    public List<FileUpdateInstructions> asFileInstructions() {
+        if (instructions.isEmpty()) {
+            return List.of();
+        }
+        if (instructions.size() == 1) {
+            var i = instructions.get(0);
+            return List.of(FileUpdateInstructions.builder().setFile(i.getFile()).add(i).build());
+        }
+        final TreeMap<String, FileUpdateInstructions.Builder> builders = new TreeMap<>();
+        for (var i : instructions) {
+            builders.computeIfAbsent(i.getFile().toString(), k -> FileUpdateInstructions.builder().setFile(i.getFile())).add(i);
+        }
+        final List<FileUpdateInstructions> result = new ArrayList<>(builders.size());
+        for (var builder : builders.values()) {
+            result.add(builder.build());
+        }
+        return result;
     }
 }
