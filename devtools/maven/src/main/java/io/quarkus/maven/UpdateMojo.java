@@ -16,6 +16,7 @@ import io.quarkus.devtools.project.QuarkusProject;
 import io.quarkus.devtools.project.QuarkusProjectHelper;
 import io.quarkus.devtools.project.update.rewrite.QuarkusUpdateExitErrorException;
 import io.quarkus.maven.dependency.ArtifactCoords;
+import io.quarkus.platform.tools.ToolsConstants;
 import io.quarkus.registry.RegistryResolutionException;
 import io.quarkus.registry.catalog.ExtensionCatalog;
 import io.quarkus.registry.catalog.PlatformStreamCoords;
@@ -114,7 +115,14 @@ public class UpdateMojo extends QuarkusProjectStateMojoBase {
                 targetCatalog = getExtensionCatalogResolver().resolveExtensionCatalog(platformStream);
                 platformVersion = getPrimaryBom(targetCatalog).getVersion();
             } else {
-                targetCatalog = getExtensionCatalogResolver().resolveExtensionCatalog();
+                if (bomVersion != null) {
+                    targetCatalog = getExtensionCatalogResolver().resolveExtensionCatalog(List.of(ArtifactCoords.pom(
+                            this.bomGroupId == null ? ToolsConstants.DEFAULT_PLATFORM_BOM_GROUP_ID : this.bomGroupId,
+                            this.bomArtifactId == null ? ToolsConstants.DEFAULT_PLATFORM_BOM_ARTIFACT_ID : this.bomArtifactId,
+                            bomVersion)));
+                } else {
+                    targetCatalog = getExtensionCatalogResolver().resolveExtensionCatalog();
+                }
                 platformVersion = getPrimaryBom(targetCatalog).getVersion();
             }
         } catch (RegistryResolutionException e) {
