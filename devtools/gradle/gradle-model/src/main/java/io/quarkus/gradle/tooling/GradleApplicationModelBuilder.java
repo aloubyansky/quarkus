@@ -250,7 +250,11 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
             ApplicationModelBuilder modelBuilder, boolean clearReloadableFlag) {
         boolean processChildren = false;
         for (var a : resolvedDep.getModuleArtifacts()) {
-            ResolvedDependencyBuilder dep = modelBuilder.getDependency(getKey(a));
+            final ArtifactKey artifactKey = getKey(a);
+            if (isApplicationRoot(modelBuilder, artifactKey)) {
+                continue;
+            }
+            ResolvedDependencyBuilder dep = modelBuilder.getDependency(artifactKey);
             if (dep == null) {
                 if (a.getId().getComponentIdentifier() instanceof ProjectComponentIdentifier projectComponentIdentifier) {
                     var includedBuild = ToolingUtils.includedBuild(project,
@@ -311,6 +315,10 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
                 processDeploymentDependency(project, child, modelBuilder, clearReloadableFlag);
             }
         }
+    }
+
+    private static boolean isApplicationRoot(ApplicationModelBuilder modelBuilder, ArtifactKey artifactKey) {
+        return modelBuilder.getApplicationArtifact().getKey().equals(artifactKey);
     }
 
     private static ResolvedDependencyBuilder addArtifactDependency(Project project, ApplicationModelBuilder modelBuilder,
@@ -407,11 +415,17 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
             WorkspaceModule.Mutable parentModule,
             byte flags) {
         WorkspaceModule.Mutable projectModule = null;
+        boolean processChildren = false;
         for (ResolvedArtifact a : resolvedDep.getModuleArtifacts()) {
             if (!isDependency(a)) {
                 continue;
             }
-            var depBuilder = modelBuilder.getDependency(getKey(a));
+            final ArtifactKey artifactKey = getKey(a);
+            if (isApplicationRoot(modelBuilder, artifactKey) || !processedModules.add(artifactKey)) {
+                continue;
+            }
+            processChildren = true;
+            var depBuilder = modelBuilder.getDependency(artifactKey);
             if (depBuilder != null) {
                 if (isFlagOn(flags, COLLECT_DIRECT_DEPS)) {
                     depBuilder.setDirect(true);
@@ -478,9 +492,8 @@ public class GradleApplicationModelBuilder implements ParameterizedToolingModelB
             }
         }
 
-        processedModules.add(ArtifactKey.ga(resolvedDep.getModuleGroup(), resolvedDep.getModuleName()));
-        for (org.gradle.api.artifacts.ResolvedDependency child : resolvedDep.getChildren()) {
-            if (!processedModules.contains(ArtifactKey.ga(child.getModuleGroup(), child.getModuleName()))) {
+        if (processChildren) {
+            for (org.gradle.api.artifacts.ResolvedDependency child : resolvedDep.getChildren()) {
                 collectDependencies(child, workspaceDiscovery, project, artifactFiles, processedModules,
                         modelBuilder, projectModule, flags);
             }
