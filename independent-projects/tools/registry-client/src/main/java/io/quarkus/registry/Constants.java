@@ -31,4 +31,15 @@ public interface Constants {
      * to indicate a user configured offering-based support key that should be displayed by extension listing commands
      */
     String REGISTRY_USER_SELECTED_SUPPORT_KEY = "registry-user-selected-support-key";
+
+    /**
+     * An internal metadata key added to extension catalog metadata by a registry client
+     * to provide information about the complete list of extension artifacts included in the catalog.
+     * The value associated with this key will be a map of {@link io.quarkus.maven.dependency.ArtifactKey}
+     * to {@link io.quarkus.maven.dependency.ArtifactCoords} of extension artifacts.
+     * <p>
+     * The list of extension artifacts will contain all the extension artifacts before the offering-based
+     * filtered applied.
+     */
+    String ALL_CATALOG_EXTENSIONS = "offering-managed-not-supported-keys";
 }

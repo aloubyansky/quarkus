@@ -4,12 +4,17 @@ import static io.quarkus.devtools.commands.CreateProject.CreateProjectKey.*;
 import static io.quarkus.devtools.commands.handlers.CreateProjectCodestartDataConverter.toCodestartData;
 import static io.quarkus.devtools.commands.handlers.QuarkusCommandHandlers.computeExtensionsFromQuery;
 import static io.quarkus.platform.catalog.processor.ExtensionProcessor.getMinimumJavaVersion;
+import static io.quarkus.platform.tools.ToolsUtils.countOf;
 
 import java.io.IOException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -27,8 +32,10 @@ import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.devtools.project.JavaVersion;
 import io.quarkus.devtools.project.extensions.Extensions;
 import io.quarkus.maven.dependency.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.platform.tools.ToolsUtils;
 import io.quarkus.registry.CatalogMergeUtility;
+import io.quarkus.registry.Constants;
 import io.quarkus.registry.catalog.Extension;
 import io.quarkus.registry.catalog.ExtensionCatalog;
 import io.quarkus.registry.catalog.ExtensionOrigin;
@@ -42,6 +49,147 @@ import io.quarkus.registry.catalog.selection.OriginSelector;
  * of {@link QuarkusCommandInvocation}.
  */
 public class CreateProjectCommandHandler implements QuarkusCommandHandler {
+
+    private static final String MAVEN = "maven";
+    private static final String GRADLE = "gradle";
+
+    private static class ProjectDependencyInfo {
+
+        private final ExtensionCatalog primaryCatalog;
+        private final ExtensionCatalog dataCatalog;
+        private final List<ArtifactCoords> platformBoms;
+        private final List<ArtifactCoords> extensionDeps;
+
+        ProjectDependencyInfo(ExtensionCatalog primaryCatalog, List<Extension> selectedExtensions) {
+
+            this.primaryCatalog = primaryCatalog;
+            this.dataCatalog = primaryCatalog;
+            this.platformBoms = List.of(primaryCatalog.getBom());
+
+            this.extensionDeps = new ArrayList<>(selectedExtensions.size());
+            for (Extension e : selectedExtensions) {
+                ArtifactCoords coords = e.getArtifact();
+                for (ExtensionOrigin origin : e.getOrigins()) {
+                    if (origin.isPlatform() && origin.getBom() != null && platformBoms.contains(origin.getBom())) {
+                        coords = Extensions.stripVersion(coords);
+                        break;
+                    }
+                }
+                extensionDeps.add(coords);
+            }
+
+        }
+
+        ProjectDependencyInfo(List<ExtensionCatalog> extensionOrigins, List<Extension> selectedExtensions,
+                Collection<String> extensionsQuery) {
+
+            final Map<ArtifactKey, ArtifactCoords> extensionDeps = new LinkedHashMap<>(selectedExtensions.size());
+
+            // TODO Compatibility of user-provided extension artifacts to be taken into account.
+            // If a user provided some complete artifact coordinates then we actually do not check for compatibility
+            // of those artifact (possibly extensions) with the recommended platforms and Quarkus core.
+            // It has worked like this from the beginning but it should be reviewed in the future.
+            final Map<ArtifactKey, ArtifactCoords> userProvidedCoords = collectArtifactCoords(extensionsQuery);
+
+            final ArrayDeque<Extension> extensionDeque = new ArrayDeque<>(selectedExtensions);
+
+            // necessary to set the versions from the selected origins
+            this.dataCatalog = CatalogMergeUtility.merge(extensionOrigins);
+            // collect platform BOMs to import
+            boolean sawFirstPlatform = false;
+            ExtensionCatalog primaryCatalog = null;
+            this.platformBoms = new ArrayList<>(extensionOrigins.size());
+            for (ExtensionCatalog c : extensionOrigins) {
+                if (c.isPlatform()) {
+                    if (c.getBom().getArtifactId().equals("quarkus-bom") || !sawFirstPlatform) {
+                        primaryCatalog = c;
+                        sawFirstPlatform = true;
+                    }
+                    platformBoms.add(c.getBom());
+                }
+
+                final Map<ArtifactKey, ArtifactCoords> allCatalogExtensions = getCatalogExtensions(c);
+                var i = extensionDeque.iterator();
+                while (i.hasNext()) {
+                    final ArtifactKey extKey = i.next().getArtifact().getKey();
+                    ArtifactCoords addedCoords = userProvidedCoords.get(extKey);
+                    if (addedCoords != null) {
+                        extensionDeps.put(extKey, addedCoords);
+                        i.remove();
+                    } else {
+                        ArtifactCoords mappedCoords = extensionDeps.get(extKey);
+                        if (mappedCoords == null || c.isPlatform()) {
+                            addedCoords = allCatalogExtensions.get(extKey);
+                            if (addedCoords != null) {
+                                if (c.isPlatform()) {
+                                    addedCoords = Extensions.stripVersion(addedCoords);
+                                    i.remove();
+                                }
+                                extensionDeps.put(extKey, addedCoords);
+                            }
+                        }
+                    }
+                }
+            }
+
+            this.primaryCatalog = Objects.requireNonNull(primaryCatalog, "primary catalog is null");
+            this.extensionDeps = List.copyOf(extensionDeps.values());
+        }
+
+        @SuppressWarnings("unchecked")
+        private static Map<ArtifactKey, ArtifactCoords> getCatalogExtensions(ExtensionCatalog catalog) {
+            if (catalog.getMetadata().get(Constants.ALL_CATALOG_EXTENSIONS) instanceof Map<?, ?> allCatalogExtensions) {
+                return (Map<ArtifactKey, ArtifactCoords>) allCatalogExtensions;
+            }
+            final Collection<Extension> extensions = catalog.getExtensions();
+            final Map<ArtifactKey, ArtifactCoords> result = new HashMap<>(extensions.size());
+            for (Extension e : extensions) {
+                result.put(e.getArtifact().getKey(), e.getArtifact());
+            }
+            return result;
+        }
+
+        /**
+         * Collects complete artifact coordinates from a user-provided input. If a user-provided input
+         * does not appear to contain complete artifact coordinates, the method returns an empty map.
+         *
+         * @param extensionsQuery user-provided input
+         * @return complete artifact coordinates collected from a user-provided input
+         */
+        private static Map<ArtifactKey, ArtifactCoords> collectArtifactCoords(Collection<String> extensionsQuery) {
+            Map<ArtifactKey, ArtifactCoords> result = Map.of();
+            for (String extensionExpr : extensionsQuery) {
+                if (countOf(extensionExpr, ':') > 1) {
+                    if (result.isEmpty()) {
+                        result = new HashMap<>();
+                    }
+                    final ArtifactCoords coords = ArtifactCoords.fromString(extensionExpr);
+                    result.put(coords.getKey(), coords);
+                }
+            }
+            return result;
+        }
+
+        ExtensionCatalog getPrimaryPlatformCatalog() {
+            return primaryCatalog;
+        }
+
+        List<ArtifactCoords> getBoms() {
+            return platformBoms;
+        }
+
+        List<ArtifactCoords> getDependencies() {
+            return extensionDeps;
+        }
+
+        Map<String, Object> getPlatformProjectData() {
+            return ToolsUtils.readProjectData(dataCatalog);
+        }
+
+        void setQuarkusProperties(QuarkusCommandInvocation invocation) {
+            CreateProjectCommandHandler.setQuarkusProperties(invocation, dataCatalog);
+        }
+    }
 
     @Override
     public QuarkusCommandOutcome execute(QuarkusCommandInvocation invocation) throws QuarkusCommandException {
@@ -69,43 +217,11 @@ public class CreateProjectCommandHandler implements QuarkusCommandHandler {
         checkMinimumJavaVersion(javaVersion, extensionsToAdd);
         final List<ExtensionCatalog> extensionOrigins = getExtensionOrigins(mainCatalog, extensionsToAdd);
 
-        final List<ArtifactCoords> platformBoms = new ArrayList<>(Math.max(extensionOrigins.size(), 1));
-        Map<String, Object> platformProjectData;
-        if (!extensionOrigins.isEmpty()) {
-            // necessary to set the versions from the selected origins
-            final ExtensionCatalog mergedCatalog = CatalogMergeUtility.merge(extensionOrigins);
-            platformProjectData = ToolsUtils.readProjectData(mergedCatalog);
-            setQuarkusProperties(invocation, mergedCatalog);
-            extensionsToAdd = computeRequiredExtensions(mergedCatalog, extensionsQuery, invocation.log());
-            // collect platform BOMs to import
-            boolean sawFirstPlatform = false;
-            for (ExtensionCatalog c : extensionOrigins) {
-                if (!c.isPlatform()) {
-                    continue;
-                }
-                if (c.getBom().getArtifactId().equals("quarkus-bom") || !sawFirstPlatform) {
-                    mainCatalog = c;
-                    sawFirstPlatform = true;
-                }
-                platformBoms.add(c.getBom());
-            }
-        } else {
-            platformProjectData = ToolsUtils.readProjectData(mainCatalog);
-            platformBoms.add(mainCatalog.getBom());
-            setQuarkusProperties(invocation, mainCatalog);
-        }
-
-        final List<ArtifactCoords> extensionCoords = new ArrayList<>(extensionsToAdd.size());
-        for (Extension e : extensionsToAdd) {
-            ArtifactCoords coords = e.getArtifact();
-            for (ExtensionOrigin origin : e.getOrigins()) {
-                if (origin.isPlatform() && origin.getBom() != null && platformBoms.contains(origin.getBom())) {
-                    coords = Extensions.stripVersion(coords);
-                    break;
-                }
-            }
-            extensionCoords.add(coords);
-        }
+        final ProjectDependencyInfo depInfo = extensionOrigins.isEmpty()
+                ? new ProjectDependencyInfo(mainCatalog, extensionsToAdd)
+                : new ProjectDependencyInfo(extensionOrigins, extensionsToAdd, extensionsQuery);
+        mainCatalog = depInfo.getPrimaryPlatformCatalog();
+        depInfo.setQuarkusProperties(invocation);
 
         invocation.setValue(CatalogKey.BOM_GROUP_ID, mainCatalog.getBom().getGroupId());
         invocation.setValue(CatalogKey.BOM_ARTIFACT_ID, mainCatalog.getBom().getArtifactId());
@@ -114,22 +230,22 @@ public class CreateProjectCommandHandler implements QuarkusCommandHandler {
 
         try {
             Map<String, Object> platformData = new HashMap<>();
-            if (mainCatalog.getMetadata().get("maven") != null) {
-                platformData.put("maven", mainCatalog.getMetadata().get("maven"));
+            if (mainCatalog.getMetadata().get(MAVEN) != null) {
+                platformData.put(MAVEN, mainCatalog.getMetadata().get(MAVEN));
             }
-            if (mainCatalog.getMetadata().get("gradle") != null) {
-                platformData.put("gradle", mainCatalog.getMetadata().get("gradle"));
+            if (mainCatalog.getMetadata().get(GRADLE) != null) {
+                platformData.put(GRADLE, mainCatalog.getMetadata().get(GRADLE));
             }
             final QuarkusCodestartProjectInput input = QuarkusCodestartProjectInput.builder()
-                    .addPlatforms(platformBoms)
-                    .addExtensions(extensionCoords)
+                    .addPlatforms(depInfo.getBoms())
+                    .addExtensions(depInfo.getDependencies())
                     .buildTool(invocation.getQuarkusProject().getBuildTool())
                     .example(invocation.getValue(EXAMPLE))
                     .noCode(invocation.getValue(NO_CODE, false))
                     .addCodestarts(invocation.getValue(EXTRA_CODESTARTS, Set.of()))
                     .noBuildToolWrapper(invocation.getValue(NO_BUILDTOOL_WRAPPER, false))
                     .noDockerfiles(invocation.getValue(NO_DOCKERFILES, false))
-                    .addData(platformProjectData)
+                    .addData(depInfo.getPlatformProjectData())
                     .addData(platformData)
                     .addData(toCodestartData(invocation.getValues()))
                     .addData(invocation.getValue(DATA, Map.of()))
@@ -138,10 +254,10 @@ public class CreateProjectCommandHandler implements QuarkusCommandHandler {
                     .build();
 
             invocation.log().info("-----------");
-            if (!extensionsToAdd.isEmpty()) {
+            if (!depInfo.getDependencies().isEmpty()) {
                 invocation.log().info("selected extensions: \n"
-                        + extensionsToAdd.stream()
-                                .map(e -> "- " + e.getArtifact().getGroupId() + ":" + e.getArtifact().getArtifactId() + "\n")
+                        + depInfo.getDependencies().stream()
+                                .map(e -> "- " + e.getGroupId() + ":" + e.getArtifactId() + "\n")
                                 .collect(Collectors.joining()));
             }
 
@@ -196,20 +312,23 @@ public class CreateProjectCommandHandler implements QuarkusCommandHandler {
         final List<ExtensionOrigins> originsWithPreferences;
         if (extensionsToAdd.isEmpty()) {
             // if no extensions were requested, we select the core BOM
-            if (quarkusCore.getOrigins().size() == 1 && quarkusCore.getOrigins().get(0) instanceof ExtensionCatalog) {
+            if (quarkusCore.getOrigins().size() == 1
+                    && quarkusCore.getOrigins().get(0) instanceof ExtensionCatalog originCatalog) {
                 // in this case, there is only one origin to choose from
-                return List.of((ExtensionCatalog) quarkusCore.getOrigins().get(0));
+                return List.of(originCatalog);
             }
-            originsWithPreferences = new ArrayList<>(quarkusCore.getOrigins().size());
             extensionsToAdd = List.of(quarkusCore);
         } else {
-            originsWithPreferences = new ArrayList<>();
-            for (Extension e : extensionsToAdd) {
-                addOriginsWithPreferences(originsWithPreferences, e);
-            }
+            List<Extension> tmp = new ArrayList<>(extensionsToAdd.size() + 1);
+            tmp.addAll(extensionsToAdd);
+            tmp.add(quarkusCore);
+            extensionsToAdd = tmp;
         }
 
-        addOriginsWithPreferences(originsWithPreferences, quarkusCore);
+        originsWithPreferences = new ArrayList<>();
+        for (Extension e : extensionsToAdd) {
+            addOriginsWithPreferences(originsWithPreferences, e);
+        }
         if (!originsWithPreferences.isEmpty()) {
             return getRecommendedOrigins(extensionsToAdd, originsWithPreferences);
         }
@@ -225,8 +344,8 @@ public class CreateProjectCommandHandler implements QuarkusCommandHandler {
         final Map<String, ExtensionCatalog> catalogMap = new HashMap<>();
         for (var e : extensionsToAdd) {
             var origin = e.getOrigins().get(0);
-            if (origin instanceof ExtensionCatalog) {
-                catalogMap.putIfAbsent(origin.getId(), (ExtensionCatalog) origin);
+            if (origin instanceof ExtensionCatalog originCatalog) {
+                catalogMap.putIfAbsent(origin.getId(), originCatalog);
             }
         }
         return List.copyOf(catalogMap.values());
@@ -244,7 +363,52 @@ public class CreateProjectCommandHandler implements QuarkusCommandHandler {
             }
             throw new QuarkusCommandException(buf.toString());
         }
-        return recommendedCombination.getUniqueSortedCatalogs();
+        // get the recommended catalogs in the right order according the preferences
+        List<ExtensionCatalog> sortedCatalogs = recommendedCombination.getUniqueSortedCatalogs();
+
+        // with the introduction of offering-based filtering, some extensions may appear to be picked
+        // from a catalog with a lower preference while still having their version managed in a catalog
+        // with a higher preference.
+        // For example, an unsupported extension managed in a downstream quarkus-bom could have been picked
+        // from the upstream quarkus-bom. In this case we don't want to import both downstream and upstream
+        // quarkus-boms. The logic below is making sure there is no unnecessary BOM overlap in such cases.
+        if (sortedCatalogs.size() < 2) {
+            return sortedCatalogs;
+        }
+
+        final List<ArtifactKey> extDeps = new ArrayList<>(extensionsToAdd.size());
+        for (Extension e : extensionsToAdd) {
+            extDeps.add(e.getArtifact().getKey());
+        }
+        List<ExtensionCatalog> reducedCatalogs = null;
+        int i = 0;
+        for (; i < sortedCatalogs.size(); ++i) {
+            var catalog = sortedCatalogs.get(i);
+            if (reducedCatalogs != null) {
+                reducedCatalogs.add(catalog);
+            }
+            if (catalog.isPlatform()) {
+                var o = catalog.getMetadata().get(Constants.ALL_CATALOG_EXTENSIONS);
+                if (o instanceof Map<?, ?> allManagedExtensionKeys) {
+                    if (extDeps.removeIf(allManagedExtensionKeys::containsKey)) {
+                        if (reducedCatalogs == null) {
+                            // if we got to the end, then we return the original catalogs
+                            if (i == sortedCatalogs.size() - 1) {
+                                break;
+                            }
+                            reducedCatalogs = new ArrayList<>(sortedCatalogs.size());
+                            for (int j = 0; j <= i; ++j) {
+                                reducedCatalogs.add(sortedCatalogs.get(j));
+                            }
+                        }
+                        if (extDeps.isEmpty()) {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        return reducedCatalogs == null ? sortedCatalogs : reducedCatalogs;
     }
 
     private static Extension findQuarkusCore(ExtensionCatalog extensionCatalog) throws QuarkusCommandException {
@@ -259,13 +423,13 @@ public class CreateProjectCommandHandler implements QuarkusCommandHandler {
     private static void addOriginsWithPreferences(final List<ExtensionOrigins> extOrigins, Extension e) {
         ExtensionOrigins.Builder eoBuilder = null;
         for (ExtensionOrigin c : e.getOrigins()) {
-            if (c instanceof ExtensionCatalog) {
+            if (c instanceof ExtensionCatalog catalog) {
                 final OriginPreference op = (OriginPreference) c.getMetadata().get("origin-preference");
                 if (op != null) {
                     if (eoBuilder == null) {
                         eoBuilder = ExtensionOrigins.builder(e.getArtifact().getKey());
                     }
-                    eoBuilder.addOrigin((ExtensionCatalog) c, op);
+                    eoBuilder.addOrigin(catalog, op);
                 }
             }
         }
