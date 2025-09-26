@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -52,6 +53,7 @@ public class CreateProjectCommandHandler implements QuarkusCommandHandler {
 
     private static final String MAVEN = "maven";
     private static final String GRADLE = "gradle";
+    private static final String QUARKUS_CORE = "quarkus-core";
 
     private static class ProjectDependencyInfo {
 
@@ -318,11 +320,6 @@ public class CreateProjectCommandHandler implements QuarkusCommandHandler {
                 return List.of(originCatalog);
             }
             extensionsToAdd = List.of(quarkusCore);
-        } else {
-            List<Extension> tmp = new ArrayList<>(extensionsToAdd.size() + 1);
-            tmp.addAll(extensionsToAdd);
-            tmp.add(quarkusCore);
-            extensionsToAdd = tmp;
         }
 
         originsWithPreferences = new ArrayList<>();
@@ -330,7 +327,7 @@ public class CreateProjectCommandHandler implements QuarkusCommandHandler {
             addOriginsWithPreferences(originsWithPreferences, e);
         }
         if (!originsWithPreferences.isEmpty()) {
-            return getRecommendedOrigins(extensionsToAdd, originsWithPreferences);
+            return getRecommendedOrigins(extensionsToAdd, quarkusCore, originsWithPreferences);
         }
 
         // no origin preferences were found (origin-preference data is missing)
@@ -352,19 +349,20 @@ public class CreateProjectCommandHandler implements QuarkusCommandHandler {
     }
 
     private static List<ExtensionCatalog> getRecommendedOrigins(List<Extension> extensionsToAdd,
-            List<ExtensionOrigins> extOrigins) throws QuarkusCommandException {
+            Extension quarkusCore, List<ExtensionOrigins> extOrigins) throws QuarkusCommandException {
         final OriginCombination recommendedCombination = OriginSelector.of(extOrigins).calculateRecommendedCombination();
         if (recommendedCombination == null) {
-            final StringBuilder buf = new StringBuilder();
-            buf.append("Failed to determine a compatible Quarkus version for the requested extensions: ");
-            buf.append(extensionsToAdd.get(0).getArtifact().getKey().toGacString());
-            for (int i = 1; i < extensionsToAdd.size(); ++i) {
-                buf.append(", ").append(extensionsToAdd.get(i).getArtifact().getKey().toGacString());
-            }
-            throw new QuarkusCommandException(buf.toString());
+            throw new QuarkusCommandException(noCompatibleQuarkusCoreVersion(extensionsToAdd));
         }
-        // get the recommended catalogs in the right order according the preferences
+        // get the recommended catalogs in the right order according to the preferences
         List<ExtensionCatalog> sortedCatalogs = recommendedCombination.getUniqueSortedCatalogs();
+
+        if (!containsQuarkusCore(extensionsToAdd)) {
+            sortedCatalogs = ensureQuarkusCorePresent(sortedCatalogs, quarkusCore);
+            if (sortedCatalogs.isEmpty()) {
+                throw new QuarkusCommandException(noCompatibleQuarkusCoreVersion(extensionsToAdd));
+            }
+        }
 
         // with the introduction of offering-based filtering, some extensions may appear to be picked
         // from a catalog with a lower preference while still having their version managed in a catalog
@@ -411,9 +409,77 @@ public class CreateProjectCommandHandler implements QuarkusCommandHandler {
         return reducedCatalogs == null ? sortedCatalogs : reducedCatalogs;
     }
 
+    private static List<ExtensionCatalog> ensureQuarkusCorePresent(List<ExtensionCatalog> catalogs, Extension quarkusCore) {
+        Map<String, ExtensionCatalog> allCoreOrigins = null;
+        ExtensionCatalog matchingQuarkusCoreOrigin = null;
+        int catalogContainingCoreIndex = -1;
+        for (int i = 0; i < catalogs.size(); ++i) {
+            ExtensionCatalog catalog = catalogs.get(i);
+            if (catalog.getMetadata().get(Constants.ALL_CATALOG_EXTENSIONS) instanceof Map<?, ?> allCatalogExtensions) {
+                final ArtifactCoords managedQuarkusCore = (ArtifactCoords) allCatalogExtensions
+                        .get(quarkusCore.getArtifact().getKey());
+                if (managedQuarkusCore != null) {
+                    if (i == 0) {
+                        return catalogs;
+                    }
+                    catalogContainingCoreIndex = i;
+                    matchingQuarkusCoreOrigin = catalog;
+                    break;
+                }
+            }
+            if (matchingQuarkusCoreOrigin == null) {
+                if (allCoreOrigins == null) {
+                    allCoreOrigins = getOriginCatalogsByQuarkusCore(quarkusCore.getOrigins());
+                }
+                matchingQuarkusCoreOrigin = allCoreOrigins.get(catalog.getQuarkusCoreVersion());
+            }
+        }
+        if (matchingQuarkusCoreOrigin == null) {
+            return List.of();
+        }
+        if (catalogContainingCoreIndex >= 0) {
+            final List<ExtensionCatalog> result = new ArrayList<>(catalogs);
+            Collections.swap(result, 0, catalogContainingCoreIndex);
+            return result;
+        }
+        final List<ExtensionCatalog> result = new ArrayList<>(catalogs.size() + 1);
+        result.add(matchingQuarkusCoreOrigin);
+        result.addAll(catalogs);
+        return result;
+    }
+
+    private static String noCompatibleQuarkusCoreVersion(List<Extension> extensionsToAdd) {
+        final StringBuilder buf = new StringBuilder();
+        buf.append("Failed to determine a compatible Quarkus version for the requested extensions: ");
+        buf.append(extensionsToAdd.get(0).getArtifact().getKey().toGacString());
+        for (int i = 1; i < extensionsToAdd.size(); ++i) {
+            buf.append(", ").append(extensionsToAdd.get(i).getArtifact().getKey().toGacString());
+        }
+        return buf.toString();
+    }
+
+    private static Map<String, ExtensionCatalog> getOriginCatalogsByQuarkusCore(List<ExtensionOrigin> origins) {
+        final Map<String, ExtensionCatalog> result = new HashMap<>(origins.size());
+        for (ExtensionOrigin origin : origins) {
+            if (origin instanceof ExtensionCatalog catalog) {
+                result.put(catalog.getQuarkusCoreVersion(), catalog);
+            }
+        }
+        return result;
+    }
+
+    private static boolean containsQuarkusCore(List<Extension> extensions) {
+        for (Extension e : extensions) {
+            if (e.getArtifact().getArtifactId().equals(QUARKUS_CORE)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static Extension findQuarkusCore(ExtensionCatalog extensionCatalog) throws QuarkusCommandException {
         final Optional<Extension> quarkusCore = extensionCatalog.getExtensions().stream()
-                .filter(e -> e.getArtifact().getArtifactId().equals("quarkus-core")).findFirst();
+                .filter(e -> e.getArtifact().getArtifactId().equals(QUARKUS_CORE)).findFirst();
         if (quarkusCore.isEmpty()) {
             throw new QuarkusCommandException("Failed to locate quarkus-core in the extension catalog");
         }
