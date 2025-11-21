@@ -488,6 +488,9 @@
                     <groupId>io.quarkus</groupId>
                     <artifactId>quarkus-maven-plugin</artifactId>
                     <version>${project.version}</version>
+                    <configuration>
+                        <suppressNotEnabledExtensionsWarning>true</suppressNotEnabledExtensionsWarning>
+                    </configuration>
                 </plugin>
                 <plugin>
                     <groupId>io.quarkus</groupId>

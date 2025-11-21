@@ -838,10 +838,11 @@ public class DevMojo extends AbstractMojo {
      * @return map of parameters for the Quarkus plugin goals
      */
     private Map<String, String> getQuarkusGoalParams(String bootstrapId, List<String> reloadPoms) {
-        final Map<String, String> result = new HashMap<>(4);
+        final Map<String, String> result = new HashMap<>(5);
         result.put(QuarkusBootstrapMojo.MODE_PARAM, getLaunchModeClasspath().name());
         result.put(QuarkusBootstrapMojo.CLOSE_BOOTSTRAPPED_APP_PARAM, "false");
         result.put(QuarkusBootstrapMojo.BOOTSTRAP_ID_PARAM, bootstrapId);
+        result.put("suppressNotEnabledExtensionsWarning", "true");
         if (reloadPoms != null && !reloadPoms.isEmpty()) {
             String reloadPomsStr;
             if (reloadPoms.size() == 1) {

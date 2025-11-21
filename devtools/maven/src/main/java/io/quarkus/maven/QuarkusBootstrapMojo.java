@@ -171,6 +171,12 @@ public abstract class QuarkusBootstrapMojo extends AbstractMojo {
     @Parameter(property = "reloadPoms")
     Set<File> reloadPoms = Set.of();
 
+    /**
+     * Allows to suppress the warning about not enabled extensions of the Quarkus Maven plugin
+     */
+    @Parameter(property = "quarkusSuppressNotEnabledExtensionsWarning")
+    boolean suppressNotEnabledExtensionsWarning;
+
     private ArtifactKey projectId;
 
     @Override
@@ -201,7 +207,7 @@ public abstract class QuarkusBootstrapMojo extends AbstractMojo {
     }
 
     private void hintEnableExtensions() {
-        if (!bootstrapSessionListener.isEnabled()) {
+        if (!suppressNotEnabledExtensionsWarning && !bootstrapSessionListener.isEnabled()) {
             super.getLog().warn("The Maven extensions for the Quarkus Maven plugin are not enabled for this build. " +
                     "We recommend enabling this, so that the plugin can verify essential build settings have been configured as required. "
                     +
