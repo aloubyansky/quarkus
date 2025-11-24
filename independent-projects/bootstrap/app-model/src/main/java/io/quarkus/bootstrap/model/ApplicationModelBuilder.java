@@ -138,7 +138,7 @@ public class ApplicationModelBuilder {
         return this;
     }
 
-    public ApplicationModelBuilder addRemovedResources(ArtifactKey key, Set<String> resources) {
+    public ApplicationModelBuilder addRemovedResources(ArtifactKey key, Collection<String> resources) {
         this.excludedResources.computeIfAbsent(key, k -> new HashSet<>(resources.size())).addAll(resources);
         return this;
     }
@@ -167,6 +167,10 @@ public class ApplicationModelBuilder {
         return projectModules.computeIfAbsent(id,
                 k -> WorkspaceModule.builder().setModuleId(id).setModuleDir(moduleDir.toPath())
                         .setBuildDir(buildDir.toPath()));
+    }
+
+    void addExtensionDevModeConfig(ExtensionDevModeConfig extDevConfig) {
+        extensionDevConfig.add(extDevConfig);
     }
 
     /**

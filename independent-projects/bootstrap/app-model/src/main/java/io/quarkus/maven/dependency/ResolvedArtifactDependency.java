@@ -4,8 +4,10 @@ import java.io.Serializable;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
+import io.quarkus.bootstrap.model.MappableCollectionFactory;
 import io.quarkus.bootstrap.workspace.WorkspaceModule;
 import io.quarkus.paths.PathCollection;
 import io.quarkus.paths.PathList;
@@ -77,6 +79,13 @@ public class ResolvedArtifactDependency extends ArtifactDependency implements Re
     @Override
     public Collection<ArtifactCoords> getDependencies() {
         return deps;
+    }
+
+    @Override
+    public Map<String, Object> asMap(MappableCollectionFactory factory) {
+        final Map<String, Object> map = factory.newMap();
+        ResolvedDependency.putInMap(this, map, factory);
+        return map;
     }
 
     @Override

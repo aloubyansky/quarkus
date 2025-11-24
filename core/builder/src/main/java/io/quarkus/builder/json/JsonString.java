@@ -27,4 +27,9 @@ public final class JsonString implements JsonValue {
     public int hashCode() {
         return Objects.hash(value);
     }
+
+    @Override
+    public String toString() {
+        return value;
+    }
 }

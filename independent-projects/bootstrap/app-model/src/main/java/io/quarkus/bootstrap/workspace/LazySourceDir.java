@@ -9,6 +9,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 
+import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.paths.DirectoryPathTree;
 import io.quarkus.paths.EmptyPathTree;
 import io.quarkus.paths.PathFilter;
@@ -18,6 +19,20 @@ import io.quarkus.paths.PathTree;
  * This implementation checks whether a directory exists before returning path trees instead of eagerly during initialization.
  */
 public class LazySourceDir implements SourceDir, Serializable {
+
+    static SourceDir fromMap(Map<String, Object> map) {
+        final Path srcDir = Path.of(map.get(BootstrapConstants.MAPPABLE_SRC_DIR).toString());
+        final Path destDir = Path.of(map.get(BootstrapConstants.MAPPABLE_DEST_DIR).toString());
+
+        final Path genSrcDir;
+        Object o = map.get(BootstrapConstants.MAPPABLE_APT_SOURCES_DIR);
+        if (o == null) {
+            genSrcDir = null;
+        } else {
+            genSrcDir = Path.of(o.toString());
+        }
+        return new LazySourceDir(srcDir, destDir, genSrcDir);
+    }
 
     private Path srcDir;
     private PathFilter srcFilter;

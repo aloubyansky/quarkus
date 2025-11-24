@@ -117,6 +117,14 @@ public class GenerateCodeMojo extends QuarkusBootstrapMojo {
                             getLog().warn("Failed to serialize application model", e);
                         }
                     }
+
+                    try {
+                        Path jsonFile = Path.of(mavenProject().getBuild().getDirectory()).resolve("json-app-model.json");
+                        JsonApplicationModel.serialize(appModel, jsonFile);
+                        JsonApplicationModel.deserialize(jsonFile);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
                 }
             }
         }

@@ -1,10 +1,15 @@
 package io.quarkus.maven.dependency;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
+import io.quarkus.bootstrap.BootstrapConstants;
+import io.quarkus.bootstrap.model.MappableCollectionFactory;
 import io.quarkus.bootstrap.workspace.WorkspaceModule;
 import io.quarkus.paths.PathCollection;
 import io.quarkus.paths.PathList;
@@ -20,6 +25,34 @@ public class ResolvedDependencyBuilder extends AbstractDependencyBuilder<Resolve
     WorkspaceModule workspaceModule;
     private volatile ArtifactCoords coords;
     private Collection<ArtifactCoords> deps = Set.of();
+
+    @Override
+    public ResolvedDependencyBuilder fromMap(Map<String, Object> map) {
+        super.fromMap(map);
+
+        Collection<String> resolvedPathsStr = (Collection<String>) map.get(BootstrapConstants.MAPPABLE_RESOLVED_PATHS);
+        final Path[] pathArr = new Path[resolvedPathsStr.size()];
+        int i = 0;
+        for (var pathStr : resolvedPathsStr) {
+            pathArr[i++] = Path.of(pathStr);
+        }
+        setResolvedPaths(PathList.of(pathArr));
+
+        Collection<String> depsStr = (Collection<String>) map.get(BootstrapConstants.MAPPABLE_DEPENDENCIES);
+        if (depsStr != null) {
+            final List<ArtifactCoords> deps = new ArrayList<>(depsStr.size());
+            for (String depStr : depsStr) {
+                deps.add(ArtifactCoords.fromString(depStr));
+            }
+            setDependencies(deps);
+        }
+
+        Map<String, Object> moduleMap = (Map<String, Object>) map.get(BootstrapConstants.MAPPABLE_MODULE);
+        if (moduleMap != null) {
+            setWorkspaceModule(WorkspaceModule.builder().fromMap(moduleMap).build());
+        }
+        return this;
+    }
 
     @Override
     public PathCollection getResolvedPaths() {
@@ -87,5 +120,12 @@ public class ResolvedDependencyBuilder extends AbstractDependencyBuilder<Resolve
     @Override
     public ResolvedDependency build() {
         return new ResolvedArtifactDependency(this);
+    }
+
+    @Override
+    public Map<String, Object> asMap(MappableCollectionFactory factory) {
+        final Map<String, Object> map = factory.newMap();
+        ResolvedDependency.putInMap(this, map, factory);
+        return map;
     }
 }

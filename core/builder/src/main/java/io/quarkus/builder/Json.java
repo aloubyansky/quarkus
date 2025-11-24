@@ -4,10 +4,12 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.Set;
 
 import io.quarkus.builder.json.JsonArray;
 import io.quarkus.builder.json.JsonBoolean;
@@ -59,6 +61,14 @@ public final class Json {
     }
 
     /**
+     * @param initialCapacity initial underlying array capacity
+     * @return the new JSON array builder, empty builders are not ignored
+     */
+    public static JsonArrayBuilder array(int initialCapacity) {
+        return new JsonArrayBuilder(false, false, initialCapacity);
+    }
+
+    /**
      * @param ignoreEmptyBuilders
      * @return the new JSON array builder
      * @see JsonBuilder#ignoreEmptyBuilders
@@ -72,6 +82,14 @@ public final class Json {
      */
     public static JsonObjectBuilder object() {
         return new JsonObjectBuilder(false, false);
+    }
+
+    /**
+     * @param initialCapacity initial underlying map capacity
+     * @return the new JSON object builder, empty builders are not ignored
+     */
+    public static JsonObjectBuilder object(int initialCapacity) {
+        return new JsonObjectBuilder(false, false, initialCapacity);
     }
 
     /**
@@ -162,16 +180,21 @@ public final class Json {
     /**
      * JSON array builder.
      */
-    public static class JsonArrayBuilder extends JsonBuilder<JsonArrayBuilder> {
+    public static class JsonArrayBuilder extends JsonBuilder<JsonArrayBuilder> implements Collection<Object> {
 
         private final List<Object> values;
 
         private JsonArrayBuilder(boolean ignoreEmptyBuilders, boolean skipEscapeCharacters) {
             super(ignoreEmptyBuilders, skipEscapeCharacters);
-            this.values = new ArrayList<Object>();
+            this.values = new ArrayList<>();
         }
 
-        JsonArrayBuilder add(JsonArrayBuilder value) {
+        private JsonArrayBuilder(boolean ignoreEmptyBuilders, boolean skipEscapeCharacters, int initialCapacity) {
+            super(ignoreEmptyBuilders, skipEscapeCharacters);
+            this.values = new ArrayList<>(initialCapacity);
+        }
+
+        public JsonArrayBuilder add(JsonArrayBuilder value) {
             addInternal(value);
             return this;
         }
@@ -214,8 +237,72 @@ public final class Json {
             }
         }
 
+        @Override
+        public int size() {
+            return values.size();
+        }
+
         public boolean isEmpty() {
             return isValuesEmpty(values);
+        }
+
+        @Override
+        public boolean contains(Object o) {
+            return values.contains(o);
+        }
+
+        @Override
+        public Iterator<Object> iterator() {
+            return values.iterator();
+        }
+
+        @Override
+        public Object[] toArray() {
+            return values.toArray();
+        }
+
+        @Override
+        public <T> T[] toArray(T[] a) {
+            return values.toArray(a);
+        }
+
+        @Override
+        public boolean add(Object o) {
+            addInternal(o);
+            return o != null;
+        }
+
+        @Override
+        public boolean remove(Object o) {
+            return values.remove(o);
+        }
+
+        @Override
+        public boolean containsAll(Collection<?> c) {
+            return values.containsAll(c);
+        }
+
+        @Override
+        public boolean addAll(Collection<?> c) {
+            for (Object o : c) {
+                addInternal(o);
+            }
+            return false;
+        }
+
+        @Override
+        public boolean removeAll(Collection<?> c) {
+            return values.removeAll(c);
+        }
+
+        @Override
+        public boolean retainAll(Collection<?> c) {
+            return values.retainAll(c);
+        }
+
+        @Override
+        public void clear() {
+            values.clear();
         }
 
         String build() throws IOException {
@@ -276,13 +363,18 @@ public final class Json {
     /**
      * JSON object builder.
      */
-    public static class JsonObjectBuilder extends JsonBuilder<JsonObjectBuilder> {
+    public static class JsonObjectBuilder extends JsonBuilder<JsonObjectBuilder> implements Map<String, Object> {
 
         private final Map<String, Object> properties;
 
         private JsonObjectBuilder(boolean ignoreEmptyBuilders, boolean skipEscapeCharacters) {
             super(ignoreEmptyBuilders, skipEscapeCharacters);
             this.properties = new HashMap<String, Object>();
+        }
+
+        private JsonObjectBuilder(boolean ignoreEmptyBuilders, boolean skipEscapeCharacters, int initialCapacity) {
+            super(ignoreEmptyBuilders, skipEscapeCharacters);
+            this.properties = new HashMap<>(initialCapacity);
         }
 
         public JsonObjectBuilder put(String name, String value) {
@@ -319,11 +411,17 @@ public final class Json {
             return properties.containsKey(name);
         }
 
-        void putInternal(String name, Object value) {
+        Object putInternal(String name, Object value) {
             Objects.requireNonNull(name);
             if (value != null) {
-                properties.put(name, value);
+                return properties.put(name, value);
             }
+            return null;
+        }
+
+        @Override
+        public int size() {
+            return properties.size();
         }
 
         public boolean isEmpty() {
@@ -331,6 +429,58 @@ public final class Json {
                 return true;
             }
             return isValuesEmpty(properties.values());
+        }
+
+        @Override
+        public boolean containsKey(Object key) {
+            return properties.containsKey(key);
+        }
+
+        @Override
+        public boolean containsValue(Object value) {
+            return properties.containsValue(value);
+        }
+
+        @Override
+        public Object get(Object key) {
+            return properties.get(key);
+        }
+
+        @Override
+        public Object put(String key, Object value) {
+            return putInternal(key, value);
+        }
+
+        @Override
+        public Object remove(Object key) {
+            return properties.remove(key);
+        }
+
+        @Override
+        public void putAll(Map<? extends String, ?> m) {
+            for (Map.Entry<? extends String, ?> entry : m.entrySet()) {
+                putInternal(entry.getKey(), entry.getValue());
+            }
+        }
+
+        @Override
+        public void clear() {
+            properties.clear();
+        }
+
+        @Override
+        public Set<String> keySet() {
+            return properties.keySet();
+        }
+
+        @Override
+        public Collection<Object> values() {
+            return properties.values();
+        }
+
+        @Override
+        public Set<Entry<String, Object>> entrySet() {
+            return properties.entrySet();
         }
 
         String build() throws IOException {
