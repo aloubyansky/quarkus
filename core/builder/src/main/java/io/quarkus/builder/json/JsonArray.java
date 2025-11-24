@@ -25,4 +25,8 @@ public final class JsonArray implements JsonMultiValue {
     public void forEach(JsonTransform transform) {
         value.forEach(v -> transform.accept(null, v));
     }
+
+    public int size() {
+        return value.size();
+    }
 }

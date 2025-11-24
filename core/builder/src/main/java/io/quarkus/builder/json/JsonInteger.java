@@ -14,4 +14,9 @@ public final class JsonInteger implements JsonNumber {
     public int intValue() {
         return (int) value;
     }
+
+    @Override
+    public String toString() {
+        return Long.toString(value);
+    }
 }

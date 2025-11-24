@@ -2,7 +2,11 @@ package io.quarkus.maven.dependency;
 
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.Map;
 
+import io.quarkus.bootstrap.BootstrapConstants;
+import io.quarkus.bootstrap.model.Mappable;
+import io.quarkus.bootstrap.model.MappableCollectionFactory;
 import io.quarkus.bootstrap.workspace.ArtifactSources;
 import io.quarkus.bootstrap.workspace.WorkspaceModule;
 import io.quarkus.paths.EmptyPathTree;
@@ -13,6 +17,22 @@ import io.quarkus.paths.PathFilter;
 import io.quarkus.paths.PathTree;
 
 public interface ResolvedDependency extends Dependency {
+
+    static void putInMap(ResolvedDependency dependency, Map<String, Object> map, MappableCollectionFactory factory) {
+        ArtifactDependency.putInMap(dependency, map, factory);
+        map.put(BootstrapConstants.MAPPABLE_RESOLVED_PATHS,
+                Mappable.iterableToStringCollection(dependency.getResolvedPaths(), factory));
+
+        final Collection<ArtifactCoords> deps = dependency.getDependencies();
+        if (!deps.isEmpty()) {
+            map.put(BootstrapConstants.MAPPABLE_DEPENDENCIES,
+                    Mappable.toStringCollection(deps, ArtifactCoords::toGACTVString, factory));
+        }
+
+        if (dependency.getWorkspaceModule() != null) {
+            map.put(BootstrapConstants.MAPPABLE_MODULE, dependency.getWorkspaceModule().asMap(factory));
+        }
+    }
 
     PathCollection getResolvedPaths();
 
