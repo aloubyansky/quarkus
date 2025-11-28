@@ -16,7 +16,7 @@ public interface SourceDir extends Mappable {
     }
 
     static SourceDir of(Path src, Path dest, Path generatedSources) {
-        return new DefaultSourceDir(src, dest, generatedSources);
+        return new LazySourceDir(src, dest, generatedSources);
     }
 
     Path getDir();

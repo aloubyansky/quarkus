@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import io.quarkus.bootstrap.BootstrapConstants;
+import io.quarkus.bootstrap.model.MappableCollectionFactory;
 import io.quarkus.paths.DirectoryPathTree;
 import io.quarkus.paths.EmptyPathTree;
 import io.quarkus.paths.PathFilter;
@@ -97,6 +98,17 @@ public class LazySourceDir implements SourceDir, Serializable {
     public <T> T getValue(Object key, Class<T> type) {
         final Object o = data.get(key);
         return o == null ? null : type.cast(o);
+    }
+
+    @Override
+    public Map<String, Object> asMap(MappableCollectionFactory factory) {
+        final Map<String, Object> map = factory.newMap(3);
+        map.put(BootstrapConstants.MAPPABLE_SRC_DIR, srcDir.toString());
+        map.put(BootstrapConstants.MAPPABLE_DEST_DIR, destDir.toString());
+        if (genSrcDir != null) {
+            map.put(BootstrapConstants.MAPPABLE_APT_SOURCES_DIR, genSrcDir.toString());
+        }
+        return map;
     }
 
     @Serial
