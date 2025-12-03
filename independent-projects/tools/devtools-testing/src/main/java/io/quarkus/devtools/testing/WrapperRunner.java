@@ -1,11 +1,13 @@
 package io.quarkus.devtools.testing;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Stream;
 
 import io.quarkus.bootstrap.resolver.maven.options.BootstrapMavenOptions;
 import io.smallrye.common.os.OS;
@@ -52,6 +54,12 @@ public final class WrapperRunner {
                 if (file.isFile() && file.canExecute()) {
                     return value;
                 }
+            }
+            System.out.println("NO WRAPPER FOUND AMONG");
+            try (Stream<Path> stream = Files.list(projectDir)) {
+                stream.forEach(p -> System.out.println("- " + p));
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
             throw new IllegalStateException("No supported wrapper that can be executed found in this directory: " + projectDir);
         }
