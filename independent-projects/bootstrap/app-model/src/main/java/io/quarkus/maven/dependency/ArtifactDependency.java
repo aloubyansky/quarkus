@@ -94,7 +94,7 @@ public class ArtifactDependency extends GACTV implements Dependency, Serializabl
 
     @Override
     public Map<String, Object> asMap(MappableCollectionFactory factory) {
-        final Map<String, Object> map = factory.newMap();
+        final Map<String, Object> map = factory.newMap(4);
         putInMap(this, map, factory);
         return map;
     }

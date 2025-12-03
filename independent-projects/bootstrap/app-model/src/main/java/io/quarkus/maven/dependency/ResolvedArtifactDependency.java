@@ -84,7 +84,7 @@ public class ResolvedArtifactDependency extends ArtifactDependency implements Re
     @Override
     public Map<String, Object> asMap(MappableCollectionFactory factory) {
         final Map<String, Object> map = factory.newMap();
-        ResolvedDependency.putInMap(this, map, factory);
+        ResolvedDependencyBuilder.putInMap(this, map, factory);
         return map;
     }
 
@@ -102,9 +102,8 @@ public class ResolvedArtifactDependency extends ArtifactDependency implements Re
             return true;
         if (!super.equals(obj))
             return false;
-        if (!(obj instanceof ResolvableDependency))
+        if (!(obj instanceof ResolvableDependency other))
             return false;
-        ResolvableDependency other = (ResolvableDependency) obj;
         return Objects.equals(module, other.getWorkspaceModule()) && Objects.equals(paths, other.getResolvedPaths());
     }
 
@@ -113,7 +112,7 @@ public class ResolvedArtifactDependency extends ArtifactDependency implements Re
         final StringBuilder buf = new StringBuilder();
         buf.append(toGACTVString()).append(paths);
         if (module != null) {
-            buf.append(" " + module);
+            buf.append(" ").append(module);
         }
         return buf.toString();
     }

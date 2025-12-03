@@ -19,6 +19,7 @@ import io.quarkus.bootstrap.json.JsonObject;
 import io.quarkus.bootstrap.json.JsonReader;
 import io.quarkus.bootstrap.json.JsonValue;
 import io.quarkus.bootstrap.model.ApplicationModel;
+import io.quarkus.bootstrap.model.ApplicationModelBuilder;
 import io.quarkus.bootstrap.model.MappableCollectionFactory;
 
 /**
@@ -198,7 +199,7 @@ public class ApplicationModelSerializer {
      */
     private static ApplicationModel fromJson(Path file) throws IOException {
         final Map<String, Object> modelMap = asMap(JsonReader.of(Files.readString(file)).read());
-        return ApplicationModel.fromMap(modelMap);
+        return ApplicationModelBuilder.fromMap(modelMap);
     }
 
     /**

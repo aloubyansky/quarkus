@@ -135,7 +135,7 @@ public class BootstrapUtils {
 
     /**
      * @deprecated since 3.31.0 in favor of ApplicationModelSerializer methods
-     *
+     *             <p>
      *             Serializes an {@link ApplicationModel} along with the workspace ID for which it was resolved.
      *             The serialization format will be different from the one used by {@link #resolveSerializedAppModelPath(Path)}
      *             and {@link #getSerializedTestAppModelPath(Path)}.
@@ -158,7 +158,7 @@ public class BootstrapUtils {
 
     /**
      * @deprecated since 3.31.0 in favor of ApplicationModelSerializer methods
-     *
+     *             <p>
      *             Deserializes an {@link ApplicationModel} from a file.
      *             <p>
      *             The implementation will check whether the serialization format of the file matches the expected one.

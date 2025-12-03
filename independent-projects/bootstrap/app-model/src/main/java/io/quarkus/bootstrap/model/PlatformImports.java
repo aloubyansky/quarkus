@@ -14,10 +14,10 @@ public interface PlatformImports extends Mappable {
     static PlatformImports fromMap(Map<String, Object> map) {
         return new PlatformImportsImpl(
                 (Map<String, String>) map.getOrDefault(BootstrapConstants.MAPPABLE_PLATFORM_PROPS, Collections.emptyMap()),
-                getImportedBoms(map), getReleaseInfo(map));
+                importedBomsFromMap(map), releaseInfoFromMap(map));
     }
 
-    private static List<ArtifactCoords> getImportedBoms(Map<String, Object> map) {
+    private static List<ArtifactCoords> importedBomsFromMap(Map<String, Object> map) {
         final Collection<String> importedBomsStr = (Collection<String>) map.get(BootstrapConstants.MAPPABLE_IMPORTED_BOMS);
         if (importedBomsStr != null) {
             final List<ArtifactCoords> importedBoms = new ArrayList<>(importedBomsStr.size());
@@ -26,10 +26,10 @@ public interface PlatformImports extends Mappable {
             }
             return importedBoms;
         }
-        return List.of();
+        return Collections.emptyList();
     }
 
-    private static List<PlatformReleaseInfo> getReleaseInfo(Map<String, Object> map) {
+    private static List<PlatformReleaseInfo> releaseInfoFromMap(Map<String, Object> map) {
         final Collection<Map<String, Object>> releaseInfoCol = (Collection<Map<String, Object>>) map
                 .get(BootstrapConstants.MAPPABLE_PLATFORM_RELEASE_INFO);
         if (releaseInfoCol != null) {
@@ -39,7 +39,7 @@ public interface PlatformImports extends Mappable {
             }
             return releaseInfo;
         }
-        return List.of();
+        return Collections.emptyList();
     }
 
     /**
@@ -80,7 +80,7 @@ public interface PlatformImports extends Mappable {
 
     @Override
     default Map<String, Object> asMap(MappableCollectionFactory factory) {
-        final Map<String, Object> map = factory.newMap(5);
+        final Map<String, Object> map = factory.newMap(3);
 
         if (!getPlatformProperties().isEmpty()) {
             final Map<String, String> props = getPlatformProperties();

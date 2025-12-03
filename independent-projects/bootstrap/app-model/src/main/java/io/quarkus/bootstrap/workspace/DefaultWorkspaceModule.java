@@ -83,7 +83,7 @@ public class DefaultWorkspaceModule implements WorkspaceModule, Serializable {
                 setDependencies(deps);
             }
 
-            // TODO
+            // TODO parent module
             return this;
         }
 

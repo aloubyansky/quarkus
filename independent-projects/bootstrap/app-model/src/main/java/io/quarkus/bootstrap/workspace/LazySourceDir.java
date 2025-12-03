@@ -105,7 +105,7 @@ public class LazySourceDir implements SourceDir, Serializable {
 
     @Override
     public Map<String, Object> asMap(MappableCollectionFactory factory) {
-        final Map<String, Object> map = factory.newMap(3);
+        final Map<String, Object> map = factory.newMap(5);
         map.put(BootstrapConstants.MAPPABLE_SRC_DIR, srcDir.toString());
         if (srcFilter != null) {
             map.put(BootstrapConstants.MAPPABLE_SRC_PATH_FILTER, srcFilter.asMap(factory));

@@ -12,7 +12,6 @@ import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.maven.dependency.Dependency;
 import io.quarkus.maven.dependency.DependencyFlags;
 import io.quarkus.maven.dependency.ResolvedDependency;
-import io.quarkus.maven.dependency.ResolvedDependencyBuilder;
 
 /**
  * Application dependency model. Allows to explore application dependencies,
@@ -212,59 +211,5 @@ public interface ApplicationModel extends Mappable {
             map.put(BootstrapConstants.MAPPABLE_EXTENSION_DEV_CONFIG, Mappable.asMaps(getExtensionDevModeConfig(), factory));
         }
         return map;
-    }
-
-    static ApplicationModel fromMap(Map<String, Object> map) {
-        final ApplicationModelBuilder builder = new ApplicationModelBuilder();
-        builder.setAppArtifact(ResolvedDependencyBuilder.newInstance()
-                .fromMap((Map<String, Object>) map.get(BootstrapConstants.MAPPABLE_APP_ARTIFACT)));
-
-        final Collection<Map<String, Object>> depsMap = (Collection<Map<String, Object>>) map
-                .get(BootstrapConstants.MAPPABLE_DEPENDENCIES);
-        if (depsMap != null) {
-            for (Map<String, Object> depMap : depsMap) {
-                builder.addDependency(ResolvedDependencyBuilder.newInstance().fromMap(depMap));
-            }
-        }
-
-        final Map<String, Object> platformImportsMap = (Map<String, Object>) map
-                .get(BootstrapConstants.MAPPABLE_PLATFORM_IMPORTS);
-        if (platformImportsMap != null) {
-            builder.setPlatformImports(PlatformImports.fromMap(platformImportsMap));
-        }
-
-        final Collection<Map<String, Object>> capabilitiesMap = (Collection<Map<String, Object>>) map
-                .get(BootstrapConstants.MAPPABLE_CAPABILITIES);
-        if (capabilitiesMap != null) {
-            for (Map<String, Object> capabilityMap : capabilitiesMap) {
-                builder.addExtensionCapabilities(ExtensionCapabilities.fromMap(capabilityMap));
-            }
-        }
-
-        final Collection<String> localProjectsStr = (Collection<String>) map.get(BootstrapConstants.MAPPABLE_LOCAL_PROJECTS);
-        if (localProjectsStr != null) {
-            for (String key : localProjectsStr) {
-                builder.addReloadableWorkspaceModule(ArtifactKey.fromString(key));
-            }
-        }
-
-        final Map<String, Object> removedResourcesMap = (Map<String, Object>) map
-                .get(BootstrapConstants.MAPPABLE_EXCLUDED_RESOURCES);
-        if (removedResourcesMap != null) {
-            for (Map.Entry<String, Object> removedResource : removedResourcesMap.entrySet()) {
-                builder.addRemovedResources(ArtifactKey.fromString(removedResource.getKey()),
-                        (Collection<String>) removedResource.getValue());
-            }
-        }
-
-        final Collection<Map<String, Object>> extDevConfigMap = (Collection<Map<String, Object>>) map
-                .get(BootstrapConstants.MAPPABLE_EXTENSION_DEV_CONFIG);
-        if (extDevConfigMap != null) {
-            for (Map<String, Object> extDevConfig : extDevConfigMap) {
-                builder.addExtensionDevModeConfig(ExtensionDevModeConfig.fromMap(extDevConfig));
-            }
-        }
-
-        return builder.build();
     }
 }

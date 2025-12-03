@@ -38,6 +38,66 @@ public class ApplicationModelBuilder {
 
     private static final String COMMA = ",";
 
+    /**
+     * Initializes an {@link ApplicationModel} from a {@link Map}.
+     *
+     * @param map map representation of an application model
+     * @return an instance of an application model
+     */
+    public static ApplicationModel fromMap(Map<String, Object> map) {
+        final ApplicationModelBuilder builder = new ApplicationModelBuilder();
+        builder.setAppArtifact(ResolvedDependencyBuilder.newInstance()
+                .fromMap((Map<String, Object>) map.get(BootstrapConstants.MAPPABLE_APP_ARTIFACT)));
+
+        final Collection<Map<String, Object>> depsMap = (Collection<Map<String, Object>>) map
+                .get(BootstrapConstants.MAPPABLE_DEPENDENCIES);
+        if (depsMap != null) {
+            for (Map<String, Object> depMap : depsMap) {
+                builder.addDependency(ResolvedDependencyBuilder.newInstance().fromMap(depMap));
+            }
+        }
+
+        final Map<String, Object> platformImportsMap = (Map<String, Object>) map
+                .get(BootstrapConstants.MAPPABLE_PLATFORM_IMPORTS);
+        if (platformImportsMap != null) {
+            builder.setPlatformImports(PlatformImports.fromMap(platformImportsMap));
+        }
+
+        final Collection<Map<String, Object>> capabilitiesMap = (Collection<Map<String, Object>>) map
+                .get(BootstrapConstants.MAPPABLE_CAPABILITIES);
+        if (capabilitiesMap != null) {
+            for (Map<String, Object> capabilityMap : capabilitiesMap) {
+                builder.addExtensionCapabilities(ExtensionCapabilities.fromMap(capabilityMap));
+            }
+        }
+
+        final Collection<String> localProjectsStr = (Collection<String>) map.get(BootstrapConstants.MAPPABLE_LOCAL_PROJECTS);
+        if (localProjectsStr != null) {
+            for (String key : localProjectsStr) {
+                builder.addReloadableWorkspaceModule(ArtifactKey.fromString(key));
+            }
+        }
+
+        final Map<String, Object> removedResourcesMap = (Map<String, Object>) map
+                .get(BootstrapConstants.MAPPABLE_EXCLUDED_RESOURCES);
+        if (removedResourcesMap != null) {
+            for (Map.Entry<String, Object> removedResource : removedResourcesMap.entrySet()) {
+                builder.addRemovedResources(ArtifactKey.fromString(removedResource.getKey()),
+                        (Collection<String>) removedResource.getValue());
+            }
+        }
+
+        final Collection<Map<String, Object>> extDevConfigMap = (Collection<Map<String, Object>>) map
+                .get(BootstrapConstants.MAPPABLE_EXTENSION_DEV_CONFIG);
+        if (extDevConfigMap != null) {
+            for (Map<String, Object> extDevConfig : extDevConfigMap) {
+                builder.extensionDevConfig.add(ExtensionDevModeConfig.fromMap(extDevConfig));
+            }
+        }
+
+        return builder.build();
+    }
+
     ResolvedDependencyBuilder appArtifact;
 
     final Map<ArtifactKey, ResolvedDependencyBuilder> dependencies = new LinkedHashMap<>();
@@ -167,10 +227,6 @@ public class ApplicationModelBuilder {
         return projectModules.computeIfAbsent(id,
                 k -> WorkspaceModule.builder().setModuleId(id).setModuleDir(moduleDir.toPath())
                         .setBuildDir(buildDir.toPath()));
-    }
-
-    void addExtensionDevModeConfig(ExtensionDevModeConfig extDevConfig) {
-        extensionDevConfig.add(extDevConfig);
     }
 
     /**

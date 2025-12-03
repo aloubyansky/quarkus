@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 
 import io.quarkus.bootstrap.BootstrapConstants;
+import io.quarkus.bootstrap.model.Mappable;
 import io.quarkus.bootstrap.model.MappableCollectionFactory;
 import io.quarkus.bootstrap.workspace.WorkspaceModule;
 import io.quarkus.paths.PathCollection;
@@ -16,6 +17,22 @@ import io.quarkus.paths.PathList;
 
 public class ResolvedDependencyBuilder extends AbstractDependencyBuilder<ResolvedDependencyBuilder, ResolvedDependency>
         implements ResolvedDependency {
+
+    static void putInMap(ResolvedDependency dependency, Map<String, Object> map, MappableCollectionFactory factory) {
+        ArtifactDependency.putInMap(dependency, map, factory);
+        map.put(BootstrapConstants.MAPPABLE_RESOLVED_PATHS,
+                Mappable.iterableToStringCollection(dependency.getResolvedPaths(), factory));
+
+        final Collection<ArtifactCoords> deps = dependency.getDependencies();
+        if (!deps.isEmpty()) {
+            map.put(BootstrapConstants.MAPPABLE_DEPENDENCIES,
+                    Mappable.toStringCollection(deps, ArtifactCoords::toGACTVString, factory));
+        }
+
+        if (dependency.getWorkspaceModule() != null) {
+            map.put(BootstrapConstants.MAPPABLE_MODULE, dependency.getWorkspaceModule().asMap(factory));
+        }
+    }
 
     public static ResolvedDependencyBuilder newInstance() {
         return new ResolvedDependencyBuilder();
@@ -124,8 +141,8 @@ public class ResolvedDependencyBuilder extends AbstractDependencyBuilder<Resolve
 
     @Override
     public Map<String, Object> asMap(MappableCollectionFactory factory) {
-        final Map<String, Object> map = factory.newMap();
-        ResolvedDependency.putInMap(this, map, factory);
+        final Map<String, Object> map = factory.newMap(7);
+        putInMap(this, map, factory);
         return map;
     }
 }
