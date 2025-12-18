@@ -3,16 +3,11 @@ package io.quarkus.deployment.pkg.jar;
 import static io.quarkus.deployment.pkg.PackageConfig.JarConfig.JarType.UBER_JAR;
 
 import java.io.IOException;
-import java.nio.file.FileSystem;
-import java.nio.file.FileVisitOption;
-import java.nio.file.FileVisitResult;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -35,7 +30,6 @@ import io.quarkus.deployment.pkg.builditem.JarBuildItem;
 import io.quarkus.deployment.pkg.builditem.OutputTargetBuildItem;
 import io.quarkus.deployment.pkg.builditem.UberJarIgnoredResourceBuildItem;
 import io.quarkus.deployment.pkg.builditem.UberJarMergedResourceBuildItem;
-import io.quarkus.fs.util.ZipUtils;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.maven.dependency.Dependency;
 import io.quarkus.maven.dependency.ResolvedDependency;
@@ -181,8 +175,8 @@ public class UberJarBuilder extends AbstractJarBuilder<JarBuildItem> {
                     continue;
                 }
 
+                final Set<String> existingEntries = new HashSet<>();
                 for (Path resolvedDep : appDep.getResolvedPaths()) {
-                    Set<String> existingEntries = new HashSet<>();
                     Set<String> transformedFilesByJar = transformedClasses.getTransformedFilesByJar().get(resolvedDep);
                     if (transformedFilesByJar != null) {
                         existingEntries.addAll(transformedFilesByJar);
@@ -190,21 +184,11 @@ public class UberJarBuilder extends AbstractJarBuilder<JarBuildItem> {
                     generatedResources.stream()
                             .map(GeneratedResourceBuildItem::getName)
                             .forEach(existingEntries::add);
-
-                    if (!Files.isDirectory(resolvedDep)) {
-                        try (FileSystem artifactFs = ZipUtils.newFileSystem(resolvedDep)) {
-                            for (final Path root : artifactFs.getRootDirectories()) {
-                                walkFileDependencyForDependency(root, archiveCreator, duplicateCatcher,
-                                        concatenatedEntries, allIgnoredEntriesPredicate, appDep, existingEntries,
-                                        mergeResourcePaths);
-                            }
-                        }
-                    } else {
-                        walkFileDependencyForDependency(resolvedDep, archiveCreator, duplicateCatcher,
-                                concatenatedEntries, allIgnoredEntriesPredicate, appDep, existingEntries,
-                                mergeResourcePaths);
-                    }
                 }
+
+                walkFileDependencyForDependency(appDep, archiveCreator, duplicateCatcher,
+                        concatenatedEntries, allIgnoredEntriesPredicate, appDep, existingEntries,
+                        mergeResourcePaths);
             }
             Set<Set<Dependency>> explained = new HashSet<>();
             for (Map.Entry<String, Set<Dependency>> entry : duplicateCatcher.entrySet()) {
@@ -229,53 +213,50 @@ public class UberJarBuilder extends AbstractJarBuilder<JarBuildItem> {
         runnerJar.toFile().setReadable(true, false);
     }
 
-    private void walkFileDependencyForDependency(Path root, ArchiveCreator archiveCreator,
+    private void walkFileDependencyForDependency(ResolvedDependency resolvedDep, ArchiveCreator archiveCreator,
             Map<String, Set<Dependency>> duplicateCatcher, Map<String, List<byte[]>> concatenatedEntries,
             Predicate<String> ignoredEntriesPredicate, Dependency appDep, Set<String> existingEntries,
             Set<String> mergeResourcePaths) throws IOException {
-        final Path metaInfDir = root.resolve("META-INF");
-        Files.walkFileTree(root, EnumSet.of(FileVisitOption.FOLLOW_LINKS), Integer.MAX_VALUE,
-                new SimpleFileVisitor<Path>() {
-                    @Override
-                    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
-                            throws IOException {
-                        final String relativePath = toUri(root.relativize(dir));
-                        if (!relativePath.isEmpty()) {
-                            archiveCreator.addDirectory(relativePath);
-                        }
-                        return FileVisitResult.CONTINUE;
-                    }
 
-                    @Override
-                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
-                            throws IOException {
-                        final String relativePath = toUri(root.relativize(file));
-                        //if this has been transformed we do not copy it
-                        // if it's a signature file (under the <jar>/META-INF directory),
-                        // then we don't add it to the uber jar
-                        if (isBlockOrSF(relativePath) &&
-                                file.relativize(metaInfDir).getNameCount() == 1) {
-                            if (LOG.isDebugEnabled()) {
-                                LOG.debug("Signature file " + file.toAbsolutePath() + " from app " +
-                                        "dependency " + appDep + " will not be included in uberjar");
-                            }
-                            return FileVisitResult.CONTINUE;
-                        }
-                        if (!existingEntries.contains(relativePath)) {
-                            if (UBER_JAR_CONCATENATED_ENTRIES_PREDICATE.test(relativePath)
-                                    || mergeResourcePaths.contains(relativePath)) {
-                                concatenatedEntries.computeIfAbsent(relativePath, (u) -> new ArrayList<>())
-                                        .add(Files.readAllBytes(file));
-                                return FileVisitResult.CONTINUE;
-                            } else if (!ignoredEntriesPredicate.test(relativePath)) {
-                                duplicateCatcher.computeIfAbsent(relativePath, (a) -> new HashSet<>())
-                                        .add(appDep);
-                                archiveCreator.addFileIfNotExists(file, relativePath, appDep.toString());
-                            }
-                        }
-                        return FileVisitResult.CONTINUE;
+        try {
+            resolvedDep.getContentTree().walk(visit -> {
+                try {
+                    if (Files.isDirectory(visit.getPath())) {
+                        archiveCreator.addDirectory(visit.getRelativePath());
+                        return;
                     }
-                });
+                    final Path file = visit.getPath();
+                    final String relativePath = visit.getRelativePath();
+                    //if this has been transformed we do not copy it
+                    // if it's a signature file (under the <jar>/META-INF directory),
+                    // then we don't add it to the uber jar
+                    if (isBlockOrSF(relativePath) &&
+                            relativePath.startsWith("META-INF") && file.getNameCount() > 1
+                            && file.getName(file.getNameCount() - 2).toString().equals("META-INF")) {
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("Signature file " + file.toAbsolutePath() + " from app " +
+                                    "dependency " + appDep + " will not be included in uberjar");
+                        }
+                        return;
+                    }
+                    if (!existingEntries.contains(relativePath)) {
+                        if (UBER_JAR_CONCATENATED_ENTRIES_PREDICATE.test(relativePath)
+                                || mergeResourcePaths.contains(relativePath)) {
+                            concatenatedEntries.computeIfAbsent(relativePath, (u) -> new ArrayList<>())
+                                    .add(Files.readAllBytes(file));
+                        } else if (!ignoredEntriesPredicate.test(relativePath)) {
+                            duplicateCatcher.computeIfAbsent(relativePath, (a) -> new HashSet<>())
+                                    .add(appDep);
+                            archiveCreator.addFileIfNotExists(file, relativePath, appDep.toString());
+                        }
+                    }
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            });
+        } catch (UncheckedIOException e) {
+            throw e.getCause();
+        }
     }
 
     // same as the impl in sun.security.util.SignatureFileVerifier#isBlockOrSF()
