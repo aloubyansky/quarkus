@@ -24,6 +24,7 @@ import java.util.function.BiConsumer;
 
 import org.eclipse.aether.DefaultRepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
+import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.collection.CollectRequest;
 import org.eclipse.aether.collection.DependencyCollectionException;
 import org.eclipse.aether.collection.DependencySelector;
@@ -50,6 +51,7 @@ import io.quarkus.bootstrap.util.DependencyUtils;
 import io.quarkus.bootstrap.workspace.WorkspaceModule;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
+import io.quarkus.maven.dependency.DependencyBuilder;
 import io.quarkus.maven.dependency.DependencyFlags;
 import io.quarkus.maven.dependency.ResolvedDependency;
 import io.quarkus.maven.dependency.ResolvedDependencyBuilder;
@@ -90,6 +92,9 @@ public class ApplicationDependencyResolver {
     }
 
     private final ExtensionInfo EXT_INFO_NONE = new ExtensionInfo();
+
+    private final boolean dirtySelector = true;
+    private ApplicationDependencyMap dependencyMap;
 
     private List<AppDep> deploymentInjectionPoints = new ArrayList<>();
     private final Map<ArtifactKey, ExtensionInfo> allExtensions = new ConcurrentHashMap<>();
@@ -200,6 +205,9 @@ public class ApplicationDependencyResolver {
      * @throws AppModelResolverException in case of a failure
      */
     public void resolve(CollectRequest collectRtDepsRequest) throws AppModelResolverException {
+
+        dependencyMap = new ApplicationDependencyMap();
+
         collectPlatformProperties();
 
         DependencyNode root = resolveRuntimeDeps(collectRtDepsRequest);
@@ -224,14 +232,51 @@ public class ApplicationDependencyResolver {
             if (d.isFlagSet(DependencyFlags.RELOADABLE)) {
                 appBuilder.addReloadableWorkspaceModule(d.getKey());
             }
-            if (!runtimeModelOnly) {
-                d.setFlags(DependencyFlags.DEPLOYMENT_CP);
-            }
         }
 
         if (!runtimeModelOnly) {
             collectCompileOnly(collectRtDepsRequest, root);
         }
+    }
+
+    private void setDirectDeps(ResolvedDependencyBuilder builder) {
+        final ArtifactDependencyMap depsMap = dependencyMap.get(builder);
+        if (depsMap == null) {
+            return;
+        }
+        final Collection<Dependency> collectedDeps = depsMap.getDependencies();
+        final List<io.quarkus.maven.dependency.Dependency> directDeps = new ArrayList<>(collectedDeps.size());
+        final List<ArtifactCoords> depCoords = new ArrayList<>(collectedDeps.size());
+        for (Dependency dep : collectedDeps) {
+            final Artifact a = dep.getArtifact();
+            var depBuilder = DependencyBuilder.newInstance()
+                    .setGroupId(a.getGroupId())
+                    .setArtifactId(a.getArtifactId())
+                    .setClassifier(a.getClassifier())
+                    .setType(a.getExtension())
+                    .setVersion(a.getVersion())
+                    .setScope(dep.getScope());
+            var appDep = appBuilder.getDependency(depBuilder.getKey());
+            if (appDep == null) {
+                depBuilder.setFlags(DependencyFlags.MISSING);
+            } else {
+                depBuilder.setVersion(appDep.getVersion())
+                        .setFlags(appDep.getFlags());
+            }
+            depBuilder.setOptional(dep.isOptional())
+                    .setFlags(DependencyFlags.DIRECT);
+            var directDep = depBuilder.build();
+            directDeps.add(directDep);
+            if (appDep != null) {
+                depCoords.add(toPlainArtifactCoords(directDep));
+            }
+        }
+        builder.setDependencies(depCoords)
+                .setDirectDependencies(directDeps);
+    }
+
+    private static ArtifactCoords toPlainArtifactCoords(io.quarkus.maven.dependency.Dependency dep) {
+        return ArtifactCoords.of(dep.getGroupId(), dep.getArtifactId(), dep.getClassifier(), dep.getType(), dep.getVersion());
     }
 
     /**
@@ -271,6 +316,13 @@ public class ApplicationDependencyResolver {
         for (var d : app.children) {
             d.addToModel();
         }
+
+        // set collected artifact dependencies
+        setDirectDeps(appBuilder.getApplicationArtifact());
+        for (var d : appBuilder.getDependencies()) {
+            setDirectDeps(d);
+        }
+
         if (depLogging != null) {
             new AppDepLogger().log(app);
         }
@@ -438,24 +490,28 @@ public class ApplicationDependencyResolver {
      */
     private DependencyNode resolveRuntimeDeps(CollectRequest request)
             throws AppModelResolverException {
-        boolean verbose = true; //Boolean.getBoolean("quarkus.bootstrap.verbose-model-resolver");
-        if (verbose) {
-            var session = resolver.getSession();
-            final DefaultRepositorySystemSession mutableSession = new DefaultRepositorySystemSession(resolver.getSession());
+
+        var session = resolver.getSession();
+        final DefaultRepositorySystemSession mutableSession = new DefaultRepositorySystemSession(resolver.getSession());
+        if (dirtySelector) {
+            mutableSession.setDependencySelector(
+                    new DependencyCollectingSelectorFactory(session.getDependencySelector(), dependencyMap));
+        } else {
             mutableSession.setConfigProperty(ConflictResolver.CONFIG_PROP_VERBOSE, true);
             mutableSession.setConfigProperty(DependencyManagerUtils.CONFIG_PROP_VERBOSE, true);
-            session = mutableSession;
-
-            var ctx = new BootstrapMavenContext(BootstrapMavenContext.config()
-                    .setRepositorySystem(resolver.getSystem())
-                    .setRepositorySystemSession(session)
-                    .setRemoteRepositories(resolver.getRepositories())
-                    .setRemoteRepositoryManager(resolver.getRemoteRepositoryManager())
-                    .setCurrentProject(resolver.getMavenContext().getCurrentProject())
-                    // no need to discover the workspace in case the current project isn't available
-                    .setWorkspaceDiscovery(resolver.getMavenContext().getCurrentProject() != null));
-            resolver = new MavenArtifactResolver(ctx);
         }
+        session = mutableSession;
+
+        var ctx = new BootstrapMavenContext(BootstrapMavenContext.config()
+                .setRepositorySystem(resolver.getSystem())
+                .setRepositorySystemSession(session)
+                .setRemoteRepositories(resolver.getRepositories())
+                .setRemoteRepositoryManager(resolver.getRemoteRepositoryManager())
+                .setCurrentProject(resolver.getMavenContext().getCurrentProject())
+                // no need to discover the workspace in case the current project isn't available
+                .setWorkspaceDiscovery(resolver.getMavenContext().getCurrentProject() != null));
+        resolver = new MavenArtifactResolver(ctx);
+
         try {
             return resolver.getSystem().collectDependencies(resolver.getSession(), request).getRoot();
         } catch (DependencyCollectionException e) {
@@ -542,6 +598,9 @@ public class ApplicationDependencyResolver {
                 resolvedDep = newDependencyBuilder(node, resolver);
             } catch (BootstrapMavenException e) {
                 throw new RuntimeException(e);
+            }
+            if (!runtimeModelOnly) {
+                resolvedDep.setDeploymentCp();
             }
         }
 
@@ -779,10 +838,7 @@ public class ApplicationDependencyResolver {
         }
 
         private void injectDeploymentDependency() {
-            // if the parent is an extension then add the deployment node as a dependency of the parent's deployment node
-            // (that would happen when injecting conditional dependencies)
-            // otherwise, the runtime module is going to be replaced with the deployment node
-            ext.injectDependencyDependency(parent == null ? null : (parent.ext == null ? null : parent.ext.deploymentNode));
+            ext.injectDeploymentDependency(parent);
         }
     }
 
@@ -867,7 +923,7 @@ public class ApplicationDependencyResolver {
         return new CollectRequest()
                 .setManagedDependencies(effectiveConstraints)
                 .setRepositories(repos)
-                .setRootArtifact(artifact)
+                .setRootArtifact(new DefaultArtifact("io.quarkus:quarkus-root:1.0"))
                 .setDependencies(List.of(new Dependency(artifact, JavaScopes.COMPILE, false, exclusions)));
     }
 
@@ -944,13 +1000,22 @@ public class ApplicationDependencyResolver {
             }
         }
 
-        private void injectDependencyDependency(DependencyNode parentDeploymentNode) {
+        private void injectDeploymentDependency(AppDep parent) {
+            // if the parent is an extension then add the deployment node as a dependency of the parent's deployment node
+            // (that would happen when injecting conditional dependencies)
+            // otherwise, the runtime module is going to be replaced with the deployment node
+            final DependencyNode parentDeploymentNode = parent == null ? null
+                    : (parent.ext == null ? null : parent.ext.deploymentNode);
             if (parentDeploymentNode == null) {
                 runtimeNode.setData(QUARKUS_RUNTIME_ARTIFACT, runtimeNode.getArtifact());
                 runtimeNode.setArtifact(deploymentNode.getArtifact());
                 runtimeNode.setChildren(deploymentNode.getChildren());
+                if (parent != null) {
+                    dependencyMap.getOrCreate(parent.node.getArtifact()).putDependency(deploymentNode.getDependency());
+                }
             } else {
                 parentDeploymentNode.getChildren().add(deploymentNode);
+                dependencyMap.getOrCreate(parentDeploymentNode.getDependency()).putDependency(deploymentNode.getDependency());
             }
         }
 
@@ -1039,6 +1104,7 @@ public class ApplicationDependencyResolver {
             conditionalDep.setFlags(
                     (byte) (COLLECT_DEPLOYMENT_INJECTION_POINTS | (collectReloadableModules ? COLLECT_RELOADABLE_MODULES : 0)));
             if (parent.resolvedDep != null) {
+                dependencyMap.getOrCreate(parent.node.getDependency()).putDependency(conditionalDep.node.getDependency());
                 parent.resolvedDep.addDependency(conditionalDep.resolvedDep.getArtifactCoords());
             }
             parent.ext.runtimeNode.getChildren().add(rtNode);

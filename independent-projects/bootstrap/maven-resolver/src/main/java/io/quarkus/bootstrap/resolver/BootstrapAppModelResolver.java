@@ -380,7 +380,7 @@ public class BootstrapAppModelResolver implements AppModelResolver {
                 new ArrayList<>(managedDeps.values()), List.of(), repos);
         try {
             long start = 0;
-            boolean logTime = false;
+            boolean logTime = true;
             if (logTime) {
                 start = System.currentTimeMillis();
             }

@@ -224,6 +224,7 @@ public class BootstrapUtils {
         appendFlagIfSet(sb, flags, DependencyFlags.CLASSLOADER_LESSER_PRIORITY, "classloader-lesser-priority");
         appendFlagIfSet(sb, flags, DependencyFlags.COMPILE_ONLY, "compile-only");
         appendFlagIfSet(sb, flags, DependencyFlags.VISITED, "visited");
+        appendFlagIfSet(sb, flags, DependencyFlags.MISSING, "missing");
         return sb.toString();
     }
 

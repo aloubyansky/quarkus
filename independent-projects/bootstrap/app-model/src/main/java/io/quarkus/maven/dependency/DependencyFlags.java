@@ -44,5 +44,11 @@ public interface DependencyFlags {
      * this flag as an argument.
      */
     int COMPILE_ONLY                         = 0b01000000000000;
+
+    /**
+     * This flag is used for dependencies returned from {@link ResolvedDependency#getDependencies()}.
+     * It indicates a dependency was configured for a given artifact but is missing among the application dependencies.
+     */
+    int MISSING                              = 0b10000000000000;
     /* @formatter:on */
 }
