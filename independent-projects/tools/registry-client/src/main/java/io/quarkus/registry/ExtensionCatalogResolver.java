@@ -173,7 +173,10 @@ public class ExtensionCatalogResolver {
         private RegistryClientFactory loadFromUrl(final URL url) {
             final ClassLoader originalCl = Thread.currentThread().getContextClassLoader();
             try {
-                ClassLoader providerCl = new URLClassLoader(new URL[] { url }, originalCl);
+                // here we use the classloader that loaded RegistryClientFactoryProvider instead of the TCCL
+                // because, apparently, the TCCL doesn't work for this use-case from Maven plugins with extensions enabled
+                final ClassLoader providerCl = new URLClassLoader(new URL[] { url },
+                        RegistryClientFactoryProvider.class.getClassLoader());
                 final Iterator<RegistryClientFactoryProvider> i = ServiceLoader
                         .load(RegistryClientFactoryProvider.class, providerCl).iterator();
                 if (!i.hasNext()) {
