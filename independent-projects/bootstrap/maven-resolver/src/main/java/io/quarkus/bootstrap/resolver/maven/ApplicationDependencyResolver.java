@@ -220,20 +220,6 @@ public class ApplicationDependencyResolver {
         DependencyTreeConflictResolver.resolveConflicts(root);
         populateModelBuilder(root);
 
-        // clear the reloadable flags
-        for (var d : appBuilder.getDependencies()) {
-            if (!d.isFlagSet(DependencyFlags.RELOADABLE) && !d.isFlagSet(DependencyFlags.VISITED)) {
-                clearReloadableFlag(d);
-            }
-        }
-
-        for (var d : appBuilder.getDependencies()) {
-            d.clearFlag(DependencyFlags.VISITED);
-            if (d.isFlagSet(DependencyFlags.RELOADABLE)) {
-                appBuilder.addReloadableWorkspaceModule(d.getKey());
-            }
-        }
-
         if (!runtimeModelOnly) {
             collectCompileOnly(collectRtDepsRequest, root);
         }
@@ -321,6 +307,20 @@ public class ApplicationDependencyResolver {
         setDirectDeps(appBuilder.getApplicationArtifact());
         for (var d : appBuilder.getDependencies()) {
             setDirectDeps(d);
+        }
+
+        // clear the reloadable flags
+        for (var d : appBuilder.getDependencies()) {
+            if (!d.isFlagSet(DependencyFlags.RELOADABLE) && !d.isFlagSet(DependencyFlags.VISITED)) {
+                clearReloadableFlag(d);
+            }
+        }
+
+        for (var d : appBuilder.getDependencies()) {
+            d.clearFlag(DependencyFlags.VISITED);
+            if (d.isFlagSet(DependencyFlags.RELOADABLE)) {
+                appBuilder.addReloadableWorkspaceModule(d.getKey());
+            }
         }
 
         if (depLogging != null) {
@@ -471,12 +471,11 @@ public class ApplicationDependencyResolver {
         }
         for (ArtifactCoords coords : deps) {
             final ResolvedDependencyBuilder child = appBuilder.getDependency(coords.getKey());
-            if (child == null || child.isFlagSet(DependencyFlags.VISITED)) {
-                continue;
+            if (child != null && !child.isFlagSet(DependencyFlags.VISITED)) {
+                child.setFlags(DependencyFlags.VISITED);
+                child.clearFlag(DependencyFlags.RELOADABLE);
+                clearReloadableFlag(child);
             }
-            child.setFlags(DependencyFlags.VISITED);
-            child.clearFlag(DependencyFlags.RELOADABLE);
-            clearReloadableFlag(child);
         }
     }
 
