@@ -15,6 +15,10 @@
 
     <dependencies>
         <dependency>
+            <groupId>io.smallrye</groupId>
+            <artifactId>jandex</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.jboss.jdeparser</groupId>
             <artifactId>jdeparser</artifactId>
         </dependency>

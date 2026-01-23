@@ -3,6 +3,10 @@ package io.quarkus.annotation.processor.extension;
 import static javax.lang.model.util.ElementFilter.methodsIn;
 import static javax.lang.model.util.ElementFilter.typesIn;
 
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -17,6 +21,7 @@ import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.tools.Diagnostic;
+import javax.tools.JavaFileObject;
 
 import io.quarkus.annotation.processor.ExtensionProcessor;
 import io.quarkus.annotation.processor.Outputs;
@@ -58,6 +63,9 @@ public class ExtensionBuildProcessor implements ExtensionProcessor {
                     trackAnnotationUsed(Types.ANNOTATION_CONFIG_GROUP);
                     processConfigGroup(roundEnv, annotation);
                     break;
+                case Types.ANNOTATION_PERSISTENT_BUILD_ITEM:
+                    trackAnnotationUsed(Types.ANNOTATION_PERSISTENT_BUILD_ITEM);
+                    processPersistentBuildItem(roundEnv, annotation);
             }
         }
     }
@@ -82,6 +90,72 @@ public class ExtensionBuildProcessor implements ExtensionProcessor {
         utils.filer().writeSet(Outputs.META_INF_QUARKUS_BUILD_STEPS, allProcessorClassNames);
 
         utils.filer().writeSet(Outputs.META_INF_QUARKUS_CONFIG_ROOTS, configRootClassNames);
+    }
+
+    private void processPersistentBuildItem(RoundEnvironment roundEnv, TypeElement annotation) {
+        final Set<TypeElement> typeElements = typesIn(roundEnv.getElementsAnnotatedWith(annotation));
+        if (typeElements.isEmpty()) {
+            return;
+        }
+
+        for (TypeElement persistentBuildItem : typeElements) {
+
+            String binaryName = utils.element().getBinaryName(persistentBuildItem);
+
+            List<String> ctorSigs = new ArrayList<>();
+            for (Element member : utils.processingEnv().getElementUtils().getAllMembers(persistentBuildItem)) {
+                if (member.getKind() == ElementKind.CONSTRUCTOR) {
+                    final List<? extends VariableElement> params = ((ExecutableElement) member).getParameters();
+                    StringBuilder sb = new StringBuilder().append("(");
+                    if (!params.isEmpty()) {
+                        int i = 0;
+                        sb.append(params.get(i).asType()).append(" ").append(params.get(i).getSimpleName());
+                        while (++i < params.size()) {
+                            var param = params.get(i);
+                            sb.append(", ").append(param.asType()).append(" ").append(param.getSimpleName());
+                        }
+                    }
+                    ctorSigs.add(sb.append(")").toString());
+                } else {
+                    System.out.println("Member " + member.getKind() + " " + member.getSimpleName());
+                }
+            }
+
+            //new org.jboss.jandex.Indexer().index();
+
+            final int lastDot = binaryName.lastIndexOf('.');
+            final String simpleName = binaryName.substring(lastDot + 1);
+            final String serializerName = simpleName + "Serializer";
+            try {
+                JavaFileObject javaFile = utils.processingEnv().getFiler().createSourceFile(binaryName + "Serializer");
+                System.out.println("JAVA FILE " + javaFile.toUri());
+                try (BufferedWriter writer = new BufferedWriter(javaFile.openWriter())) {
+                    writer.write("package ");
+                    writer.write(binaryName.substring(0, binaryName.lastIndexOf('.')));
+                    writer.write(";");
+                    writer.newLine();
+
+                    writer.write("public class ");
+                    writer.write(serializerName);
+                    writer.write(" {");
+                    writer.newLine();
+
+                    for (String ctorSig : ctorSigs) {
+                        writer.write("    public ");
+                        writer.write(serializerName);
+                        writer.write(ctorSig);
+                        writer.write(" {");
+                        writer.newLine();
+                        writer.write("    }");
+                        writer.newLine();
+                    }
+
+                    writer.write("}");
+                }
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 
     private void processBuildStep(RoundEnvironment roundEnv, TypeElement annotation) {
