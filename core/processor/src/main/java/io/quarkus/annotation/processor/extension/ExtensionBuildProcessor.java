@@ -58,6 +58,9 @@ public class ExtensionBuildProcessor implements ExtensionProcessor {
                     trackAnnotationUsed(Types.ANNOTATION_CONFIG_GROUP);
                     processConfigGroup(roundEnv, annotation);
                     break;
+                case Types.ANNOTATION_PERSISTENT_BUILD_ITEM:
+                    trackAnnotationUsed(Types.ANNOTATION_PERSISTENT_BUILD_ITEM);
+                    PersistentBuildItemProcessor.process(utils, roundEnv, annotation);
             }
         }
     }
