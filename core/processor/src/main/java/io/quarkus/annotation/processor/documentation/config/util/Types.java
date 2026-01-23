@@ -38,9 +38,10 @@ public final class Types {
     public static final String ANNOTATION_CONFIG_WITH_PARENT_NAME = "io.smallrye.config.WithParentName";
     public static final String ANNOTATION_CONFIG_WITH_DEFAULT = "io.smallrye.config.WithDefault";
     public static final String ANNOTATION_CONFIG_WITH_UNNAMED_KEY = "io.smallrye.config.WithUnnamedKey";
+    public static final String ANNOTATION_PERSISTENT_BUILD_ITEM = "io.quarkus.deployment.annotations.PersistentBuildItem";
 
     public static final Set<String> SUPPORTED_ANNOTATIONS_TYPES = Set.of(ANNOTATION_BUILD_STEP, ANNOTATION_CONFIG_GROUP,
-            ANNOTATION_CONFIG_ROOT, ANNOTATION_RECORDER, ANNOTATION_CONFIG_MAPPING);
+            ANNOTATION_CONFIG_ROOT, ANNOTATION_RECORDER, ANNOTATION_CONFIG_MAPPING, ANNOTATION_PERSISTENT_BUILD_ITEM);
 
     static final Map<String, String> ALIASED_TYPES = Map.of(
             OptionalLong.class.getName(), long.class.getName(),
