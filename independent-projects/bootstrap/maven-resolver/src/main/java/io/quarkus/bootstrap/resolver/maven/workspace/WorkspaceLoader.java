@@ -194,11 +194,8 @@ public class WorkspaceLoader implements WorkspaceModelResolver, WorkspaceReader 
     }
 
     private void processLoadedRawModel(WorkspaceModulePom module) {
-        String resolvedVersion = module.getResolvedVersion();
-        if (resolvedVersion == null) {
-            throw new RuntimeException(module.getPom().toString() + " " + module.getModel().getParent());
-        }
-        loadedModule(new LocalProject(resolvedVersion, module.getModel(), module.effectiveModel, workspace));
+        loadedModule(new LocalProject(module.getResolvedGroupId(), module.getResolvedVersion(), module.getModel(),
+                module.effectiveModel, workspace));
     }
 
     private void loadedModule(LocalProject project) {
@@ -236,7 +233,7 @@ public class WorkspaceLoader implements WorkspaceModelResolver, WorkspaceReader 
         final String rawVersion = ModelUtils.getRawVersionOrNull(model);
         final String version = module.getResolvedVersion();
         final Model existingModel = loadedModules.putIfAbsent(
-                new GAV(ModelUtils.getGroupId(model), model.getArtifactId(), version),
+                new GAV(module.getResolvedGroupId(), model.getArtifactId(), version),
                 model);
         if (existingModel != null) {
             return;

@@ -90,6 +90,30 @@ public class WorkspaceModulePom {
         }
     }
 
+    String getResolvedGroupId() {
+        if (effectiveModel != null) {
+            return effectiveModel.getGroupId();
+        }
+        final Model model = getModel();
+        if (model != null) {
+            String groupId = model.getGroupId();
+            if (groupId != null) {
+                return groupId;
+            }
+            Parent parent = model.getParent();
+            if (parent != null) {
+                groupId = parent.getGroupId();
+                if (groupId != null) {
+                    return groupId;
+                }
+            }
+        }
+        if (parent != null) {
+            return parent.getResolvedGroupId();
+        }
+        throw new RuntimeException("Failed to determine the groupId of module " + pom);
+    }
+
     String getResolvedVersion() {
         if (effectiveModel != null) {
             return effectiveModel.getVersion();
@@ -107,7 +131,7 @@ public class WorkspaceModulePom {
         if (parent != null) {
             return parent.getResolvedVersion();
         }
-        throw new RuntimeException("Failed to determine module version of " + pom);
+        throw new RuntimeException("Failed to determine the version of module " + pom);
     }
 
     @Override
