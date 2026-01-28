@@ -5,8 +5,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 import org.apache.maven.model.Model;
 import org.apache.maven.settings.crypto.SettingsDecrypter;
@@ -58,7 +62,7 @@ public class BootstrapMavenContextConfig<T extends BootstrapMavenContextConfig<T
     protected boolean preferPomsFromWorkspace;
     protected Boolean effectiveModelBuilder;
     protected Boolean wsModuleParentHierarchy;
-    protected List<WorkspaceModulePom> providedModules;
+    protected Map<Path, WorkspaceModulePom> providedModules;
     protected List<String> excludeSisuBeanPackages;
     protected List<String> includeSisuBeanPackages;
     protected Boolean warnOnFailedWorkspaceModules;
@@ -377,10 +381,46 @@ public class BootstrapMavenContextConfig<T extends BootstrapMavenContextConfig<T
     @SuppressWarnings("unchecked")
     public T addProvidedModule(Path pomFile, Model rawModel, Model effectiveModel) {
         if (providedModules == null || providedModules.isEmpty()) {
-            providedModules = new ArrayList<>();
+            providedModules = new HashMap<>();
         }
-        providedModules.add(new WorkspaceModulePom(pomFile, rawModel, effectiveModel));
+        WorkspaceModulePom module = new WorkspaceModulePom(pomFile, rawModel, effectiveModel);
+        providedModules.put(module.getPom(), module);
         return (T) this;
+    }
+
+    /**
+     * List of modules sorted with parent modules appearing before their children.
+     * The method will return null, in case modules were not provided in the configuration.
+     *
+     * @return list of modules sorted with parent modules appearing before their children or null
+     */
+    protected List<WorkspaceModulePom> getProvidedModulesSorted() {
+        if (providedModules == null) {
+            return null;
+        }
+        if (providedModules.size() < 2) {
+            return List.copyOf(providedModules.values());
+        }
+        final List<WorkspaceModulePom> result = new ArrayList<>(providedModules.size());
+        final Set<Path> addedPoms = new HashSet<>(providedModules.size());
+        for (var module : providedModules.values()) {
+            addFollowingParents(module, addedPoms, result);
+        }
+        return result;
+    }
+
+    private void addFollowingParents(WorkspaceModulePom module, Set<Path> addedPoms, List<WorkspaceModulePom> sortedModules) {
+        if (!addedPoms.add(module.getPom())) {
+            return;
+        }
+        final Path parentPom = module.getParentPom();
+        if (parentPom != null && !addedPoms.contains(parentPom)) {
+            final WorkspaceModulePom parentModule = providedModules.get(parentPom);
+            if (parentModule != null) {
+                addFollowingParents(parentModule, addedPoms, sortedModules);
+            }
+        }
+        sortedModules.add(module);
     }
 
     /**

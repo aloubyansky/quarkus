@@ -2,17 +2,25 @@ package io.quarkus.bootstrap.resolver.maven.workspace;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Deque;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.function.Consumer;
 
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
 
 public class WorkspaceModulePom {
+
+    private static int STATUS_NEW = 0;
+    private static int STATUS_SCHEDULED = 1;
+    private static int STATUS_PROCESSED = 2;
+
     final Path pom;
     Model model;
     Model effectiveModel;
     WorkspaceModulePom parent;
-    boolean processed;
+    private int state = STATUS_NEW;
+    final ConcurrentLinkedDeque<WorkspaceModulePom> thenSchedule = new ConcurrentLinkedDeque<>();
 
     WorkspaceModulePom(Path pom) {
         this(pom, null, null);
@@ -24,6 +32,10 @@ public class WorkspaceModulePom {
         this.effectiveModel = effectiveModel;
     }
 
+    public Path getPom() {
+        return pom;
+    }
+
     Path getModuleDir() {
         var moduleDir = pom.getParent();
         return moduleDir == null ? WorkspaceLoader.getFsRootDir() : moduleDir;
@@ -33,7 +45,11 @@ public class WorkspaceModulePom {
         return model == null ? model = WorkspaceLoader.readModel(pom) : model;
     }
 
-    Path getParentPom() {
+    boolean isParentConfigured() {
+        return getModel().getParent() != null;
+    }
+
+    public Path getParentPom() {
         if (model == null) {
             return null;
         }
@@ -53,11 +69,19 @@ public class WorkspaceModulePom {
         return parentPom != null && Files.exists(parentPom) ? parentPom.normalize().toAbsolutePath() : null;
     }
 
+    boolean isNew() {
+        return state == STATUS_NEW;
+    }
+
+    void setScheduled() {
+        state = STATUS_SCHEDULED;
+    }
+
     void process(Consumer<WorkspaceModulePom> consumer) {
-        if (processed) {
+        if (state == STATUS_PROCESSED) {
             return;
         }
-        processed = true;
+        state = STATUS_PROCESSED;
         if (parent != null) {
             parent.process(consumer);
         }
@@ -66,8 +90,36 @@ public class WorkspaceModulePom {
         }
     }
 
+    String getResolvedVersion() {
+        if (effectiveModel != null) {
+            return effectiveModel.getVersion();
+        }
+        final Model model = getModel();
+        if (model != null) {
+            String version = ModelUtils.getRawVersionOrNull(model);
+            if (version != null && ModelUtils.isUnresolvedVersion(version)) {
+                version = ModelUtils.resolveVersion(version, model);
+            }
+            if (version != null) {
+                return version;
+            }
+        }
+        if (parent != null) {
+            return parent.getResolvedVersion();
+        }
+        throw new RuntimeException("Failed to determine module version of " + pom);
+    }
+
     @Override
     public String toString() {
         return String.valueOf(pom);
+    }
+
+    void thenSchedule(WorkspaceModulePom module) {
+        thenSchedule.add(module);
+    }
+
+    Deque<WorkspaceModulePom> getThenSchedule() {
+        return thenSchedule;
     }
 }

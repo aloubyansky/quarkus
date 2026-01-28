@@ -195,7 +195,7 @@ public class BootstrapMavenContext {
             this.currentPom = currentProject.getRawModel().getPomFile().toPath();
             this.workspace = config.currentProject.getWorkspace();
         } else if (config.workspaceDiscovery) {
-            currentProject = resolveCurrentProject(config.providedModules);
+            currentProject = resolveCurrentProject(config.getProvidedModulesSorted());
             this.workspace = currentProject == null ? null : currentProject.getWorkspace();
             if (workspace != null) {
                 if (config.repoSession == null && repoSession != null && repoSession.getWorkspaceReader() == null) {

@@ -78,7 +78,7 @@ public class WorkspaceLoader implements WorkspaceModelResolver, WorkspaceReader 
 
     private final Deque<WorkspaceModulePom> moduleQueue = new ConcurrentLinkedDeque<>();
     // Map key is the normalized absolute Path to the module directory
-    private final Map<Path, Model> loadedPoms = new ConcurrentHashMap<>();
+    private final Map<Path, WorkspaceModulePom> loadedPoms = new ConcurrentHashMap<>();
     private final Map<GAV, Model> loadedModules = new ConcurrentHashMap<>();
     private final Consumer<WorkspaceModulePom> loadedModelProcessor;
 
@@ -102,30 +102,26 @@ public class WorkspaceLoader implements WorkspaceModelResolver, WorkspaceReader 
                 if (queueCurrentPom && this.currentProjectPom.equals(e.pom)) {
                     queueCurrentPom = false;
                 }
-                moduleQueue.push(e);
+                addAndQueueModule(e);
             }
         }
 
         if (queueCurrentPom) {
-            moduleQueue.push(new WorkspaceModulePom(this.currentProjectPom));
+            addAndQueueModule(new WorkspaceModulePom(this.currentProjectPom));
         }
 
         loadedModelProcessor = getLoadedModelProcessor(ctx);
         workspace.setBootstrapMavenContext(ctx);
     }
 
-    private void addModulePom(Path pom) {
-        if (pom != null) {
-            moduleQueue.push(new WorkspaceModulePom(pom));
-        }
-    }
-
     void setWorkspaceRootPom(Path rootPom) {
-        addModulePom(rootPom);
+        WorkspaceModulePom rootModule = new WorkspaceModulePom(rootPom);
+        loadedPoms.put(rootModule.getModuleDir(), rootModule);
+        moduleQueue.addFirst(rootModule);
     }
 
     LocalProject load() throws BootstrapMavenException {
-        final ModelResolutionTaskRunner taskRunner = ModelResolutionTaskRunner.getNonBlockingTaskRunner();
+        final ModelResolutionTaskRunner taskRunner = ModelResolutionTaskRunner.getBlockingTaskRunner();
         while (!moduleQueue.isEmpty()) {
             final ConcurrentLinkedDeque<WorkspaceModulePom> newModules = new ConcurrentLinkedDeque<>();
             while (!moduleQueue.isEmpty()) {
@@ -192,18 +188,17 @@ public class WorkspaceLoader implements WorkspaceModelResolver, WorkspaceReader 
             }
             loadedModule(project);
             for (var module : project.getEffectiveModel().getModules()) {
-                Path modulePath = project.getDir().resolve(module);
-                if (Files.isDirectory(modulePath)) {
-                    addModulePom(modulePath.resolve(POM_XML));
-                } else {
-                    addModulePom(modulePath);
-                }
+                queueModule(project.getDir().resolve(module));
             }
         };
     }
 
-    private void processLoadedRawModel(WorkspaceModulePom rawModule) {
-        loadedModule(new LocalProject(rawModule.getModel(), rawModule.effectiveModel, workspace));
+    private void processLoadedRawModel(WorkspaceModulePom module) {
+        String resolvedVersion = module.getResolvedVersion();
+        if (resolvedVersion == null) {
+            throw new RuntimeException(module.getPom().toString() + " " + module.getModel().getParent());
+        }
+        loadedModule(new LocalProject(resolvedVersion, module.getModel(), module.effectiveModel, workspace));
     }
 
     private void loadedModule(LocalProject project) {
@@ -213,53 +208,55 @@ public class WorkspaceLoader implements WorkspaceModelResolver, WorkspaceReader 
         }
     }
 
-    private void loadModule(WorkspaceModulePom rawModule, Collection<WorkspaceModulePom> newModules) {
-        final Path moduleDir = rawModule.getModuleDir();
-        if (loadedPoms.containsKey(moduleDir)) {
+    private void loadModule(WorkspaceModulePom module, Collection<WorkspaceModulePom> newModules) {
+        if (!module.isNew()) {
             return;
         }
 
-        final Model model = rawModule.getModel();
-        loadedPoms.put(moduleDir, model);
+        final Model model = module.getModel();
         if (model == MISSING_MODEL) {
             return;
         }
 
-        final String rawVersion = ModelUtils.getRawVersion(model);
-        final String version = ModelUtils.isUnresolvedVersion(rawVersion)
-                ? ModelUtils.resolveVersion(rawVersion, model)
-                : rawVersion;
+        if (module.parent == null) {
+            final Path parentPom = module.getParentPom();
+            if (parentPom != null) {
+                var parentDir = parentPom.getParent();
+                if (parentDir == null) {
+                    parentDir = getFsRootDir();
+                }
+                module.parent = loadedPoms.computeIfAbsent(parentDir, dir -> queueModulePom(parentPom));
+                module.parent.thenSchedule(module);
+            }
+        }
+        if (module.isParentConfigured() && module.parent != null && module.parent.isNew()) {
+            return;
+        }
+
+        final String rawVersion = ModelUtils.getRawVersionOrNull(model);
+        final String version = module.getResolvedVersion();
         final Model existingModel = loadedModules.putIfAbsent(
                 new GAV(ModelUtils.getGroupId(model), model.getArtifactId(), version),
                 model);
         if (existingModel != null) {
             return;
         }
-        newModules.add(rawModule);
+        module.setScheduled();
+        newModules.add(module);
+        while (!module.getThenSchedule().isEmpty()) {
+            moduleQueue.push(module.getThenSchedule().poll());
+        }
 
-        if (!rawVersion.equals(version)) {
+        if (rawVersion != null && !rawVersion.equals(version)) {
             loadedModules.putIfAbsent(new GAV(ModelUtils.getGroupId(model), model.getArtifactId(), rawVersion), model);
         }
 
-        for (var module : model.getModules()) {
-            queueModule(model.getProjectDirectory().toPath().resolve(module));
+        for (String modulePath : model.getModules()) {
+            queueModule(model.getProjectDirectory().toPath().resolve(modulePath));
         }
         for (var profile : model.getProfiles()) {
-            for (var module : profile.getModules()) {
-                queueModule(model.getProjectDirectory().toPath().resolve(module));
-            }
-        }
-        if (rawModule.parent == null) {
-            final Path parentPom = rawModule.getParentPom();
-            if (parentPom != null) {
-                var parentDir = parentPom.getParent();
-                if (parentDir == null) {
-                    parentDir = getFsRootDir();
-                }
-                if (!loadedPoms.containsKey(parentDir)) {
-                    rawModule.parent = new WorkspaceModulePom(parentPom);
-                    moduleQueue.push(rawModule.parent);
-                }
+            for (String modulePath : profile.getModules()) {
+                queueModule(model.getProjectDirectory().toPath().resolve(modulePath));
             }
         }
     }
@@ -274,10 +271,18 @@ public class WorkspaceLoader implements WorkspaceModelResolver, WorkspaceReader 
             pom = normalizedModuleDir;
             normalizedModuleDir = normalizedModuleDir.getParent() != null ? normalizedModuleDir.getParent() : getFsRootDir();
         }
+        loadedPoms.computeIfAbsent(normalizedModuleDir, dir -> queueModulePom(pom));
+    }
 
-        if (!loadedPoms.containsKey(normalizedModuleDir)) {
-            moduleQueue.push(new WorkspaceModulePom(pom));
-        }
+    private WorkspaceModulePom queueModulePom(Path pomFile) {
+        var module = new WorkspaceModulePom(pomFile);
+        moduleQueue.push(module);
+        return module;
+    }
+
+    private void addAndQueueModule(WorkspaceModulePom module) {
+        loadedPoms.put(module.getModuleDir(), module);
+        moduleQueue.push(module);
     }
 
     @Override
