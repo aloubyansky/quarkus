@@ -26,7 +26,7 @@ import org.codehaus.plexus.util.xml.Xpp3Dom;
 import org.eclipse.aether.DefaultRepositorySystemSession;
 import org.eclipse.aether.RepositorySystemSession;
 
-import io.fabric8.maven.Maven;
+import io.fabric8.maven.Maven4;
 import io.fabric8.maven.XMLFormat;
 import io.quarkus.commons.classloading.ClassLoaderHelper;
 
@@ -168,7 +168,7 @@ public class MojoUtils {
 
     public static Model readPom(final File pom) throws IOException {
         try {
-            return Maven.readModel(pom.toPath());
+            return Maven4.readModel(pom.toPath());
         } catch (UncheckedIOException e) {
             throw e.getCause();
         } catch (RuntimeException e) {
@@ -178,7 +178,7 @@ public class MojoUtils {
 
     public static Model readPom(final InputStream resourceAsStream) throws IOException {
         try (InputStream is = resourceAsStream) {
-            return Maven.readModel(is);
+            return Maven4.readModel(is);
         } catch (UncheckedIOException e) {
             throw e.getCause();
         } catch (RuntimeException e) {
@@ -193,7 +193,7 @@ public class MojoUtils {
 
     public static void write(Model model, File outputFile) throws IOException {
         try {
-            Maven.writeModel(model, outputFile.toPath());
+            Maven4.writeModel(model, outputFile.toPath());
         } catch (UncheckedIOException e) {
             throw e.getCause();
         }
@@ -201,7 +201,7 @@ public class MojoUtils {
 
     public static void writeFormatted(Model model, File outputFile) throws IOException {
         try {
-            Maven.writeModel(model, outputFile.toPath(),
+            Maven4.writeModel(model, outputFile.toPath(),
                     XMLFormat.builder().indent("    ").insertLineBreakBetweenMajorSections().build());
         } catch (UncheckedIOException e) {
             throw e.getCause();
@@ -217,7 +217,7 @@ public class MojoUtils {
             model.setProperties(sorted);
         }
         try (XmlStreamWriter writer = WriterFactory.newXmlWriter(fileOutputStream)) {
-            Maven.writeModel(model, writer);
+            Maven4.writeModel(model, writer);
         } catch (UncheckedIOException e) {
             throw e.getCause();
         }
