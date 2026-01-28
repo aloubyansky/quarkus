@@ -10,7 +10,7 @@ import java.util.Objects;
 
 import org.apache.maven.model.Model;
 
-import io.fabric8.maven.Maven;
+import io.fabric8.maven.Maven4;
 import io.fabric8.maven.XMLFormat;
 import io.fabric8.maven.merge.SmartModelMerger;
 import io.quarkus.devtools.codestarts.CodestartException;
@@ -37,12 +37,24 @@ final class SmartPomMergeCodestartFileStrategyHandler implements CodestartFileSt
                         "something is wrong, smart-pom-merge file strategy must only be used on maven projects"));
 
         final SmartModelMerger merger = new SmartModelMerger();
-        final Model targetModel = Maven.readModel(new StringReader(codestartFiles.get(0).getContent()));
+        final Model targetModel = Maven4.readModel(new StringReader(codestartFiles.get(0).getContent()));
         final ListIterator<TargetFile> iterator = codestartFiles.listIterator(1);
         while (iterator.hasNext()) {
-            merger.merge(targetModel, Maven.readModel(new StringReader(iterator.next().getContent())), true, null);
+            merger.merge(targetModel, Maven4.readModel(new StringReader(iterator.next().getContent())), true, null);
         }
-        Maven.writeModel(targetModel, targetPath,
+
+        /*
+         * Properties copy = new Properties();
+         * copy.putAll(targetModel.getProperties());
+         * final List<String> keys = new ArrayList<>(targetModel.getProperties().stringPropertyNames());
+         * Collections.sort(keys);
+         * targetModel.setProperties(new Properties());
+         * for (String key : keys) {
+         * targetModel.addProperty(key, copy.getProperty(key));
+         * }
+         */
+
+        Maven4.writeModel(targetModel, targetPath,
                 XMLFormat.builder().indent("    ").insertLineBreakBetweenMajorSections().build());
     }
 }
