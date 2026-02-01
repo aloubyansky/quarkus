@@ -66,7 +66,7 @@ public class GrpcCodeGen implements CodeGenProvider {
     private static final String DESCRIPTOR_SET_OUTPUT_DIR = "quarkus.generate-code.grpc.descriptor-set.output-dir";
     private static final String DESCRIPTOR_SET_FILENAME = "quarkus.generate-code.grpc.descriptor-set.name";
 
-    private static final String USE_ARG_FILE = "quarkus.generate-code.grpc.use-arg-file";
+    public static final String USE_ARG_FILE = "quarkus.generate-code.grpc.use-arg-file";
 
     private static final String GENERATE_KOTLIN = "quarkus.generate-code.grpc.kotlin.generate";
 
@@ -604,7 +604,7 @@ public class GrpcCodeGen implements CodeGenProvider {
         });
     }
 
-    private static class Executables {
+    static class Executables {
 
         final Path protoc;
         final Path grpc;

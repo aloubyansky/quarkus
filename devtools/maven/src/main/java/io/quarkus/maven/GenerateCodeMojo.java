@@ -20,6 +20,7 @@ import io.quarkus.bootstrap.app.CuratedApplication;
 import io.quarkus.bootstrap.classloading.QuarkusClassLoader;
 import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.bootstrap.util.BootstrapUtils;
+import io.quarkus.deployment.codegen.SourceCodeGenerator;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.paths.PathCollection;
 import io.quarkus.paths.PathList;
@@ -83,8 +84,12 @@ public class GenerateCodeMojo extends QuarkusBootstrapMojo {
         QuarkusClassLoader deploymentClassLoader = null;
         try {
             curatedApplication = bootstrapApplication(launchMode);
+
             deploymentClassLoader = curatedApplication.createDeploymentClassLoader();
             Thread.currentThread().setContextClassLoader(deploymentClassLoader);
+
+            deploymentClassLoader.loadClass(SourceCodeGenerator.class.getName())
+                    .getMethod("generateCode", CuratedApplication.class).invoke(null, curatedApplication);
 
             final Class<?> codeGenerator = deploymentClassLoader.loadClass("io.quarkus.deployment.CodeGenerator");
             final Method initAndRun = codeGenerator.getMethod("initAndRun", QuarkusClassLoader.class, PathCollection.class,

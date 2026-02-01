@@ -3,6 +3,7 @@ package io.quarkus.grpc.codegen;
 import java.io.File;
 import java.nio.file.Path;
 
+import org.eclipse.microprofile.config.Config;
 import org.jboss.logging.Logger;
 
 import com.github.javaparser.ast.CompilationUnit;
@@ -34,9 +35,13 @@ public class GrpcPostProcessing {
     private final boolean removeFinal;
 
     public GrpcPostProcessing(CodeGenContext context, Path root) {
+        this(context.config(), root);
+    }
+
+    public GrpcPostProcessing(Config config, Path root) {
         this.root = root;
-        this.replaceGeneratedAnnotation = isEnabled(context, POST_PROCESS_QUARKUS_GENERATED_ANNOTATION, true);
-        this.removeFinal = isEnabled(context, POST_PROCESS_NO_FINAL, true);
+        this.replaceGeneratedAnnotation = isEnabled(config, POST_PROCESS_QUARKUS_GENERATED_ANNOTATION, true);
+        this.removeFinal = isEnabled(config, POST_PROCESS_NO_FINAL, true);
     }
 
     public GrpcPostProcessing(Path root) {
@@ -59,8 +64,8 @@ public class GrpcPostProcessing {
 
     }
 
-    private boolean isEnabled(CodeGenContext context, String name, boolean def) {
-        return Boolean.getBoolean(name) || context.config().getOptionalValue(name, Boolean.class).orElse(def);
+    private boolean isEnabled(Config config, String name, boolean def) {
+        return Boolean.getBoolean(name) || config.getOptionalValue(name, Boolean.class).orElse(def);
     }
 
     public void postprocess() {
