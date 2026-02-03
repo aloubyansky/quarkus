@@ -7,6 +7,9 @@ import java.util.List;
 import java.util.Properties;
 import java.util.function.Consumer;
 
+import io.quarkus.runtime.configuration.PropertiesUtil;
+import io.quarkus.runtime.util.IsWindows;
+import io.smallrye.common.os.OS;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
@@ -43,6 +46,9 @@ public class GenerateCodeMojo extends QuarkusBootstrapMojo {
      */
     @Parameter(defaultValue = "NORMAL", property = "launchMode")
     String mode;
+
+    @Parameter(property = "quarkus.generate-code.build-step")
+    boolean buildStep;
 
     @Override
     protected boolean beforeExecute() throws MojoExecutionException, MojoFailureException {
@@ -83,31 +89,35 @@ public class GenerateCodeMojo extends QuarkusBootstrapMojo {
         CuratedApplication curatedApplication = null;
         QuarkusClassLoader deploymentClassLoader = null;
         try {
+            mavenProject().getProperties().setProperty(BootstrapConstants.QUARKUS_BOOTSTRAP_WORKSPACE_DISCOVERY, "true");
             curatedApplication = bootstrapApplication(launchMode);
 
-            deploymentClassLoader = curatedApplication.createDeploymentClassLoader();
-            Thread.currentThread().setContextClassLoader(deploymentClassLoader);
+            if (buildStep) {
+                var augmentCl = curatedApplication.getOrCreateAugmentClassLoader();
+                Thread.currentThread().setContextClassLoader(augmentCl);
+                augmentCl.loadClass(SourceCodeGenerator.class.getName())
+                        .getMethod("generateCode", CuratedApplication.class, Consumer.class)
+                        .invoke(null, curatedApplication, sourceRegistrar);
+            } else {
 
-            deploymentClassLoader.loadClass(SourceCodeGenerator.class.getName())
-                    .getMethod("generateCode", CuratedApplication.class).invoke(null, curatedApplication);
+                deploymentClassLoader = curatedApplication.createDeploymentClassLoader();
+                Thread.currentThread().setContextClassLoader(deploymentClassLoader);
 
-            final Class<?> codeGenerator = deploymentClassLoader.loadClass("io.quarkus.deployment.CodeGenerator");
-            final Method initAndRun = codeGenerator.getMethod("initAndRun", QuarkusClassLoader.class, PathCollection.class,
-                    Path.class, Path.class,
-                    Consumer.class, ApplicationModel.class, Properties.class, String.class,
-                    boolean.class);
-            initAndRun.invoke(null, deploymentClassLoader, sourceParents,
-                    generatedSourcesDir(test), buildDir().toPath(),
-                    sourceRegistrar, curatedApplication.getApplicationModel(), getBuildSystemProperties(false),
-                    launchMode.name(),
-                    test);
+                final Class<?> codeGenerator = deploymentClassLoader.loadClass("io.quarkus.deployment.CodeGenerator");
+                final Method initAndRun = codeGenerator.getMethod("initAndRun", QuarkusClassLoader.class, PathCollection.class,
+                        Path.class, Path.class,
+                        Consumer.class, ApplicationModel.class, Properties.class, String.class,
+                        boolean.class);
+                initAndRun.invoke(null, deploymentClassLoader, sourceParents,
+                        generatedSourcesDir(test), buildDir().toPath(),
+                        sourceRegistrar, curatedApplication.getApplicationModel(), getBuildSystemProperties(false),
+                        launchMode.name(),
+                        test);
+            }
         } catch (Exception any) {
             throw new MojoExecutionException("Quarkus code generation phase has failed", any);
         } finally {
             Thread.currentThread().setContextClassLoader(originalTccl);
-            if (deploymentClassLoader != null) {
-                deploymentClassLoader.close();
-            }
             // In case of the test mode, we can't share the application model with the test plugins, so we are closing it right away,
             // but we are serializing the application model so the test plugins can deserialize it from disk instead of re-initializing
             // the resolver and re-resolving it as part of the test bootstrap
