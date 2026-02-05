@@ -154,6 +154,7 @@ public class WorkspaceLoader implements WorkspaceModelResolver, WorkspaceReader 
     }
 
     LocalProject load() throws BootstrapMavenException {
+        final long start = System.currentTimeMillis();
         final ModelResolutionTaskRunner taskRunner = getTaskRunner();
         while (!loadQueue.isEmpty()) {
             while (!loadQueue.isEmpty()) {
@@ -177,6 +178,7 @@ public class WorkspaceLoader implements WorkspaceModelResolver, WorkspaceReader 
             }
             throw new BootstrapMavenException("Failed to locate " + currentProjectPom + " in the workspace");
         }
+        System.out.println("WorkspaceLoader.load finished in " + (System.currentTimeMillis() - start));
         return currentProject;
     }
 
