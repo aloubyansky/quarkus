@@ -125,6 +125,7 @@ public class WorkspaceLoader implements WorkspaceModelResolver, WorkspaceReader 
     }
 
     LocalProject load() throws BootstrapMavenException {
+        final long start = System.currentTimeMillis();
         final ModelResolutionTaskRunner taskRunner = ModelResolutionTaskRunner.getNonBlockingTaskRunner();
         while (!moduleQueue.isEmpty()) {
             final ConcurrentLinkedDeque<WorkspaceModulePom> newModules = new ConcurrentLinkedDeque<>();
@@ -147,6 +148,8 @@ public class WorkspaceLoader implements WorkspaceModelResolver, WorkspaceReader 
             }
             throw new BootstrapMavenException("Failed to locate " + currentProjectPom + " in the workspace");
         }
+        System.out.println("WorkspaceLoader.load " + currentProject.getWorkspace().getProjects().size() + " modules in "
+                + (System.currentTimeMillis() - start));
         return currentProject;
     }
 
