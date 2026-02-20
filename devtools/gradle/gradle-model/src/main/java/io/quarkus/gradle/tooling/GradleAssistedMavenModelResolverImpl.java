@@ -19,33 +19,29 @@ import org.gradle.api.Project;
 import org.gradle.api.artifacts.result.ResolvedArtifactResult;
 import org.gradle.maven.MavenModule;
 import org.gradle.maven.MavenPomArtifact;
-import org.jspecify.annotations.Nullable;
+
+import io.quarkus.maven.dependency.GAV;
 
 public class GradleAssistedMavenModelResolverImpl implements ModelResolver {
 
     private final Project project;
-    private final Map<String, Optional<File>> pomCache = new ConcurrentHashMap<>();
+    private final Map<GAV, Optional<File>> pomCache = new ConcurrentHashMap<>();
 
     public GradleAssistedMavenModelResolverImpl(Project project) {
         this.project = project;
     }
 
-    private GradleAssistedMavenModelResolverImpl(GradleAssistedMavenModelResolverImpl other) {
-        this.project = other.project;
-        this.pomCache.putAll(other.pomCache);
-    }
-
-    private static String cacheKey(String groupId, String artifactId, String version) {
-        return groupId + ":" + artifactId + ":" + version;
+    private static GAV cacheKey(String groupId, String artifactId, String version) {
+        return new GAV(groupId, artifactId, version);
     }
 
     @Override
     public ModelSource2 resolveModel(String groupId, String artifactId, String version)
             throws UnresolvableModelException {
-        String key = cacheKey(groupId, artifactId, version);
+        GAV key = cacheKey(groupId, artifactId, version);
 
         File pomFile = pomCache
-                .computeIfAbsent(key, k -> Optional.ofNullable(resolvePomViaQuery(groupId, artifactId, version)))
+                .computeIfAbsent(key, this::resolvePomViaQuery)
                 .orElse(null);
 
         if (pomFile == null) {
@@ -67,7 +63,7 @@ public class GradleAssistedMavenModelResolverImpl implements ModelResolver {
             }
 
             @Override
-            public @Nullable ModelSource2 getRelatedSource(String relPath) {
+            public ModelSource2 getRelatedSource(String relPath) {
                 return null;
             }
 
@@ -78,22 +74,22 @@ public class GradleAssistedMavenModelResolverImpl implements ModelResolver {
         };
     }
 
-    private @Nullable File resolvePomViaQuery(String groupId, String artifactId, String version) {
+    private Optional<File> resolvePomViaQuery(GAV gav) {
         @SuppressWarnings("unchecked")
         var componentId = project.getDependencies()
                 .createArtifactResolutionQuery()
-                .forModule(groupId, artifactId, version)
+                .forModule(gav.getGroupId(), gav.getArtifactId(), gav.getVersion())
                 .withArtifacts(MavenModule.class, MavenPomArtifact.class)
                 .execute();
 
         for (var component : componentId.getResolvedComponents()) {
             for (var artifactResult : component.getArtifacts(MavenPomArtifact.class)) {
                 if (artifactResult instanceof ResolvedArtifactResult resolved) {
-                    return resolved.getFile();
+                    return Optional.of(resolved.getFile());
                 }
             }
         }
-        return null;
+        return Optional.empty();
     }
 
     @Override
@@ -118,6 +114,6 @@ public class GradleAssistedMavenModelResolverImpl implements ModelResolver {
 
     @Override
     public ModelResolver newCopy() {
-        return new GradleAssistedMavenModelResolverImpl(this);
+        return this;
     }
 }

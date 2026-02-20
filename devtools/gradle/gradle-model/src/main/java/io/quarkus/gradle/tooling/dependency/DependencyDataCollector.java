@@ -4,10 +4,9 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -22,7 +21,6 @@ import org.gradle.api.GradleException;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.ArtifactCollection;
 import org.gradle.api.artifacts.Configuration;
-import org.gradle.api.artifacts.ExternalModuleDependency;
 import org.gradle.api.artifacts.ProjectDependency;
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
@@ -40,6 +38,7 @@ import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.maven.dependency.DependencyBuilder;
 import io.quarkus.maven.dependency.DependencyFlags;
+import io.quarkus.maven.dependency.GAV;
 import io.quarkus.maven.dependency.ResolvedDependencyBuilder;
 
 public class DependencyDataCollector {
@@ -282,7 +281,7 @@ public class DependencyDataCollector {
         // runtimeOnly -> runtime
         // compileOnly -> ignored altogether
         // test* -> test
-        final List<DeclaredDependency> declaredDeps = new ArrayList<>();
+        final Map<GAV, DeclaredDependency> declaredDeps = new LinkedHashMap<>();
 
         addDeclaredFromConfig(project, JavaPlugin.API_CONFIGURATION_NAME,
                 io.quarkus.maven.dependency.Dependency.SCOPE_COMPILE, declaredDeps);
@@ -295,81 +294,48 @@ public class DependencyDataCollector {
             // addDeclaredFromConfig(project, JavaPlugin.TEST_COMPILE_ONLY_CONFIGURATION_NAME, SCOPE_TEST, declaredDeps);
         }
 
-        return deduplicate(declaredDeps);
+        return new ArrayList<>(declaredDeps.values());
     }
 
     private static void addDeclaredFromConfig(Project p, String cfgName, String scope,
-            List<DeclaredDependency> out) {
+            Map<GAV, DeclaredDependency> out) {
         final Configuration cfg = p.getConfigurations().findByName(cfgName);
         if (cfg == null) {
             return;
         }
 
         for (var d : cfg.getDependencies()) {
-            if (d instanceof ExternalModuleDependency emd) {
-                out.add(new DeclaredDependency(
-                        emd.getGroup(),
-                        emd.getName(),
-                        emd.getVersion(),
-                        null,
-                        null,
-                        scope,
-                        false));
-                continue;
-            }
+            var gav = new GAV(
+                    String.valueOf(d.getGroup()),
+                    d.getName(),
+                    String.valueOf(d.getVersion()));
             if (d instanceof ProjectDependency pd) {
                 Project dp = p.findProject(pd.getPath());
                 if (dp == null) {
                     // should not happen
                     throw new GradleException("Failed to find project for dependency: " + pd.getPath());
                 }
-                out.add(new DeclaredDependency(
-                        String.valueOf(dp.getGroup()),
-                        dp.getName(),
-                        String.valueOf(dp.getVersion()),
-                        null,
-                        null,
-                        scope,
-                        false));
             }
-        }
-    }
+            out.put(gav, new DeclaredDependency(
+                    gav.getGroupId(),
+                    gav.getArtifactId(),
+                    gav.getVersion(),
+                    null,
+                    null,
+                    scope,
+                    false));
 
-    private static List<DeclaredDependency> deduplicate(
-            List<DeclaredDependency> in) {
-        final Set<String> seen = new LinkedHashSet<>();
-        final List<DeclaredDependency> out = new ArrayList<>(in.size());
-        for (var d : in) {
-            final String key = d.getGroupId() + ":" + d.getArtifactId() + ":" + d.getVersion()
-                    + ":" + d.getClassifier() + ":" + d.getType() + ":" + d.getScope() + ":" + d.isOptional();
-            if (seen.add(key)) {
-                out.add(d);
-            }
         }
-        return out;
-    }
-
-    private static List<DeclaredDependency> filterTestScopes(
-            List<DeclaredDependency> declaredDeps) {
-        if (declaredDeps == null) {
-            return null;
-        }
-        final List<DeclaredDependency> out = new ArrayList<>(declaredDeps.size());
-        for (var dep : declaredDeps) {
-            if (!SCOPE_TEST.equals(dep.getScope())) {
-                out.add(dep);
-            }
-        }
-        return out;
     }
 
     private static List<DeclaredDependency> toDeclaredDependencies(Model model) {
         final List<DeclaredDependency> declaredDeps = new ArrayList<>();
         for (org.apache.maven.model.Dependency dep : model.getDependencies()) {
-            declaredDeps.add(new DeclaredDependency(dep));
+            if (!SCOPE_TEST.equals(dep.getScope())) {
+                declaredDeps.add(new DeclaredDependency(dep));
+            }
         }
-        final List<DeclaredDependency> deduped = deduplicate(declaredDeps);
-        return filterTestScopes(deduped);
+        return declaredDeps;
     }
 
     private static String resolveArtifactType(ResolvedArtifactResult artifact) {
