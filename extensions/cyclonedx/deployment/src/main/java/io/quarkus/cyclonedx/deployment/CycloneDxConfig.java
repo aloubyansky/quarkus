@@ -2,6 +2,7 @@ package io.quarkus.cyclonedx.deployment;
 
 import java.util.Optional;
 
+import io.quarkus.runtime.annotations.ConfigDocSection;
 import io.quarkus.runtime.annotations.ConfigRoot;
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
@@ -42,4 +43,32 @@ public interface CycloneDxConfig {
      */
     @WithDefault("false")
     boolean includeLicenseText();
+
+    /**
+     * Embedded dependency SBOM
+     */
+    @ConfigDocSection
+    EmbeddedDependencySbomConfig embeddedDependencySbom();
+
+    /**
+     * Embedded dependency SBOM configuration
+     */
+    interface EmbeddedDependencySbomConfig {
+
+        /**
+         * Whether dependency SBOM should be embedded in the final application.
+         *
+         * @return true, if dependency SBOM should be embedded in the final application, false - otherwise
+         */
+        @WithDefault("false")
+        boolean enabled();
+
+        /**
+         * Resource name for the embedded dependency SBOM
+         *
+         * @return resource name for the embedded dependency SBOM
+         */
+        @WithDefault("META-INF/sbom/dependency-cdx.json")
+        String resourceName();
+    }
 }
