@@ -160,6 +160,7 @@
 
         <!-- SBOM -->
         <module>cyclonedx</module>
+        <module>spdx</module>
 
         <!-- Infinispan -->
         <module>infinispan-client</module>

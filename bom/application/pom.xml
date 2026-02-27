@@ -20,6 +20,9 @@
         <bouncycastle.fips.version>2.1.2</bouncycastle.fips.version>
         <bouncycastle.tls.fips.version>2.1.22</bouncycastle.tls.fips.version>
         <cyclonedx.version>12.1.0</cyclonedx.version>
+        <spdx-java-library.version>2.0.2</spdx-java-library.version>
+        <spdx-jackson-store.version>2.0.4</spdx-jackson-store.version>
+        <spdx-tagvalue-store.version>2.0.2</spdx-tagvalue-store.version>
         <expressly.version>6.0.0</expressly.version>
         <findbugs.version>3.0.2</findbugs.version>
         <jandex.version>3.5.3</jandex.version>
@@ -885,6 +888,21 @@
             <dependency>
                 <groupId>io.quarkus</groupId>
                 <artifactId>quarkus-cyclonedx-generator</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-spdx</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-spdx-deployment</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-spdx-generator</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -5167,6 +5185,21 @@
                 <groupId>org.cyclonedx</groupId>
                 <artifactId>cyclonedx-core-java</artifactId>
                 <version>${cyclonedx.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.spdx</groupId>
+                <artifactId>java-spdx-library</artifactId>
+                <version>${spdx-java-library.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.spdx</groupId>
+                <artifactId>spdx-jackson-store</artifactId>
+                <version>${spdx-jackson-store.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.spdx</groupId>
+                <artifactId>spdx-tagvalue-store</artifactId>
+                <version>${spdx-tagvalue-store.version}</version>
             </dependency>
 
             <dependency>

@@ -1,0 +1,7 @@
+name: "SPDX"
+artifact: ${project.groupId}:${project.artifactId}:${project.version}
+metadata:
+  keywords:
+  - "spdx"
+  - "sbom"
+  status: "preview"
