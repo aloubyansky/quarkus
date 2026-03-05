@@ -1,7 +1,5 @@
 package io.quarkus.paths;
 
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
@@ -10,40 +8,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.regex.Pattern;
 
 public abstract class OpenContainerPathTree extends PathTreeWithManifest implements OpenPathTree {
-
-    private static final boolean USE_WINDOWS_ABSOLUTE_PATH_PATTERN = !FileSystems.getDefault().getSeparator().equals("/");
-
-    private static volatile Pattern windowsAbsolutePathPattern;
-
-    private static Pattern windowsAbsolutePathPattern() {
-        return windowsAbsolutePathPattern == null ? windowsAbsolutePathPattern = Pattern.compile("[a-zA-Z]:\\\\.*")
-                : windowsAbsolutePathPattern;
-    }
-
-    static boolean isAbsolutePath(String path) {
-        return path != null && !path.isEmpty()
-                && (path.charAt(0) == '/' // we want to check for '/' on every OS
-                        || USE_WINDOWS_ABSOLUTE_PATH_PATTERN
-                                && (windowsAbsolutePathPattern().matcher(path).matches())
-                        || path.startsWith(FileSystems.getDefault().getSeparator()));
-    }
-
-    static void ensureResourcePath(FileSystem fs, String path) {
-        if (isAbsolutePath(path)) {
-            throw new IllegalArgumentException("Expected a path relative to the root of the path tree but got " + path);
-        }
-        // this is to disallow reading outside the path tree root
-        if (path != null && path.contains("..")) {
-            for (Path pathElement : fs.getPath(path)) {
-                if (pathElement.toString().equals("..")) {
-                    throw new IllegalArgumentException("'..' cannot be used in resource paths, but got " + path);
-                }
-            }
-        }
-    }
 
     protected PathFilter pathFilter;
 
@@ -123,13 +89,13 @@ public abstract class OpenContainerPathTree extends PathTreeWithManifest impleme
     }
 
     @Override
-    public void walkIfContains(String relativePath, PathVisitor visitor) {
-        ensureResourcePath(relativePath);
-        if (!PathFilter.isVisible(pathFilter, relativePath)) {
+    public void walkIfContains(String resourceDirName, PathVisitor visitor) {
+        ensureResourcePath(resourceDirName);
+        if (!PathFilter.isVisible(pathFilter, resourceDirName)) {
             return;
         }
         final Path walkDir = getRootPath()
-                .resolve(manifestEnabled ? toMultiReleaseRelativePath(relativePath) : relativePath);
+                .resolve(manifestEnabled ? toMultiReleaseRelativePath(resourceDirName) : resourceDirName);
         if (!Files.exists(walkDir)) {
             return;
         }
@@ -137,16 +103,16 @@ public abstract class OpenContainerPathTree extends PathTreeWithManifest impleme
     }
 
     private void ensureResourcePath(String path) {
-        ensureResourcePath(getRootPath().getFileSystem(), path);
+        PathTreeVisit.ensureResourcePath(getRootPath().getFileSystem(), path);
     }
 
     @Override
-    protected <T> T apply(String relativePath, Function<PathVisit, T> func, boolean manifestEnabled) {
-        ensureResourcePath(relativePath);
-        if (!PathFilter.isVisible(pathFilter, relativePath)) {
+    protected <T> T apply(String resourceName, Function<PathVisit, T> func, boolean manifestEnabled) {
+        ensureResourcePath(resourceName);
+        if (!PathFilter.isVisible(pathFilter, resourceName)) {
             return func.apply(null);
         }
-        final Path path = getRootPath().resolve(manifestEnabled ? toMultiReleaseRelativePath(relativePath) : relativePath);
+        final Path path = getRootPath().resolve(manifestEnabled ? toMultiReleaseRelativePath(resourceName) : resourceName);
         if (!Files.exists(path)) {
             return func.apply(null);
         }
@@ -154,13 +120,13 @@ public abstract class OpenContainerPathTree extends PathTreeWithManifest impleme
     }
 
     @Override
-    public void accept(String relativePath, Consumer<PathVisit> consumer) {
-        ensureResourcePath(relativePath);
-        if (!PathFilter.isVisible(pathFilter, relativePath)) {
+    public void accept(String resourceName, Consumer<PathVisit> consumer) {
+        ensureResourcePath(resourceName);
+        if (!PathFilter.isVisible(pathFilter, resourceName)) {
             consumer.accept(null);
             return;
         }
-        final Path path = getRootPath().resolve(manifestEnabled ? toMultiReleaseRelativePath(relativePath) : relativePath);
+        final Path path = getRootPath().resolve(manifestEnabled ? toMultiReleaseRelativePath(resourceName) : resourceName);
         if (!Files.exists(path)) {
             consumer.accept(null);
             return;
@@ -169,12 +135,12 @@ public abstract class OpenContainerPathTree extends PathTreeWithManifest impleme
     }
 
     @Override
-    public boolean contains(String relativePath) {
-        ensureResourcePath(relativePath);
-        if (!PathFilter.isVisible(pathFilter, relativePath)) {
+    public boolean contains(String resourceName) {
+        ensureResourcePath(resourceName);
+        if (!PathFilter.isVisible(pathFilter, resourceName)) {
             return false;
         }
-        final Path path = getRootPath().resolve(manifestEnabled ? toMultiReleaseRelativePath(relativePath) : relativePath);
+        final Path path = getRootPath().resolve(manifestEnabled ? toMultiReleaseRelativePath(resourceName) : resourceName);
         return Files.exists(path);
     }
 

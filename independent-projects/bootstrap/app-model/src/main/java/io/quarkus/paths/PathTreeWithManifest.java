@@ -68,11 +68,11 @@ public abstract class PathTreeWithManifest implements PathTree {
     }
 
     @Override
-    public <T> T apply(String relativePath, Function<PathVisit, T> func) {
-        return apply(relativePath, func, manifestEnabled);
+    public <T> T apply(String resourceName, Function<PathVisit, T> func) {
+        return apply(resourceName, func, manifestEnabled);
     }
 
-    protected abstract <T> T apply(String relativePath, Function<PathVisit, T> func, boolean manifestEnabled);
+    protected abstract <T> T apply(String resourceName, Function<PathVisit, T> func, boolean manifestEnabled);
 
     @Override
     public ManifestAttributes getManifestAttributes() {
@@ -153,11 +153,11 @@ public abstract class PathTreeWithManifest implements PathTree {
                 return Collections.emptyMap();
             }
             final Path versionsDir = visit.getPath();
-            if (!Files.isDirectory(versionsDir)) {
+            // get the root of the tree
+            final Path root = getTreeRootForVersionsDir(visit.getPath());
+            if (root == null) {
                 return Collections.emptyMap();
             }
-            // get the root of the tree
-            final Path root = versionsDir.getParent().getParent();
             final TreeMap<Integer, Consumer<Map<String, String>>> versionContentMap = new TreeMap<>();
             try (Stream<Path> versions = Files.list(versionsDir)) {
                 versions.forEach(versionDir -> {
@@ -200,6 +200,14 @@ public abstract class PathTreeWithManifest implements PathTree {
                 c.accept(multiReleaseMapping);
             }
             return multiReleaseMapping;
+        }
+
+        private static Path getTreeRootForVersionsDir(Path versionsDir) {
+            if (Files.isDirectory(versionsDir)) {
+                Path parent = versionsDir.getParent();
+                return parent == null ? null : parent.getParent();
+            }
+            return null;
         }
 
         private static String asSubpath(Path parentDir, Path childPath) {
