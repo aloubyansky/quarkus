@@ -51,7 +51,7 @@ public class NativeImageSourceJarBuilder extends AbstractLegacyThinJarBuilder<Na
             ResolvedJVMRequirements jvmRequirements) {
         super(curateOutcome, outputTarget, applicationInfo, packageConfig, mainClass, applicationArchives, transformedClasses,
                 augmentGeneratedClasses(generatedClasses, nativeImageResources), generatedResources,
-                augmentRemovedArtifactKeys(removedArtifactKeys), executorService, jvmRequirements);
+                augmentRemovedArtifactKeys(removedArtifactKeys), executorService, jvmRequirements, null);
     }
 
     public NativeImageSourceJarBuildItem build() throws IOException {
