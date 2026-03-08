@@ -193,7 +193,7 @@ public interface PackageConfig {
          * classes from used dependencies.</li>
          * </ul>
          */
-        @WithDefault("none")
+        @WithDefault("classes")
         PurgeLevel purge();
 
         /**
