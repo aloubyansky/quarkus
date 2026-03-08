@@ -1,0 +1,82 @@
+////
+This guide is maintained in the main Quarkus repository
+and pull requests should be submitted there:
+https://github.com/quarkusio/quarkus/tree/main/docs/src/main/asciidoc
+////
+= Tree-shaking JAR dependencies
+include::_attributes.adoc[]
+:categories: core
+:summary: This guide explains how to reduce JAR size by removing unreachable classes from runtime dependencies.
+:topics: packaging,jar,tree-shaking,optimization
+
+[WARNING]
+====
+This feature is experimental and subject to change. Please provide feedback if you encounter issues.
+====
+
+Tree-shaking analyzes your application's bytecode at build time to determine which classes from runtime dependencies are actually reachable.
+Unreachable classes are excluded from the produced JAR, reducing its size.
+
+This applies to `fast-jar`, `uber-jar`, `legacy-jar`, and `aot-jar` package types.
+
+== Enabling tree-shaking
+
+Add the following property to your `application.properties`:
+
+[source,properties]
+----
+quarkus.package.jar.tree-shake=classes
+----
+
+The default value is `none`, which disables tree-shaking entirely.
+
+== How it works
+
+When tree-shaking is enabled, Quarkus performs a breadth-first reachability analysis starting from your application classes and any generated/transformed classes.
+It walks bytecode references to build the set of dependency classes that are actually used.
+Any dependency class not in this reachable set is excluded from the final JAR.
+
+The analysis recognizes the following patterns:
+
+Direct class references:: Superclasses, implemented interfaces, field types, method parameter and return types, and exception types in `throws` clauses.
+
+Annotations and generics:: Class references appearing in annotation values and generic type signatures.
+
+ServiceLoader / SPI:: `ServiceLoader.load()` calls where the service interface is a compile-time constant, and implementations listed in `META-INF/services` files.
+
+Dynamic class loading:: `Class.forName()` and `ClassLoader.loadClass()` calls where the class name is a string constant in the bytecode.
+
+Reflection, JNI, and service provider registrations:: Classes registered by extensions for reflection (`ReflectiveClassBuildItem`, `ReflectiveFieldBuildItem`, `ReflectiveMethodBuildItem`), JNI runtime access (`JniRuntimeAccessBuildItem`, `JniRuntimeAccessFieldBuildItem`, `JniRuntimeAccessMethodBuildItem`), and service providers (`ServiceProviderBuildItem`) are treated as root classes. Weak reflective registrations are excluded — they are only preserved if bytecode analysis independently reaches them. Conditional registrations (`ReflectiveClassConditionBuildItem`) are evaluated to a fixed point: a conditionally registered class becomes a root only when its condition type is reachable.
+
+String constants:: When a method contains a string constant that exactly matches a fully-qualified dependency class name, that class is marked reachable. Comma- or colon-delimited lists of class names (as used by some frameworks) are also handled by splitting and matching each part.
+
+Inner and outer classes:: If an outer class is reachable, its inner classes are preserved.
+
+Multi-release JAR entries:: `META-INF/versions/N/` entries are analyzed, picking the highest version compatible with the application's target Java version.
+
+JBoss Logging companions:: `_$logger` and `_$bundle` companion classes are automatically included when their owning class is reachable.
+
+Sisu named components:: Classes discovered through Eclipse Sisu's named component loading are preserved.
+
+== Limitations
+
+* Tree-shaking is not supported for the `mutable-jar` package type, since re-augmentation requires all classes to be present.
+* Only classes from runtime dependencies are candidates for removal. Application classes are never removed.
+* The `classes` level only removes class files. Other resources (such as configuration files, property files, and `META-INF` entries) are preserved. Dependencies from which all classes have been removed are still included in the final JAR, since they may contain resources required at runtime.
+
+== Troubleshooting
+
+When tree-shaking is enabled, the build log includes a one-line summary at info level:
+
+[source]
+----
+Tree-shaking removed 2469 unreachable classes from 15 dependencies, saving 1.5 MB (20.0%)
+----
+
+For a detailed per-dependency breakdown, enable debug logging for the tree shaker. The debug output includes total/reachable/removed class counts and a list of affected dependencies.
+
+If your application throws a `ClassNotFoundException` or `NoClassDefFoundError` at runtime after enabling tree-shaking, a needed class may have been incorrectly identified as unreachable.
+To resolve this:
+
+1. Disable tree-shaking by setting `quarkus.package.jar.tree-shake=none` to verify the issue goes away.
+2. If it does, please report the issue so the analysis can be improved.
