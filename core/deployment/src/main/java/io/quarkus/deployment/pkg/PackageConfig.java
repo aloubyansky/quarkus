@@ -183,6 +183,31 @@ public interface PackageConfig {
         boolean addRunnerSuffix();
 
         /**
+         * Whether to perform class reachability analysis and exclude non-reachable classes
+         * from the produced JAR.
+         * <ul>
+         * <li>{@code none} - No analysis or exclusion is performed.</li>
+         * <li>{@code classes} - Exclude non-reachable classes from dependencies.</li>
+         * </ul>
+         */
+        @WithDefault("none")
+        TreeShakeLevel treeShake();
+
+        /**
+         * The level of tree shaking to apply.
+         */
+        enum TreeShakeLevel {
+            /**
+             * No analysis or exclusion is performed.
+             */
+            NONE,
+            /**
+             * Exclude non-reachable classes from dependencies.
+             */
+            CLASSES
+        }
+
+        /**
          * Indicates a list of dependency for which the jar will use artifactId.type filename scheme
          * Each dependency needs to be expressed in the following format:
          * <p>
