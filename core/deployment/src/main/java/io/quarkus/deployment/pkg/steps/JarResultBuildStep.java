@@ -37,6 +37,7 @@ import io.quarkus.deployment.pkg.builditem.NativeImageSourceJarBuildItem;
 import io.quarkus.deployment.pkg.builditem.OutputTargetBuildItem;
 import io.quarkus.deployment.pkg.builditem.UberJarIgnoredResourceBuildItem;
 import io.quarkus.deployment.pkg.builditem.UberJarMergedResourceBuildItem;
+import io.quarkus.deployment.pkg.builditem.UberJarPurgeBuildItem;
 import io.quarkus.deployment.pkg.jar.AotFastJarBuilder;
 import io.quarkus.deployment.pkg.jar.FastJarBuilder;
 import io.quarkus.deployment.pkg.jar.LegacyThinJarBuilder;
@@ -106,6 +107,7 @@ public class JarResultBuildStep {
             List<AdditionalApplicationArchiveBuildItem> additionalApplicationArchiveBuildItems,
             MainClassBuildItem mainClassBuildItem,
             Optional<JvmStartupOptimizerArchiveRequestedBuildItem> jvmStartupOptimizerArchiveRequested,
+            UberJarPurgeBuildItem purgeResult,
             ExecutorService buildExecutor)
             throws Exception {
 
@@ -130,7 +132,8 @@ public class JarResultBuildStep {
                     uberJarMergedResourceBuildItems,
                     uberJarIgnoredResourceBuildItems,
                     buildExecutor,
-                    jvmRequirements).build();
+                    jvmRequirements,
+                    purgeResult).build();
             case LEGACY_JAR -> new LegacyThinJarBuilder(curateOutcomeBuildItem,
                     outputTargetBuildItem,
                     applicationInfo,
@@ -156,7 +159,8 @@ public class JarResultBuildStep {
                     parentFirstArtifactKeys,
                     removedArtifactKeys,
                     buildExecutor,
-                    jvmRequirements).build();
+                    jvmRequirements,
+                    purgeResult).build();
             case AOT_JAR -> new AotFastJarBuilder(curateOutcomeBuildItem,
                     outputTargetBuildItem,
                     applicationInfo,
@@ -170,7 +174,8 @@ public class JarResultBuildStep {
                     parentFirstArtifactKeys,
                     removedArtifactKeys,
                     buildExecutor,
-                    jvmRequirements).build();
+                    jvmRequirements,
+                    purgeResult).build();
         };
     }
 

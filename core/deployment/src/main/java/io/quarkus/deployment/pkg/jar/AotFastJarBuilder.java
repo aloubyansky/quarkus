@@ -22,6 +22,7 @@ import io.quarkus.deployment.jvm.ResolvedJVMRequirements;
 import io.quarkus.deployment.pkg.PackageConfig;
 import io.quarkus.deployment.pkg.builditem.CurateOutcomeBuildItem;
 import io.quarkus.deployment.pkg.builditem.OutputTargetBuildItem;
+import io.quarkus.deployment.pkg.builditem.UberJarPurgeBuildItem;
 import io.quarkus.maven.dependency.ArtifactKey;
 
 public class AotFastJarBuilder extends AbstractFastJarBuilder {
@@ -41,10 +42,11 @@ public class AotFastJarBuilder extends AbstractFastJarBuilder {
             Set<ArtifactKey> parentFirstArtifactKeys,
             Set<ArtifactKey> removedArtifactKeys,
             ExecutorService executorService,
-            ResolvedJVMRequirements jvmRequirements) {
+            ResolvedJVMRequirements jvmRequirements,
+            UberJarPurgeBuildItem purgeResult) {
         super(curateOutcome, outputTarget, applicationInfo, packageConfig, mainClass, applicationArchives,
                 additionalApplicationArchives, transformedClasses, generatedClasses, generatedResources,
-                parentFirstArtifactKeys, removedArtifactKeys, executorService, jvmRequirements);
+                parentFirstArtifactKeys, removedArtifactKeys, executorService, jvmRequirements, purgeResult);
     }
 
     @Override
