@@ -183,6 +183,38 @@ public interface PackageConfig {
         boolean addRunnerSuffix();
 
         /**
+         * Whether to perform class reachability analysis and exclude non-reachable content
+         * from the produced JAR.
+         * <ul>
+         * <li>{@code none} - No analysis or exclusion is performed.</li>
+         * <li>{@code dependencies} - Exclude entirely unused dependencies but keep all classes
+         * within used dependencies.</li>
+         * <li>{@code classes} - Exclude entirely unused dependencies and also exclude non-reachable
+         * classes from used dependencies.</li>
+         * </ul>
+         */
+        @WithDefault("none")
+        PurgeLevel purge();
+
+        /**
+         * The level of dependency purging to apply.
+         */
+        enum PurgeLevel {
+            /**
+             * No analysis or exclusion is performed.
+             */
+            NONE,
+            /**
+             * Exclude entirely unused dependencies.
+             */
+            DEPENDENCIES,
+            /**
+             * Exclude entirely unused dependencies and non-reachable classes from used dependencies.
+             */
+            CLASSES
+        }
+
+        /**
          * Indicates a list of dependency for which the jar will use artifactId.type filename scheme
          * Each dependency needs to be expressed in the following format:
          * <p>

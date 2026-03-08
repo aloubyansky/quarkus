@@ -33,6 +33,7 @@ import io.quarkus.deployment.pkg.builditem.JarBuildItem;
 import io.quarkus.deployment.pkg.builditem.OutputTargetBuildItem;
 import io.quarkus.deployment.pkg.builditem.UberJarIgnoredResourceBuildItem;
 import io.quarkus.deployment.pkg.builditem.UberJarMergedResourceBuildItem;
+import io.quarkus.deployment.pkg.builditem.UberJarPurgeBuildItem;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.maven.dependency.Dependency;
 import io.quarkus.maven.dependency.ResolvedDependency;
@@ -61,6 +62,7 @@ public class UberJarBuilder extends AbstractJarBuilder<JarBuildItem> {
 
     private final List<UberJarMergedResourceBuildItem> mergedResources;
     private final List<UberJarIgnoredResourceBuildItem> ignoredResources;
+    private final UberJarPurgeBuildItem purgeResult;
 
     public UberJarBuilder(CurateOutcomeBuildItem curateOutcome,
             OutputTargetBuildItem outputTarget,
@@ -75,12 +77,14 @@ public class UberJarBuilder extends AbstractJarBuilder<JarBuildItem> {
             List<UberJarMergedResourceBuildItem> mergedResources,
             List<UberJarIgnoredResourceBuildItem> ignoredResources,
             ExecutorService executorService,
-            ResolvedJVMRequirements jvmRequirements) {
+            ResolvedJVMRequirements jvmRequirements,
+            UberJarPurgeBuildItem purgeResult) {
         super(curateOutcome, outputTarget, applicationInfo, packageConfig, mainClass, applicationArchives, transformedClasses,
                 generatedClasses, generatedResources, removedArtifactKeys, executorService, jvmRequirements);
 
         this.mergedResources = mergedResources;
         this.ignoredResources = ignoredResources;
+        this.purgeResult = purgeResult;
     }
 
     @Override
@@ -176,6 +180,13 @@ public class UberJarBuilder extends AbstractJarBuilder<JarBuildItem> {
                 // Exclude files that are not jars (typically, we can have XML files here, see https://github.com/quarkusio/quarkus/issues/2852)
                 // and are not part of the optional dependencies to include
                 if (!includeAppDependency(appDep, outputTarget.getIncludedOptionalDependencies(), removedArtifactKeys)) {
+                    continue;
+                }
+
+                // When purge is enabled, skip entirely unused dependencies
+                if (purgeResult.getLevel() != PackageConfig.JarConfig.PurgeLevel.NONE
+                        && !purgeResult.getUsedDependencies().contains(appDep.getKey())) {
+                    LOG.debugf("Purge: skipping unused dependency %s", appDep.getKey());
                     continue;
                 }
 
