@@ -454,6 +454,12 @@ public class PurgeProcessor {
                     private String lastStringConstant;
 
                     @Override
+                    public org.objectweb.asm.AnnotationVisitor visitAnnotationDefault() {
+                        // Captures default values of annotation methods (e.g. @Reflective(processors = SimpleReflectiveProcessor.class))
+                        return createAnnotationRefVisitor(refs);
+                    }
+
+                    @Override
                     public void visitTypeInsn(int opcode, String type) {
                         lastStringConstant = null;
                         refs.add(internalToDotName(type));
@@ -575,6 +581,8 @@ public class PurgeProcessor {
      * Extracts LDC string constants from bytecode that match known class names.
      * This catches class names passed as string arguments to methods that eventually
      * call Class.forName() at runtime (e.g. Quarkus recorder generated code).
+     * Also handles delimited class name lists (comma, colon) used by frameworks
+     * like RESTEasy for provider and resource builder lists.
      */
     private Set<DotName> extractStringClassReferences(byte[] bytecode, Set<DotName> knownClasses) {
         final Set<DotName> refs = new HashSet<>();
@@ -587,16 +595,29 @@ public class PurgeProcessor {
                     @Override
                     public void visitLdcInsn(Object value) {
                         if (value instanceof String str) {
-                            DotName dotName = DotName.createSimple(str);
-                            if (knownClasses.contains(dotName)) {
-                                refs.add(dotName);
-                            }
+                            matchClassNames(str, knownClasses, refs);
                         }
                     }
                 };
             }
         }, ClassReader.SKIP_FRAMES | ClassReader.SKIP_DEBUG);
         return refs;
+    }
+
+    private static void matchClassNames(String str, Set<DotName> knownClasses, Set<DotName> refs) {
+        if (str.indexOf(',') >= 0 || str.indexOf(':') >= 0) {
+            for (String part : str.split("[,:]")) {
+                DotName dotName = DotName.createSimple(part);
+                if (knownClasses.contains(dotName)) {
+                    refs.add(dotName);
+                }
+            }
+        } else {
+            DotName dotName = DotName.createSimple(str);
+            if (knownClasses.contains(dotName)) {
+                refs.add(dotName);
+            }
+        }
     }
 
     private void detectServiceLoaderCalls(Path classFile, DotName className,
