@@ -270,6 +270,22 @@ public class UberJarBuilder extends AbstractJarBuilder<JarBuildItem> {
                         return;
                     }
 
+                    // When purge level is CLASSES, skip non-reachable classes
+                    // Skip filtering for multi-release version entries (META-INF/versions/)
+                    if (purgeResult.getLevel() == PackageConfig.JarConfig.PurgeLevel.CLASSES
+                            && relativePath.endsWith(".class") && !relativePath.equals("module-info.class")
+                            && !relativePath.startsWith("META-INF/versions/")) {
+                        String className = relativePath.substring(0, relativePath.length() - 6).replace('/', '.');
+                        if (!purgeResult.getReachableClassNames().contains(className)) {
+                            // Keep inner classes if the outer class is reachable
+                            int dollarIdx = className.indexOf('$');
+                            if (dollarIdx < 0
+                                    || !purgeResult.getReachableClassNames().contains(className.substring(0, dollarIdx))) {
+                                return;
+                            }
+                        }
+                    }
+
                     final Path file = visit.getPath();
                     //if this has been transformed we do not copy it
                     // if it's a signature file (under the <jar>/META-INF directory),
