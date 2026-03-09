@@ -274,13 +274,29 @@ public class PurgeProcessor {
             }
         }
 
+        // Compute removal stats from dependency bytecode
+        int totalDepClasses = depBytecode.size();
+        int removedClasses = 0;
+        long removedBytes = 0;
+        for (var entry : depBytecode.entrySet()) {
+            if (!reachable.contains(entry.getKey())) {
+                removedClasses++;
+                removedBytes += entry.getValue().length;
+            }
+        }
+
         // Report
         log.info("============================================================");
         log.info("  Quarkus Purge: Dependency Usage Analysis");
         log.info("============================================================");
-        log.infof("  Total reachable classes: %d", reachable.size());
-        log.infof("  Used dependencies     : %d", usedDeps.size());
-        log.infof("  Unused dependencies   : %d", unusedCount);
+        log.infof("  Total dependency classes: %d", totalDepClasses);
+        log.infof("  Reachable classes       : %d", reachable.size());
+        log.infof("  Removed classes         : %d  (%.1f%% of dependency classes, %s)",
+                removedClasses,
+                totalDepClasses > 0 ? (removedClasses * 100.0 / totalDepClasses) : 0.0,
+                formatSize(removedBytes));
+        log.infof("  Used dependencies       : %d", usedDeps.size());
+        log.infof("  Unused dependencies     : %d", unusedCount);
         log.info("------------------------------------------------------------");
         log.info("  USED DEPENDENCIES:");
         for (var entry : usedDepsReport.entrySet()) {
@@ -724,6 +740,16 @@ public class PurgeProcessor {
             refs.add(internalToDotName(type.getInternalName()));
         } else if (type.getSort() == org.objectweb.asm.Type.ARRAY) {
             addAsmType(type.getElementType(), refs);
+        }
+    }
+
+    private static String formatSize(long bytes) {
+        if (bytes < 1024) {
+            return bytes + " B";
+        } else if (bytes < 1024 * 1024) {
+            return String.format("%.1f KB", bytes / 1024.0);
+        } else {
+            return String.format("%.1f MB", bytes / (1024.0 * 1024.0));
         }
     }
 
