@@ -311,11 +311,13 @@ public class PurgeProcessor {
         log.infof("  Used dependencies       : %d", usedDeps.size());
         log.infof("  Unused dependencies     : %d", unusedCount);
         log.info("------------------------------------------------------------");
-        log.info("  USED DEPENDENCIES:");
+        log.info("  DEPENDENCIES WITH REMOVED CLASSES:");
         for (var entry : usedDepsReport.entrySet()) {
             int[] counts = entry.getValue();
-            log.infof("    - %s  (%d / %d classes reachable)",
-                    entry.getKey().toGacString(), counts[0], counts[1]);
+            if (counts[0] < counts[1]) {
+                log.infof("    - %s  (%d / %d classes removed)",
+                        entry.getKey().toGacString(), counts[1] - counts[0], counts[1]);
+            }
         }
         log.info("============================================================");
 
