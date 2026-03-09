@@ -28,10 +28,9 @@ import org.objectweb.asm.Opcodes;
 import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
-import io.quarkus.deployment.builditem.BytecodeTransformerBuildItem;
 import io.quarkus.deployment.builditem.GeneratedClassBuildItem;
 import io.quarkus.deployment.builditem.MainClassBuildItem;
-import io.quarkus.deployment.builditem.RemovedResourceBuildItem;
+import io.quarkus.deployment.builditem.TransformedClassesBuildItem;
 import io.quarkus.deployment.pkg.PackageConfig;
 import io.quarkus.deployment.pkg.builditem.CurateOutcomeBuildItem;
 import io.quarkus.deployment.pkg.builditem.UberJarPurgeBuildItem;
@@ -49,13 +48,12 @@ public class PurgeProcessor {
             CurateOutcomeBuildItem curateOutcome,
             MainClassBuildItem mainClass,
             List<GeneratedClassBuildItem> generatedClasses,
-            List<BytecodeTransformerBuildItem> bytecodeTransformers,
-            BuildProducer<UberJarPurgeBuildItem> purgeProducer,
-            BuildProducer<RemovedResourceBuildItem> removedResourceProducer) {
+            TransformedClassesBuildItem transformedClasses,
+            BuildProducer<UberJarPurgeBuildItem> purgeProducer) {
 
         final PackageConfig.JarConfig.PurgeLevel purgeLevel = packageConfig.jar().purge();
         if (purgeLevel == PackageConfig.JarConfig.PurgeLevel.NONE) {
-            purgeProducer.produce(new UberJarPurgeBuildItem(purgeLevel, Set.of()));
+            purgeProducer.produce(new UberJarPurgeBuildItem(purgeLevel, Set.of(), Set.of()));
             return;
         }
 
@@ -95,6 +93,23 @@ public class PurgeProcessor {
                 }
             });
             depClassCount.put(key, classCount[0]);
+        }
+
+        // Override dependency bytecode with transformed bytecode where available.
+        // Transformations can add interfaces, annotations, or other references
+        // that aren't in the original bytecode (e.g. NettySharable marker interface).
+        for (Set<TransformedClassesBuildItem.TransformedClass> transformedSet : transformedClasses
+                .getTransformedClassesByJar().values()) {
+            for (TransformedClassesBuildItem.TransformedClass tc : transformedSet) {
+                if (tc.getData() != null) {
+                    String fileName = tc.getFileName();
+                    if (fileName.endsWith(".class") && !fileName.equals("module-info.class")) {
+                        DotName className = DotName
+                                .createSimple(fileName.substring(0, fileName.length() - 6).replace('/', '.'));
+                        depBytecode.put(className, tc.getData());
+                    }
+                }
+            }
         }
 
         // Collect service providers and ServiceLoader calls from the app artifact
@@ -142,12 +157,6 @@ public class PurgeProcessor {
             }
         }
 
-        // Classes targeted by bytecode transformations are clearly in use.
-        // Add them as roots so they (and their references) are traced.
-        for (BytecodeTransformerBuildItem transformer : bytecodeTransformers) {
-            roots.add(DotName.createSimple(transformer.getClassToTransform()));
-        }
-
         // Scan generated classes for LDC string constants that match known dependency class names.
         // Generated recorder bytecode often passes class names as strings to methods like
         // factory(className) that eventually call Class.forName() at runtime.
@@ -166,7 +175,12 @@ public class PurgeProcessor {
         final Set<DotName> reachable = traceReachableClasses(roots, generatedBytecode, depBytecode,
                 serviceProviders, serviceLoaderCalls);
 
-        // Determine which dependencies have reachable classes and build removal sets
+        // Determine which dependencies have reachable classes
+        final Set<String> reachableClassNames = new HashSet<>();
+        for (DotName name : reachable) {
+            reachableClassNames.add(name.toString());
+        }
+
         final Map<ArtifactKey, Integer> depReachableCount = new HashMap<>();
         for (DotName className : reachable) {
             ArtifactKey dep = classToDep.get(className);
@@ -205,35 +219,7 @@ public class PurgeProcessor {
         }
         log.info("============================================================");
 
-        // For CLASSES level, produce RemovedResourceBuildItem entries for unreachable classes.
-        // This leverages existing infrastructure: ClassTransformingBuildStep converts these
-        // into TransformedClass entries with null data, which jar builders already handle.
-        if (purgeLevel == PackageConfig.JarConfig.PurgeLevel.CLASSES) {
-            // Group unreachable classes by dependency
-            final Map<ArtifactKey, Set<String>> unreachableByDep = new HashMap<>();
-            for (Map.Entry<DotName, ArtifactKey> entry : classToDep.entrySet()) {
-                DotName className = entry.getKey();
-                if (!reachable.contains(className)) {
-                    // Keep inner classes if the outer class is reachable
-                    String name = className.toString();
-                    int dollarIdx = name.indexOf('$');
-                    if (dollarIdx >= 0 && reachable.contains(DotName.createSimple(name.substring(0, dollarIdx)))) {
-                        continue;
-                    }
-                    // Convert dot-separated class name to resource path
-                    String resourcePath = name.replace('.', '/') + ".class";
-                    unreachableByDep.computeIfAbsent(entry.getValue(), k -> new HashSet<>())
-                            .add(resourcePath);
-                }
-            }
-            for (Map.Entry<ArtifactKey, Set<String>> entry : unreachableByDep.entrySet()) {
-                log.debugf("Purge: removing %d unreachable classes from %s",
-                        entry.getValue().size(), entry.getKey());
-                removedResourceProducer.produce(new RemovedResourceBuildItem(entry.getKey(), entry.getValue()));
-            }
-        }
-
-        purgeProducer.produce(new UberJarPurgeBuildItem(purgeLevel, usedDeps));
+        purgeProducer.produce(new UberJarPurgeBuildItem(purgeLevel, reachableClassNames, usedDeps));
     }
 
     // ---- Reachability tracing ----

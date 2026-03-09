@@ -242,7 +242,7 @@ abstract class AbstractFastJarBuilder extends AbstractJarBuilder<JarBuildItem> {
                 copyDependency(parentFirstArtifactKeys, outputTarget, copiedArtifacts, mainLib, baseLib,
                         fastJarJarsBuilder::addDependency, fastJarJarsBuilder::addParentFirstDependency, true,
                         appDep, transformedClasses, removedArtifactKeys, packageConfig, manifestConfig,
-                        executorService);
+                        executorService, purgeResult);
             } else if (includeAppDependency(appDep, outputTarget.getIncludedOptionalDependencies(), removedArtifactKeys)) {
                 appDep.getResolvedPaths().forEach(fastJarJarsBuilder::addDependency);
             }
@@ -317,7 +317,7 @@ abstract class AbstractFastJarBuilder extends AbstractJarBuilder<JarBuildItem> {
                     copyDependency(parentFirstArtifactKeys, outputTarget, copiedArtifacts, deploymentLib, baseLib, p -> {
                     }, p -> {
                     }, false, appDep, new TransformedClassesBuildItem(Map.of()), removedArtifactKeys, packageConfig,
-                            manifestConfig, executorService); //we don't care about transformation here, so just pass in an empty item
+                            manifestConfig, executorService, null); //we don't care about transformation or purge here
                 }
                 Map<ArtifactKey, List<String>> relativePaths = new HashMap<>();
                 for (Entry<ArtifactKey, List<Path>> e : copiedArtifacts.entrySet()) {
@@ -398,7 +398,8 @@ abstract class AbstractFastJarBuilder extends AbstractJarBuilder<JarBuildItem> {
             Map<ArtifactKey, List<Path>> runtimeArtifacts, Path libDir, Path baseLib, Consumer<Path> dependenciesConsumer,
             Consumer<Path> parentFirstDependenciesConsumer, boolean allowParentFirst, ResolvedDependency appDep,
             TransformedClassesBuildItem transformedClasses, Set<ArtifactKey> removedDeps,
-            PackageConfig packageConfig, ApplicationManifestConfig.Builder manifestConfig, ExecutorService executorService)
+            PackageConfig packageConfig, ApplicationManifestConfig.Builder manifestConfig, ExecutorService executorService,
+            UberJarPurgeBuildItem purgeResult)
             throws IOException {
 
         // Exclude files that are not jars (typically, we can have XML files here, see https://github.com/quarkusio/quarkus/issues/2852)
@@ -448,6 +449,26 @@ abstract class AbstractFastJarBuilder extends AbstractJarBuilder<JarBuildItem> {
                         if (i.getData() == null) {
                             removedFromThisArchive.add(i.getFileName());
                         }
+                    }
+                }
+                // When purge level is CLASSES, add non-reachable classes to removal set
+                if (purgeResult != null
+                        && purgeResult.getLevel() == PackageConfig.JarConfig.PurgeLevel.CLASSES) {
+                    try (var pathTree = appDep.getContentTree().open()) {
+                        pathTree.walk(visit -> {
+                            String rel = visit.getRelativePath("/");
+                            if (rel.endsWith(".class") && !rel.equals("module-info.class")) {
+                                String className = rel.substring(0, rel.length() - 6).replace('/', '.');
+                                if (!purgeResult.getReachableClassNames().contains(className)) {
+                                    int dollarIdx = className.indexOf('$');
+                                    if (dollarIdx < 0
+                                            || !purgeResult.getReachableClassNames()
+                                                    .contains(className.substring(0, dollarIdx))) {
+                                        removedFromThisArchive.add(rel);
+                                    }
+                                }
+                            }
+                        });
                     }
                 }
                 var appComponent = ApplicationComponent.builder()
