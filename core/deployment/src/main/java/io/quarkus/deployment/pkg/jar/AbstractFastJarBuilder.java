@@ -232,8 +232,9 @@ abstract class AbstractFastJarBuilder extends AbstractJarBuilder<JarBuildItem> {
         }
         final Map<ArtifactKey, List<Path>> copiedArtifacts = new HashMap<>();
         for (ResolvedDependency appDep : curateOutcome.getApplicationModel().getRuntimeDependencies()) {
-            // When purge is enabled, skip entirely unused dependencies
-            if (purgeResult.getLevel() != PackageConfig.JarConfig.PurgeLevel.NONE
+            // When purge level is DEPENDENCIES, skip entirely unused dependencies.
+            // At CLASSES level, keep all dependencies (only remove individual classes).
+            if (purgeResult.getLevel() == PackageConfig.JarConfig.PurgeLevel.DEPENDENCIES
                     && !purgeResult.getUsedDependencies().contains(appDep.getKey())) {
                 LOG.debugf("Purge: skipping unused dependency %s", appDep.getKey());
                 continue;

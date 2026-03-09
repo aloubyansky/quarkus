@@ -52,8 +52,11 @@ public class PurgeProcessor {
             BuildProducer<UberJarPurgeBuildItem> purgeProducer) {
 
         final PackageConfig.JarConfig.PurgeLevel purgeLevel = packageConfig.jar().purge();
-        if (purgeLevel == PackageConfig.JarConfig.PurgeLevel.NONE) {
-            purgeProducer.produce(new UberJarPurgeBuildItem(purgeLevel, Set.of(), Set.of()));
+        // Disable purge for mutable jars: re-augmentation loads deployment classes that
+        // reference runtime classes, so we can't safely remove any runtime classes.
+        if (purgeLevel == PackageConfig.JarConfig.PurgeLevel.NONE
+                || packageConfig.jar().type() == PackageConfig.JarConfig.JarType.MUTABLE_JAR) {
+            purgeProducer.produce(new UberJarPurgeBuildItem(PackageConfig.JarConfig.PurgeLevel.NONE, Set.of(), Set.of()));
             return;
         }
 
@@ -75,8 +78,34 @@ public class PurgeProcessor {
         for (ResolvedDependency dep : appModel.getRuntimeDependencies()) {
             final ArtifactKey key = dep.getKey();
             final int[] classCount = new int[1];
-            dep.getContentTree().walk(visit -> {
+            // Use walkRaw to avoid multi-release JAR resolution that can replace base class
+            // bytecode with stripped-down stubs (e.g. vertx-core LoaderManager JDK 11+ stub
+            // removes IsolatingClassLoader references)
+            dep.getContentTree().walkRaw(visit -> {
                 String relative = visit.getRelativePath("/");
+                // Handle multi-release version entries (META-INF/versions/N/...)
+                // Extract the actual class path and only add if not already present (base takes priority)
+                if (relative.startsWith("META-INF/versions/")) {
+                    String afterVersions = relative.substring("META-INF/versions/".length());
+                    int slash = afterVersions.indexOf('/');
+                    if (slash > 0) {
+                        String classPath = afterVersions.substring(slash + 1);
+                        if (isClassEntry(classPath)) {
+                            DotName className = classNameOf(classPath);
+                            // Only add multi-release bytecode if base version doesn't exist
+                            if (!depBytecode.containsKey(className)) {
+                                classToDep.put(className, key);
+                                classCount[0]++;
+                                try (InputStream is = Files.newInputStream(visit.getPath())) {
+                                    depBytecode.put(className, is.readAllBytes());
+                                } catch (IOException e) {
+                                    log.debugf(e, "Failed to read bytecode: %s", visit.getPath());
+                                }
+                            }
+                        }
+                    }
+                    return;
+                }
                 if (isClassEntry(relative)) {
                     DotName className = classNameOf(relative);
                     classToDep.put(className, key);
@@ -112,11 +141,20 @@ public class PurgeProcessor {
             }
         }
 
-        // Collect service providers and ServiceLoader calls from the app artifact
+        // Collect service providers, ServiceLoader calls, and bytecode from the app artifact.
+        // App bytecode is needed so the reachability trace can follow references from app classes
+        // to dependency classes (e.g. app code using commons-io IOUtils).
+        final Map<DotName, byte[]> appBytecode = new HashMap<>();
         appModel.getAppArtifact().getContentTree().walk(visit -> {
             String relative = visit.getRelativePath("/");
             if (isClassEntry(relative)) {
-                detectServiceLoaderCalls(visit.getPath(), classNameOf(relative), serviceLoaderCalls);
+                DotName className = classNameOf(relative);
+                detectServiceLoaderCalls(visit.getPath(), className, serviceLoaderCalls);
+                try (InputStream is = Files.newInputStream(visit.getPath())) {
+                    appBytecode.put(className, is.readAllBytes());
+                } catch (IOException e) {
+                    log.debugf(e, "Failed to read app bytecode: %s", visit.getPath());
+                }
             }
             if (relative.startsWith("META-INF/services/") && !relative.endsWith("/")) {
                 parseServiceFile(visit.getPath(), relative, serviceProviders);
@@ -172,7 +210,7 @@ public class PurgeProcessor {
         }
 
         // Trace all reachable classes using bytecode analysis for full method-body coverage
-        final Set<DotName> reachable = traceReachableClasses(roots, generatedBytecode, depBytecode,
+        final Set<DotName> reachable = traceReachableClasses(roots, generatedBytecode, appBytecode, depBytecode,
                 serviceProviders, serviceLoaderCalls);
 
         // Determine which dependencies have reachable classes
@@ -226,6 +264,7 @@ public class PurgeProcessor {
 
     private Set<DotName> traceReachableClasses(Set<DotName> roots,
             Map<DotName, byte[]> generatedBytecode,
+            Map<DotName, byte[]> appBytecode,
             Map<DotName, byte[]> depBytecode,
             Map<DotName, Set<DotName>> serviceProviders,
             Map<DotName, Set<DotName>> serviceLoaderCalls) {
@@ -259,8 +298,23 @@ public class PurgeProcessor {
                 }
             }
 
-            // Look up bytecode: generated classes first, then dependency classes
+            // If this class is a service interface, include all its providers.
+            // This handles indirect ServiceLoader.load() calls through helper methods
+            // (e.g. jakarta.ws.rs FactoryFinder) that the direct call tracing can't detect.
+            Set<DotName> providers = serviceProviders.get(name);
+            if (providers != null) {
+                for (DotName provider : providers) {
+                    if (visited.add(provider)) {
+                        queue.add(provider);
+                    }
+                }
+            }
+
+            // Look up bytecode: generated classes first, then app classes, then dependency classes
             byte[] bytecode = generatedBytecode.get(name);
+            if (bytecode == null) {
+                bytecode = appBytecode.get(name);
+            }
             if (bytecode == null) {
                 bytecode = depBytecode.get(name);
             }
