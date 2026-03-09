@@ -41,6 +41,7 @@ public class PurgeProcessor {
 
     private static final Logger log = Logger.getLogger(PurgeProcessor.class);
     private static final String SERVICE_LOADER_INTERNAL = "java/util/ServiceLoader";
+    private static final String SISU_NAMED_RESOURCE = "META-INF/sisu/javax.inject.Named";
 
     @BuildStep
     void analyzeReachableClasses(
@@ -79,6 +80,7 @@ public class PurgeProcessor {
         final Map<ArtifactKey, Integer> depClassCount = new HashMap<>();
         final Map<DotName, Set<DotName>> serviceProviders = new HashMap<>();
         final Map<DotName, Set<DotName>> serviceLoaderCalls = new HashMap<>();
+        final Set<DotName> sisuNamedClasses = new HashSet<>();
         final Map<DotName, byte[]> depBytecode = new HashMap<>();
         // Track which multi-release version is currently stored per class
         // (0 = base, N = META-INF/versions/N/)
@@ -145,6 +147,11 @@ public class PurgeProcessor {
                 }
                 if (relative.startsWith("META-INF/services/") && !relative.endsWith("/")) {
                     parseServiceFile(visit.getPath(), relative, serviceProviders);
+                }
+                // Collect sisu named components (META-INF/sisu/javax.inject.Named).
+                // These are only included if ClassLoader.getResources() for this path is detected.
+                if (SISU_NAMED_RESOURCE.equals(relative)) {
+                    parseSisuNamedFile(visit.getPath(), sisuNamedClasses);
                 }
             });
             depClassCount.put(key, classCount[0]);
@@ -237,7 +244,7 @@ public class PurgeProcessor {
 
         // Trace all reachable classes using bytecode analysis for full method-body coverage
         final Set<DotName> reachable = traceReachableClasses(roots, generatedBytecode, appBytecode, depBytecode,
-                serviceProviders, serviceLoaderCalls);
+                serviceProviders, serviceLoaderCalls, sisuNamedClasses);
 
         // Determine which dependencies have reachable classes
         final Set<String> reachableClassNames = new HashSet<>();
@@ -293,9 +300,11 @@ public class PurgeProcessor {
             Map<DotName, byte[]> appBytecode,
             Map<DotName, byte[]> depBytecode,
             Map<DotName, Set<DotName>> serviceProviders,
-            Map<DotName, Set<DotName>> serviceLoaderCalls) {
+            Map<DotName, Set<DotName>> serviceLoaderCalls,
+            Set<DotName> sisuNamedClasses) {
         final Set<DotName> visited = new HashSet<>(roots);
         final Queue<DotName> queue = new ArrayDeque<>(roots);
+        boolean sisuActivated = false;
 
         while (!queue.isEmpty()) {
             DotName name = queue.poll();
@@ -347,6 +356,18 @@ public class PurgeProcessor {
             if (bytecode == null) {
                 continue; // JDK class or not available
             }
+
+            // Include sisu named classes when a reachable class loads the sisu resource
+            // via ClassLoader.getResources("META-INF/sisu/javax.inject.Named")
+            if (!sisuActivated && !sisuNamedClasses.isEmpty() && detectsGetResourcesForSisu(bytecode)) {
+                sisuActivated = true;
+                for (DotName sisuClass : sisuNamedClasses) {
+                    if (visited.add(sisuClass)) {
+                        queue.add(sisuClass);
+                    }
+                }
+            }
+
             Set<DotName> refs = extractReferencesFromBytecode(bytecode);
             for (DotName ref : refs) {
                 if (ref != null && visited.add(ref)) {
@@ -741,6 +762,63 @@ public class PurgeProcessor {
         } catch (IOException e) {
             log.debugf(e, "Failed to read service file: %s", file);
         }
+    }
+
+    private void parseSisuNamedFile(Path file, Set<DotName> sisuNamedClasses) {
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(Files.newInputStream(file), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                int commentIdx = line.indexOf('#');
+                if (commentIdx >= 0) {
+                    line = line.substring(0, commentIdx);
+                }
+                line = line.trim();
+                if (!line.isEmpty()) {
+                    sisuNamedClasses.add(DotName.createSimple(line));
+                }
+            }
+        } catch (IOException e) {
+            log.debugf(e, "Failed to read sisu named file: %s", file);
+        }
+    }
+
+    /**
+     * Checks whether bytecode contains both an LDC string constant for the sisu named resource path
+     * and a ClassLoader.getResources()/getResource() call. These may be in different methods
+     * (e.g. the string is passed to a helper that calls getResources in a lambda), so we check
+     * for both independently within the same class.
+     */
+    private static boolean detectsGetResourcesForSisu(byte[] bytecode) {
+        boolean[] hasSisuString = new boolean[1];
+        boolean[] hasGetResources = new boolean[1];
+        ClassReader reader = new ClassReader(bytecode);
+        reader.accept(new ClassVisitor(Opcodes.ASM9) {
+            @Override
+            public MethodVisitor visitMethod(int access, String name, String descriptor,
+                    String signature, String[] exceptions) {
+                if (hasSisuString[0] && hasGetResources[0]) {
+                    return null;
+                }
+                return new MethodVisitor(Opcodes.ASM9) {
+                    @Override
+                    public void visitLdcInsn(Object value) {
+                        if (SISU_NAMED_RESOURCE.equals(value)) {
+                            hasSisuString[0] = true;
+                        }
+                    }
+
+                    @Override
+                    public void visitMethodInsn(int opcode, String owner, String mname,
+                            String mdescriptor, boolean isInterface) {
+                        if ("getResources".equals(mname) || "getResource".equals(mname)) {
+                            hasGetResources[0] = true;
+                        }
+                    }
+                };
+            }
+        }, ClassReader.SKIP_FRAMES | ClassReader.SKIP_DEBUG);
+        return hasSisuString[0] && hasGetResources[0];
     }
 
     /**
