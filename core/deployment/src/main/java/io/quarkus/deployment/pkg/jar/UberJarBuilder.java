@@ -140,6 +140,11 @@ public class UberJarBuilder extends AbstractJarBuilder<JarBuildItem> {
                         .build())
                 .setRunnerPath(runnerJar);
         for (ResolvedDependency dep : curateOutcome.getApplicationModel().getDependencies()) {
+            // At DEPENDENCIES level, unused deps are not packaged — exclude from manifest
+            if (purgeResult.getLevel() == PackageConfig.JarConfig.PurgeLevel.DEPENDENCIES
+                    && !purgeResult.getUsedDependencies().contains(dep.getKey())) {
+                continue;
+            }
             final ApplicationComponent.Builder comp = ApplicationComponent.builder()
                     .setResolvedDependency(dep);
             if (!dep.getResolvedPaths().isEmpty()) {
@@ -195,7 +200,8 @@ public class UberJarBuilder extends AbstractJarBuilder<JarBuildItem> {
                 }
 
                 // When purge level is DEPENDENCIES, skip entirely unused dependencies.
-                // At CLASSES level, keep all dependencies (only remove individual classes).
+                // At CLASSES level, keep all dependencies (only remove individual classes)
+                // since they may still contribute non-class resources.
                 if (purgeResult.getLevel() == PackageConfig.JarConfig.PurgeLevel.DEPENDENCIES
                         && !purgeResult.getUsedDependencies().contains(appDep.getKey())) {
                     LOG.debugf("Purge: skipping unused dependency %s", appDep.getKey());

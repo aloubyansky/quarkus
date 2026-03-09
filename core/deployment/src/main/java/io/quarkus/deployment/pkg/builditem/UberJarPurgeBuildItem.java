@@ -64,9 +64,6 @@ public final class UberJarPurgeBuildItem extends SimpleBuildItem {
         if (level == PurgeLevel.NONE) {
             return null;
         }
-        if (level == PurgeLevel.DEPENDENCIES && !usedDependencies.contains(depKey)) {
-            return "Purged (unused dependency)";
-        }
         List<String> removed = removedClasses.getOrDefault(depKey, Collections.emptyList());
         if (removed.isEmpty()) {
             return null;
