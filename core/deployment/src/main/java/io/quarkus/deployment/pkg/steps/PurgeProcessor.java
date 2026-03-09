@@ -68,6 +68,11 @@ public class PurgeProcessor {
             generatedBytecode.put(DotName.createSimple(gen.getName().replace('/', '.')), gen.getClassData());
         }
 
+        // Detect the application's minimum Java version from bytecode.
+        // Multi-release JAR entries for versions <= this are resolved (highest wins),
+        // entries for versions > this are ignored (won't be loaded at runtime).
+        final int appJavaVersion = detectAppJavaVersion(appModel);
+
         // Build class-to-dependency map and collect service provider/loader info
         // Read bytecode for all dependency classes for full method-body reference analysis
         final Map<DotName, ArtifactKey> classToDep = new HashMap<>();
@@ -75,29 +80,46 @@ public class PurgeProcessor {
         final Map<DotName, Set<DotName>> serviceProviders = new HashMap<>();
         final Map<DotName, Set<DotName>> serviceLoaderCalls = new HashMap<>();
         final Map<DotName, byte[]> depBytecode = new HashMap<>();
+        // Track which multi-release version is currently stored per class
+        // (0 = base, N = META-INF/versions/N/)
+        final Map<DotName, Integer> depBytecodeVersion = new HashMap<>();
         for (ResolvedDependency dep : appModel.getRuntimeDependencies()) {
             final ArtifactKey key = dep.getKey();
             final int[] classCount = new int[1];
-            // Use walkRaw to avoid multi-release JAR resolution that can replace base class
-            // bytecode with stripped-down stubs (e.g. vertx-core LoaderManager JDK 11+ stub
-            // removes IsolatingClassLoader references)
+            // Use walkRaw to get all entries including multi-release versions.
+            // For multi-release entries, we pick the highest version <= appJavaVersion,
+            // matching what JarFile.runtimeVersion() resolves at runtime.
             dep.getContentTree().walkRaw(visit -> {
                 String relative = visit.getRelativePath("/");
                 // Handle multi-release version entries (META-INF/versions/N/...)
-                // Extract the actual class path and only add if not already present (base takes priority)
                 if (relative.startsWith("META-INF/versions/")) {
                     String afterVersions = relative.substring("META-INF/versions/".length());
                     int slash = afterVersions.indexOf('/');
                     if (slash > 0) {
+                        int version;
+                        try {
+                            version = Integer.parseInt(afterVersions.substring(0, slash));
+                        } catch (NumberFormatException e) {
+                            return;
+                        }
+                        // Skip versions newer than the app's target — they won't be loaded at runtime
+                        if (version > appJavaVersion) {
+                            return;
+                        }
                         String classPath = afterVersions.substring(slash + 1);
                         if (isClassEntry(classPath)) {
                             DotName className = classNameOf(classPath);
-                            // Only add multi-release bytecode if base version doesn't exist
-                            if (!depBytecode.containsKey(className)) {
+                            // Replace existing bytecode only if this version is higher
+                            // (higher version = closer to runtime resolution)
+                            int currentVersion = depBytecodeVersion.getOrDefault(className, 0);
+                            if (version > currentVersion) {
                                 classToDep.put(className, key);
-                                classCount[0]++;
+                                if (currentVersion == 0 && !depBytecode.containsKey(className)) {
+                                    classCount[0]++;
+                                }
                                 try (InputStream is = Files.newInputStream(visit.getPath())) {
                                     depBytecode.put(className, is.readAllBytes());
+                                    depBytecodeVersion.put(className, version);
                                 } catch (IOException e) {
                                     log.debugf(e, "Failed to read bytecode: %s", visit.getPath());
                                 }
@@ -110,10 +132,14 @@ public class PurgeProcessor {
                     DotName className = classNameOf(relative);
                     classToDep.put(className, key);
                     classCount[0]++;
-                    try (InputStream is = Files.newInputStream(visit.getPath())) {
-                        depBytecode.put(className, is.readAllBytes());
-                    } catch (IOException e) {
-                        log.debugf(e, "Failed to read bytecode: %s", visit.getPath());
+                    // Base class: only store if no versioned entry was seen yet
+                    if (!depBytecodeVersion.containsKey(className)) {
+                        try (InputStream is = Files.newInputStream(visit.getPath())) {
+                            depBytecode.put(className, is.readAllBytes());
+                            depBytecodeVersion.put(className, 0);
+                        } catch (IOException e) {
+                            log.debugf(e, "Failed to read bytecode: %s", visit.getPath());
+                        }
                     }
                     detectServiceLoaderCalls(visit.getPath(), className, serviceLoaderCalls);
                 }
@@ -675,5 +701,36 @@ public class PurgeProcessor {
         } catch (IOException e) {
             log.debugf(e, "Failed to read service file: %s", file);
         }
+    }
+
+    /**
+     * Detects the Java feature version from the application's class bytecode.
+     * The class file major version maps to Java versions: 52=8, 55=11, 61=17, 65=21.
+     * Falls back to the current JVM's feature version if no app classes are found.
+     */
+    private static int detectAppJavaVersion(ApplicationModel appModel) {
+        int[] majorVersion = new int[1];
+        appModel.getAppArtifact().getContentTree().walk(visit -> {
+            if (majorVersion[0] > 0) {
+                return;
+            }
+            String relative = visit.getRelativePath("/");
+            if (isClassEntry(relative)) {
+                try (InputStream is = Files.newInputStream(visit.getPath())) {
+                    byte[] header = new byte[8];
+                    if (is.read(header) == 8) {
+                        // Class file: magic (4 bytes) + minor (2 bytes) + major (2 bytes)
+                        majorVersion[0] = ((header[6] & 0xFF) << 8) | (header[7] & 0xFF);
+                    }
+                } catch (IOException e) {
+                    // ignore, will try next class
+                }
+            }
+        });
+        // Convert class file major version to Java feature version (major - 44)
+        // e.g., 61 -> Java 17, 65 -> Java 21
+        int javaVersion = majorVersion[0] > 0 ? majorVersion[0] - 44 : Runtime.version().feature();
+        log.debugf("Purge: detected app Java version: %d (class file major: %d)", javaVersion, majorVersion[0]);
+        return javaVersion;
     }
 }
