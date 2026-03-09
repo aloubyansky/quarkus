@@ -237,6 +237,9 @@ abstract class AbstractFastJarBuilder extends AbstractJarBuilder<JarBuildItem> {
             if (purgeResult.getLevel() == PackageConfig.JarConfig.PurgeLevel.DEPENDENCIES
                     && !purgeResult.getUsedDependencies().contains(appDep.getKey())) {
                 LOG.debugf("Purge: skipping unused dependency %s", appDep.getKey());
+                manifestConfig.addComponent(ApplicationComponent.builder()
+                        .setResolvedDependency(appDep)
+                        .setPedigree(purgeResult.computePedigree(appDep.getKey())));
                 continue;
             }
             if (!rebuild) {
@@ -497,14 +500,10 @@ abstract class AbstractFastJarBuilder extends AbstractJarBuilder<JarBuildItem> {
                     // we copy jars for which we remove entries to the same directory
                     // which seems a bit odd to me
                     JarUnsigner.unsignJar(resolvedDep, targetPath, Predicate.not(removedFromThisArchive::contains));
-
-                    var list = new ArrayList<>(removedFromThisArchive);
-                    Collections.sort(list);
-                    var sb = new StringBuilder("Removed ").append(list.get(0));
-                    for (int i = 1; i < list.size(); ++i) {
-                        sb.append(",").append(list.get(i));
-                    }
-                    appComponent.setPedigree(sb.toString());
+                }
+                String pedigree = purgeResult != null ? purgeResult.computePedigree(appDep.getKey()) : null;
+                if (pedigree != null) {
+                    appComponent.setPedigree(pedigree);
                 }
                 manifestConfig.addComponent(appComponent);
             }

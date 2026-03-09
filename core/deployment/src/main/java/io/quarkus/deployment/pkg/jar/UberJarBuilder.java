@@ -133,14 +133,25 @@ public class UberJarBuilder extends AbstractJarBuilder<JarBuildItem> {
                     .setFlags(appArtifact.getFlags())
                     .build();
         }
-        final ApplicationManifestConfig manifestConfig = ApplicationManifestConfig.builder()
+        final ApplicationManifestConfig.Builder manifestBuilder = ApplicationManifestConfig.builder()
                 .setMainComponent(ApplicationComponent.builder()
                         .setPath(runnerJar)
                         .setResolvedDependency(appArtifact)
                         .build())
-                .setRunnerPath(runnerJar)
-                .addComponents(curateOutcome.getApplicationModel().getDependencies())
-                .build();
+                .setRunnerPath(runnerJar);
+        for (ResolvedDependency dep : curateOutcome.getApplicationModel().getDependencies()) {
+            final ApplicationComponent.Builder comp = ApplicationComponent.builder()
+                    .setResolvedDependency(dep);
+            if (!dep.getResolvedPaths().isEmpty()) {
+                comp.setPath(dep.getResolvedPaths().iterator().next());
+            }
+            String pedigree = purgeResult.computePedigree(dep.getKey());
+            if (pedigree != null) {
+                comp.setPedigree(pedigree);
+            }
+            manifestBuilder.addComponent(comp.build());
+        }
+        final ApplicationManifestConfig manifestConfig = manifestBuilder.build();
 
         return new JarBuildItem(runnerJar, originalJar, null, UBER_JAR,
                 suffixToClassifier(packageConfig.computedRunnerSuffix()), manifestConfig);

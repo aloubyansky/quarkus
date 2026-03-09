@@ -8,6 +8,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -57,7 +59,8 @@ public class PurgeProcessor {
         // reference runtime classes, so we can't safely remove any runtime classes.
         if (purgeLevel == PackageConfig.JarConfig.PurgeLevel.NONE
                 || packageConfig.jar().type() == PackageConfig.JarConfig.JarType.MUTABLE_JAR) {
-            purgeProducer.produce(new UberJarPurgeBuildItem(PackageConfig.JarConfig.PurgeLevel.NONE, Set.of(), Set.of()));
+            purgeProducer
+                    .produce(new UberJarPurgeBuildItem(PackageConfig.JarConfig.PurgeLevel.NONE, Set.of(), Set.of(), Map.of()));
             return;
         }
 
@@ -274,15 +277,25 @@ public class PurgeProcessor {
             }
         }
 
-        // Compute removal stats from dependency bytecode
+        // Compute removal stats and per-dependency removed class lists
         int totalDepClasses = depBytecode.size();
-        int removedClasses = 0;
+        int removedClassCount = 0;
         long removedBytes = 0;
+        final Map<ArtifactKey, List<String>> removedClassesPerDep = new HashMap<>();
         for (var entry : depBytecode.entrySet()) {
             if (!reachable.contains(entry.getKey())) {
-                removedClasses++;
+                removedClassCount++;
                 removedBytes += entry.getValue().length;
+                ArtifactKey dep = classToDep.get(entry.getKey());
+                if (dep != null) {
+                    removedClassesPerDep.computeIfAbsent(dep, k -> new ArrayList<>())
+                            .add(entry.getKey().toString().replace('.', '/') + ".class");
+                }
             }
+        }
+        // Sort each list for stable pedigree output
+        for (List<String> list : removedClassesPerDep.values()) {
+            Collections.sort(list);
         }
 
         // Report
@@ -292,8 +305,8 @@ public class PurgeProcessor {
         log.infof("  Total dependency classes: %d", totalDepClasses);
         log.infof("  Reachable classes       : %d", reachable.size());
         log.infof("  Removed classes         : %d  (%.1f%% of dependency classes, %s)",
-                removedClasses,
-                totalDepClasses > 0 ? (removedClasses * 100.0 / totalDepClasses) : 0.0,
+                removedClassCount,
+                totalDepClasses > 0 ? (removedClassCount * 100.0 / totalDepClasses) : 0.0,
                 formatSize(removedBytes));
         log.infof("  Used dependencies       : %d", usedDeps.size());
         log.infof("  Unused dependencies     : %d", unusedCount);
@@ -306,7 +319,7 @@ public class PurgeProcessor {
         }
         log.info("============================================================");
 
-        purgeProducer.produce(new UberJarPurgeBuildItem(purgeLevel, reachableClassNames, usedDeps));
+        purgeProducer.produce(new UberJarPurgeBuildItem(purgeLevel, reachableClassNames, usedDeps, removedClassesPerDep));
     }
 
     // ---- Reachability tracing ----
