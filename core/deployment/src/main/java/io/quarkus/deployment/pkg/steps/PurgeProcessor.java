@@ -379,7 +379,7 @@ public class PurgeProcessor {
             @Override
             public org.objectweb.asm.AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
                 addDescriptorType(descriptor, refs);
-                return null;
+                return createAnnotationRefVisitor(refs);
             }
 
             @Override
@@ -503,7 +503,15 @@ public class PurgeProcessor {
                     public org.objectweb.asm.AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
                         lastStringConstant = null;
                         addDescriptorType(descriptor, refs);
-                        return null;
+                        return createAnnotationRefVisitor(refs);
+                    }
+
+                    @Override
+                    public org.objectweb.asm.AnnotationVisitor visitParameterAnnotation(int parameter,
+                            String descriptor, boolean visible) {
+                        lastStringConstant = null;
+                        addDescriptorType(descriptor, refs);
+                        return createAnnotationRefVisitor(refs);
                     }
                 };
             }
@@ -627,6 +635,38 @@ public class PurgeProcessor {
                 };
             }
         }, ClassReader.SKIP_FRAMES | ClassReader.SKIP_DEBUG);
+    }
+
+    /**
+     * Creates an AnnotationVisitor that extracts class references from annotation values.
+     * Handles class literals (e.g. {@code @Command(subcommands = {Foo.class})}),
+     * enum constants, nested annotations, and arrays of these.
+     */
+    private static org.objectweb.asm.AnnotationVisitor createAnnotationRefVisitor(Set<DotName> refs) {
+        return new org.objectweb.asm.AnnotationVisitor(Opcodes.ASM9) {
+            @Override
+            public void visit(String name, Object value) {
+                if (value instanceof org.objectweb.asm.Type) {
+                    addAsmType((org.objectweb.asm.Type) value, refs);
+                }
+            }
+
+            @Override
+            public void visitEnum(String name, String descriptor, String value) {
+                addDescriptorType(descriptor, refs);
+            }
+
+            @Override
+            public org.objectweb.asm.AnnotationVisitor visitAnnotation(String name, String descriptor) {
+                addDescriptorType(descriptor, refs);
+                return this;
+            }
+
+            @Override
+            public org.objectweb.asm.AnnotationVisitor visitArray(String name) {
+                return this;
+            }
+        };
     }
 
     // ---- Helpers ----
