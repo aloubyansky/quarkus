@@ -26,6 +26,8 @@ import org.objectweb.asm.Handle;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.signature.SignatureReader;
+import org.objectweb.asm.signature.SignatureVisitor;
 
 import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.deployment.annotations.BuildProducer;
@@ -451,6 +453,7 @@ public class PurgeProcessor {
                         refs.add(internalToDotName(iface));
                     }
                 }
+                addSignatureTypes(signature, refs);
             }
 
             @Override
@@ -463,6 +466,7 @@ public class PurgeProcessor {
             public org.objectweb.asm.FieldVisitor visitField(int access, String name,
                     String descriptor, String signature, Object value) {
                 addDescriptorType(descriptor, refs);
+                addSignatureTypes(signature, refs);
                 return null;
             }
 
@@ -470,6 +474,7 @@ public class PurgeProcessor {
             public MethodVisitor visitMethod(int access, String name, String descriptor,
                     String signature, String[] exceptions) {
                 addMethodDescriptorTypes(descriptor, refs);
+                addSignatureTypes(signature, refs);
                 if (exceptions != null) {
                     for (String ex : exceptions) {
                         refs.add(internalToDotName(ex));
@@ -794,6 +799,24 @@ public class PurgeProcessor {
         } else {
             addMethodDescriptorTypes(handle.getDesc(), refs);
         }
+    }
+
+    /**
+     * Parses a generic signature and extracts all class type references.
+     * This captures type arguments (e.g. {@code Map<String, ContainerConfig>})
+     * that are not present in raw descriptors but can be resolved at runtime
+     * via reflection on generic type metadata.
+     */
+    private static void addSignatureTypes(String signature, Set<DotName> refs) {
+        if (signature == null) {
+            return;
+        }
+        new SignatureReader(signature).accept(new SignatureVisitor(Opcodes.ASM9) {
+            @Override
+            public void visitClassType(String name) {
+                refs.add(internalToDotName(name));
+            }
+        });
     }
 
     private static void addAsmType(org.objectweb.asm.Type type, Set<DotName> refs) {
