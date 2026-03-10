@@ -247,7 +247,7 @@ public class PurgeProcessor {
 
         // Trace all reachable classes using bytecode analysis for full method-body coverage
         final Set<DotName> reachable = traceReachableClasses(roots, generatedBytecode, appBytecode, depBytecode,
-                serviceProviders, serviceLoaderCalls, sisuNamedClasses);
+                serviceProviders, serviceLoaderCalls, sisuNamedClasses, allKnownClasses, classToDep);
 
         // Determine which dependencies have reachable classes
         final Set<String> reachableClassNames = new HashSet<>();
@@ -332,7 +332,9 @@ public class PurgeProcessor {
             Map<DotName, byte[]> depBytecode,
             Map<DotName, Set<DotName>> serviceProviders,
             Map<DotName, Set<DotName>> serviceLoaderCalls,
-            Set<DotName> sisuNamedClasses) {
+            Set<DotName> sisuNamedClasses,
+            Set<DotName> allKnownClasses,
+            Map<DotName, ArtifactKey> classToDep) {
         final Set<DotName> visited = new HashSet<>(roots);
         final Queue<DotName> queue = new ArrayDeque<>(roots);
         boolean sisuActivated = false;
@@ -403,6 +405,29 @@ public class PurgeProcessor {
             for (DotName ref : refs) {
                 if (ref != null && visited.add(ref)) {
                     queue.add(ref);
+                }
+            }
+            // Also check string constants in dependency/app bytecode for class names
+            // passed as strings to methods like Class.forName wrappers
+            if (!generatedBytecode.containsKey(name)) {
+                Set<DotName> stringRefs = extractStringClassReferences(bytecode, allKnownClasses);
+                for (DotName ref : stringRefs) {
+                    if (visited.add(ref)) {
+                        queue.add(ref);
+                    }
+                }
+            }
+
+            // If this class uses dynamic class loading (MethodHandles.Lookup.findClass),
+            // include all classes from the same dependency since the loaded class names
+            // are constructed at runtime and can't be statically determined.
+            ArtifactKey depKey = classToDep.get(name);
+            if (depKey != null && usesDynamicClassLoading(bytecode)) {
+                log.debugf("Purge: dynamic class loading detected in %s, keeping all classes from %s", name, depKey);
+                for (var entry : classToDep.entrySet()) {
+                    if (depKey.equals(entry.getValue()) && visited.add(entry.getKey())) {
+                        queue.add(entry.getKey());
+                    }
                 }
             }
         }
@@ -824,6 +849,37 @@ public class PurgeProcessor {
         } catch (IOException e) {
             log.debugf(e, "Failed to read service file: %s", file);
         }
+    }
+
+    /**
+     * Detects whether bytecode uses dynamic class loading patterns where class names
+     * are constructed at runtime (e.g. MethodHandles.Lookup.findClass). When detected,
+     * all classes from the same dependency must be preserved since the loaded class names
+     * can't be statically determined.
+     */
+    private static boolean usesDynamicClassLoading(byte[] bytecode) {
+        boolean[] found = new boolean[1];
+        ClassReader reader = new ClassReader(bytecode);
+        reader.accept(new ClassVisitor(Opcodes.ASM9) {
+            @Override
+            public MethodVisitor visitMethod(int access, String name, String descriptor,
+                    String signature, String[] exceptions) {
+                if (found[0]) {
+                    return null;
+                }
+                return new MethodVisitor(Opcodes.ASM9) {
+                    @Override
+                    public void visitMethodInsn(int opcode, String owner, String mname,
+                            String mdescriptor, boolean isInterface) {
+                        if ("findClass".equals(mname)
+                                && "java/lang/invoke/MethodHandles$Lookup".equals(owner)) {
+                            found[0] = true;
+                        }
+                    }
+                };
+            }
+        }, ClassReader.SKIP_FRAMES | ClassReader.SKIP_DEBUG);
+        return found[0];
     }
 
     private void parseSisuNamedFile(Path file, Set<DotName> sisuNamedClasses) {
