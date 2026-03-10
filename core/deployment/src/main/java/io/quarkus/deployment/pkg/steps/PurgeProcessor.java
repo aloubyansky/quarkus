@@ -454,6 +454,12 @@ public class PurgeProcessor {
                     }
                 }
                 addSignatureTypes(signature, refs);
+                // Inner classes must reference their outer class because the JVM
+                // resolves it at runtime via Class.getDeclaringClass0()
+                int dollar = name.lastIndexOf('$');
+                if (dollar > 0) {
+                    refs.add(internalToDotName(name.substring(0, dollar)));
+                }
             }
 
             @Override
