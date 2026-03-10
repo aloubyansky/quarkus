@@ -18,7 +18,6 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.TreeMap;
 
-import org.jboss.jandex.DotName;
 import org.jboss.logging.Logger;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
@@ -68,10 +67,10 @@ public class PurgeProcessor {
 
         final ApplicationModel appModel = curateOutcome.getApplicationModel();
 
-        // Build generated class bytecode map (internal name -> dot name conversion)
-        final Map<DotName, byte[]> generatedBytecode = new HashMap<>();
+        // Build generated class bytecode map (dot-separated class name -> bytecode)
+        final Map<String, byte[]> generatedBytecode = new HashMap<>();
         for (GeneratedClassBuildItem gen : generatedClasses) {
-            generatedBytecode.put(DotName.createSimple(gen.getName().replace('/', '.')), gen.getClassData());
+            generatedBytecode.put(gen.getName().replace('/', '.'), gen.getClassData());
         }
 
         // Detect the application's minimum Java version from bytecode.
@@ -81,15 +80,15 @@ public class PurgeProcessor {
 
         // Build class-to-dependency map and collect service provider/loader info
         // Read bytecode for all dependency classes for full method-body reference analysis
-        final Map<DotName, ArtifactKey> classToDep = new HashMap<>();
+        final Map<String, ArtifactKey> classToDep = new HashMap<>();
         final Map<ArtifactKey, Integer> depClassCount = new HashMap<>();
-        final Map<DotName, Set<DotName>> serviceProviders = new HashMap<>();
-        final Map<DotName, Set<DotName>> serviceLoaderCalls = new HashMap<>();
-        final Set<DotName> sisuNamedClasses = new HashSet<>();
-        final Map<DotName, byte[]> depBytecode = new HashMap<>();
+        final Map<String, Set<String>> serviceProviders = new HashMap<>();
+        final Map<String, Set<String>> serviceLoaderCalls = new HashMap<>();
+        final Set<String> sisuNamedClasses = new HashSet<>();
+        final Map<String, byte[]> depBytecode = new HashMap<>();
         // Track which multi-release version is currently stored per class
         // (0 = base, N = META-INF/versions/N/)
-        final Map<DotName, Integer> depBytecodeVersion = new HashMap<>();
+        final Map<String, Integer> depBytecodeVersion = new HashMap<>();
         for (ResolvedDependency dep : appModel.getRuntimeDependencies()) {
             final ArtifactKey key = dep.getKey();
             final int[] classCount = new int[1];
@@ -115,7 +114,7 @@ public class PurgeProcessor {
                         }
                         String classPath = afterVersions.substring(slash + 1);
                         if (isClassEntry(classPath)) {
-                            DotName className = classNameOf(classPath);
+                            String className = classNameOf(classPath);
                             // Replace existing bytecode only if this version is higher
                             // (higher version = closer to runtime resolution)
                             int currentVersion = depBytecodeVersion.getOrDefault(className, 0);
@@ -136,7 +135,7 @@ public class PurgeProcessor {
                     return;
                 }
                 if (isClassEntry(relative)) {
-                    DotName className = classNameOf(relative);
+                    String className = classNameOf(relative);
                     classToDep.put(className, key);
                     classCount[0]++;
                     // Base class: only store if no versioned entry was seen yet
@@ -171,8 +170,7 @@ public class PurgeProcessor {
                 if (tc.getData() != null) {
                     String fileName = tc.getFileName();
                     if (fileName.endsWith(".class") && !fileName.equals("module-info.class")) {
-                        DotName className = DotName
-                                .createSimple(fileName.substring(0, fileName.length() - 6).replace('/', '.'));
+                        String className = fileName.substring(0, fileName.length() - 6).replace('/', '.');
                         depBytecode.put(className, tc.getData());
                     }
                 }
@@ -182,11 +180,11 @@ public class PurgeProcessor {
         // Collect service providers, ServiceLoader calls, and bytecode from the app artifact.
         // App bytecode is needed so the reachability trace can follow references from app classes
         // to dependency classes (e.g. app code using commons-io IOUtils).
-        final Map<DotName, byte[]> appBytecode = new HashMap<>();
+        final Map<String, byte[]> appBytecode = new HashMap<>();
         appModel.getAppArtifact().getContentTree().walk(visit -> {
             String relative = visit.getRelativePath("/");
             if (isClassEntry(relative)) {
-                DotName className = classNameOf(relative);
+                String className = classNameOf(relative);
                 detectServiceLoaderCalls(visit.getPath(), className, serviceLoaderCalls);
                 try (InputStream is = Files.newInputStream(visit.getPath())) {
                     appBytecode.put(className, is.readAllBytes());
@@ -206,8 +204,8 @@ public class PurgeProcessor {
 
         // Use main class + all generated classes as roots
         // Also add all classes from quarkus-bootstrap-runner as roots (fast-jar runtime infrastructure)
-        final Set<DotName> roots = new HashSet<>();
-        roots.add(DotName.createSimple(mainClass.getClassName()));
+        final Set<String> roots = new HashSet<>();
+        roots.add(mainClass.getClassName());
         roots.addAll(generatedBytecode.keySet());
         for (ResolvedDependency dep : appModel.getRuntimeDependencies()) {
             if ("quarkus-bootstrap-runner".equals(dep.getArtifactId())) {
@@ -225,8 +223,8 @@ public class PurgeProcessor {
         // isn't analyzed and its ServiceLoader.load() calls can't be traced.
         // Non-JDK service providers are discovered through ServiceLoader.load() call
         // tracing in reachable dependency/app code.
-        for (Map.Entry<DotName, Set<DotName>> entry : serviceProviders.entrySet()) {
-            DotName serviceInterface = entry.getKey();
+        for (Map.Entry<String, Set<String>> entry : serviceProviders.entrySet()) {
+            String serviceInterface = entry.getKey();
             if (!classToDep.containsKey(serviceInterface) && !generatedBytecode.containsKey(serviceInterface)) {
                 // Interface not in any dependency or generated code — it's a JDK class
                 roots.addAll(entry.getValue());
@@ -236,11 +234,11 @@ public class PurgeProcessor {
         // Scan generated classes for LDC string constants that match known dependency class names.
         // Generated recorder bytecode often passes class names as strings to methods like
         // factory(className) that eventually call Class.forName() at runtime.
-        final Set<DotName> allKnownClasses = new HashSet<>(classToDep.keySet());
+        final Set<String> allKnownClasses = new HashSet<>(classToDep.keySet());
         allKnownClasses.addAll(generatedBytecode.keySet());
         for (byte[] bytecode : generatedBytecode.values()) {
-            Set<DotName> stringClassRefs = extractStringClassReferences(bytecode, allKnownClasses);
-            for (DotName ref : stringClassRefs) {
+            Set<String> stringClassRefs = extractStringClassReferences(bytecode, allKnownClasses);
+            for (String ref : stringClassRefs) {
                 if (roots.add(ref)) {
                     log.debugf("Purge: string constant class reference from generated code: %s", ref);
                 }
@@ -248,17 +246,14 @@ public class PurgeProcessor {
         }
 
         // Trace all reachable classes using bytecode analysis for full method-body coverage
-        final Set<DotName> reachable = traceReachableClasses(roots, generatedBytecode, appBytecode, depBytecode,
+        final Set<String> reachable = traceReachableClasses(roots, generatedBytecode, appBytecode, depBytecode,
                 serviceProviders, serviceLoaderCalls, sisuNamedClasses, allKnownClasses, classToDep);
 
         // Determine which dependencies have reachable classes
-        final Set<String> reachableClassNames = new HashSet<>();
-        for (DotName name : reachable) {
-            reachableClassNames.add(name.toString());
-        }
+        final Set<String> reachableClassNames = reachable;
 
         final Map<ArtifactKey, Integer> depReachableCount = new HashMap<>();
-        for (DotName className : reachable) {
+        for (String className : reachable) {
             ArtifactKey dep = classToDep.get(className);
             if (dep != null) {
                 depReachableCount.merge(dep, 1, Integer::sum);
@@ -291,7 +286,7 @@ public class PurgeProcessor {
                 ArtifactKey dep = classToDep.get(entry.getKey());
                 if (dep != null) {
                     removedClassesPerDep.computeIfAbsent(dep, k -> new ArrayList<>())
-                            .add(entry.getKey().toString().replace('.', '/') + ".class");
+                            .add(entry.getKey().replace('.', '/') + ".class");
                 }
             }
         }
@@ -328,29 +323,29 @@ public class PurgeProcessor {
 
     // ---- Reachability tracing ----
 
-    private Set<DotName> traceReachableClasses(Set<DotName> roots,
-            Map<DotName, byte[]> generatedBytecode,
-            Map<DotName, byte[]> appBytecode,
-            Map<DotName, byte[]> depBytecode,
-            Map<DotName, Set<DotName>> serviceProviders,
-            Map<DotName, Set<DotName>> serviceLoaderCalls,
-            Set<DotName> sisuNamedClasses,
-            Set<DotName> allKnownClasses,
-            Map<DotName, ArtifactKey> classToDep) {
-        final Set<DotName> visited = new HashSet<>(roots);
-        final Queue<DotName> queue = new ArrayDeque<>(roots);
+    private Set<String> traceReachableClasses(Set<String> roots,
+            Map<String, byte[]> generatedBytecode,
+            Map<String, byte[]> appBytecode,
+            Map<String, byte[]> depBytecode,
+            Map<String, Set<String>> serviceProviders,
+            Map<String, Set<String>> serviceLoaderCalls,
+            Set<String> sisuNamedClasses,
+            Set<String> allKnownClasses,
+            Map<String, ArtifactKey> classToDep) {
+        final Set<String> visited = new HashSet<>(roots);
+        final Queue<String> queue = new ArrayDeque<>(roots);
         boolean sisuActivated = false;
 
         while (!queue.isEmpty()) {
-            DotName name = queue.poll();
+            String name = queue.poll();
 
             // If this class calls ServiceLoader.load(), include providers
-            Set<DotName> loadedServices = serviceLoaderCalls.get(name);
+            Set<String> loadedServices = serviceLoaderCalls.get(name);
             if (loadedServices != null) {
-                for (DotName serviceInterface : loadedServices) {
-                    Set<DotName> providers = serviceProviders.get(serviceInterface);
+                for (String serviceInterface : loadedServices) {
+                    Set<String> providers = serviceProviders.get(serviceInterface);
                     if (providers != null) {
-                        for (DotName provider : providers) {
+                        for (String provider : providers) {
                             if (visited.add(provider)) {
                                 queue.add(provider);
                             }
@@ -362,7 +357,7 @@ public class PurgeProcessor {
             // Include JBoss Logging companion classes (_$logger, _$bundle)
             // These are loaded reflectively via name concatenation in Logger.getMessageLogger()
             for (String suffix : new String[] { "_$logger", "_$bundle" }) {
-                DotName companion = DotName.createSimple(name.toString() + suffix);
+                String companion = name + suffix;
                 if (depBytecode.containsKey(companion) && visited.add(companion)) {
                     queue.add(companion);
                 }
@@ -371,9 +366,9 @@ public class PurgeProcessor {
             // If this class is a service interface, include all its providers.
             // This handles indirect ServiceLoader.load() calls through helper methods
             // (e.g. jakarta.ws.rs FactoryFinder) that the direct call tracing can't detect.
-            Set<DotName> providers = serviceProviders.get(name);
+            Set<String> providers = serviceProviders.get(name);
             if (providers != null) {
-                for (DotName provider : providers) {
+                for (String provider : providers) {
                     if (visited.add(provider)) {
                         queue.add(provider);
                     }
@@ -396,15 +391,15 @@ public class PurgeProcessor {
             // via ClassLoader.getResources("META-INF/sisu/javax.inject.Named")
             if (!sisuActivated && !sisuNamedClasses.isEmpty() && detectsGetResourcesForSisu(bytecode)) {
                 sisuActivated = true;
-                for (DotName sisuClass : sisuNamedClasses) {
+                for (String sisuClass : sisuNamedClasses) {
                     if (visited.add(sisuClass)) {
                         queue.add(sisuClass);
                     }
                 }
             }
 
-            Set<DotName> refs = extractReferencesFromBytecode(bytecode);
-            for (DotName ref : refs) {
+            Set<String> refs = extractReferencesFromBytecode(bytecode);
+            for (String ref : refs) {
                 if (ref != null && visited.add(ref)) {
                     queue.add(ref);
                 }
@@ -412,8 +407,8 @@ public class PurgeProcessor {
             // Also check string constants in dependency/app bytecode for class names
             // passed as strings to methods like Class.forName wrappers
             if (!generatedBytecode.containsKey(name)) {
-                Set<DotName> stringRefs = extractStringClassReferences(bytecode, allKnownClasses);
-                for (DotName ref : stringRefs) {
+                Set<String> stringRefs = extractStringClassReferences(bytecode, allKnownClasses);
+                for (String ref : stringRefs) {
                     if (visited.add(ref)) {
                         queue.add(ref);
                     }
@@ -438,19 +433,19 @@ public class PurgeProcessor {
 
     // ---- Bytecode analysis ----
 
-    private Set<DotName> extractReferencesFromBytecode(byte[] bytecode) {
-        final Set<DotName> refs = new HashSet<>();
+    private Set<String> extractReferencesFromBytecode(byte[] bytecode) {
+        final Set<String> refs = new HashSet<>();
         ClassReader reader = new ClassReader(bytecode);
         reader.accept(new ClassVisitor(Opcodes.ASM9) {
             @Override
             public void visit(int version, int access, String name, String signature,
                     String superName, String[] interfaces) {
                 if (superName != null) {
-                    refs.add(internalToDotName(superName));
+                    refs.add(toClassName(superName));
                 }
                 if (interfaces != null) {
                     for (String iface : interfaces) {
-                        refs.add(internalToDotName(iface));
+                        refs.add(toClassName(iface));
                     }
                 }
                 addSignatureTypes(signature, refs);
@@ -458,7 +453,7 @@ public class PurgeProcessor {
                 // resolves it at runtime via Class.getDeclaringClass0()
                 int dollar = name.lastIndexOf('$');
                 if (dollar > 0) {
-                    refs.add(internalToDotName(name.substring(0, dollar)));
+                    refs.add(toClassName(name.substring(0, dollar)));
                 }
             }
 
@@ -483,7 +478,7 @@ public class PurgeProcessor {
                 addSignatureTypes(signature, refs);
                 if (exceptions != null) {
                     for (String ex : exceptions) {
-                        refs.add(internalToDotName(ex));
+                        refs.add(toClassName(ex));
                     }
                 }
                 return new MethodVisitor(Opcodes.ASM9) {
@@ -498,13 +493,13 @@ public class PurgeProcessor {
                     @Override
                     public void visitTypeInsn(int opcode, String type) {
                         lastStringConstant = null;
-                        refs.add(internalToDotName(type));
+                        refs.add(toClassName(type));
                     }
 
                     @Override
                     public void visitFieldInsn(int opcode, String owner, String fname, String fdescriptor) {
                         lastStringConstant = null;
-                        refs.add(internalToDotName(owner));
+                        refs.add(toClassName(owner));
                         addDescriptorType(fdescriptor, refs);
                     }
 
@@ -515,11 +510,11 @@ public class PurgeProcessor {
                         if (lastStringConstant != null) {
                             if (("java/lang/Class".equals(owner) && "forName".equals(mname))
                                     || "loadClass".equals(mname)) {
-                                refs.add(DotName.createSimple(lastStringConstant));
+                                refs.add(lastStringConstant);
                             }
                         }
                         lastStringConstant = null;
-                        refs.add(internalToDotName(owner));
+                        refs.add(toClassName(owner));
                         addMethodDescriptorTypes(mdescriptor, refs);
                     }
 
@@ -533,11 +528,11 @@ public class PurgeProcessor {
                         if (value instanceof org.objectweb.asm.Type) {
                             org.objectweb.asm.Type type = (org.objectweb.asm.Type) value;
                             if (type.getSort() == org.objectweb.asm.Type.OBJECT) {
-                                refs.add(internalToDotName(type.getInternalName()));
+                                refs.add(toClassName(type.getInternalName()));
                             } else if (type.getSort() == org.objectweb.asm.Type.ARRAY) {
                                 org.objectweb.asm.Type elem = type.getElementType();
                                 if (elem.getSort() == org.objectweb.asm.Type.OBJECT) {
-                                    refs.add(internalToDotName(elem.getInternalName()));
+                                    refs.add(toClassName(elem.getInternalName()));
                                 }
                             }
                         }
@@ -620,8 +615,8 @@ public class PurgeProcessor {
      * Also handles delimited class name lists (comma, colon) used by frameworks
      * like RESTEasy for provider and resource builder lists.
      */
-    private Set<DotName> extractStringClassReferences(byte[] bytecode, Set<DotName> knownClasses) {
-        final Set<DotName> refs = new HashSet<>();
+    private Set<String> extractStringClassReferences(byte[] bytecode, Set<String> knownClasses) {
+        final Set<String> refs = new HashSet<>();
         ClassReader reader = new ClassReader(bytecode);
         reader.accept(new ClassVisitor(Opcodes.ASM9) {
             @Override
@@ -640,24 +635,22 @@ public class PurgeProcessor {
         return refs;
     }
 
-    private static void matchClassNames(String str, Set<DotName> knownClasses, Set<DotName> refs) {
+    private static void matchClassNames(String str, Set<String> knownClasses, Set<String> refs) {
         if (str.indexOf(',') >= 0 || str.indexOf(':') >= 0) {
             for (String part : str.split("[,:]")) {
-                DotName dotName = DotName.createSimple(part);
-                if (knownClasses.contains(dotName)) {
-                    refs.add(dotName);
+                if (knownClasses.contains(part)) {
+                    refs.add(part);
                 }
             }
         } else {
-            DotName dotName = DotName.createSimple(str);
-            if (knownClasses.contains(dotName)) {
-                refs.add(dotName);
+            if (knownClasses.contains(str)) {
+                refs.add(str);
             }
         }
     }
 
-    private void detectServiceLoaderCalls(Path classFile, DotName className,
-            Map<DotName, Set<DotName>> serviceLoaderCalls) {
+    private void detectServiceLoaderCalls(Path classFile, String className,
+            Map<String, Set<String>> serviceLoaderCalls) {
         try (InputStream is = Files.newInputStream(classFile)) {
             detectServiceLoaderCalls(is.readAllBytes(), className, serviceLoaderCalls);
         } catch (IOException e) {
@@ -665,8 +658,8 @@ public class PurgeProcessor {
         }
     }
 
-    private void detectServiceLoaderCalls(byte[] bytecode, DotName className,
-            Map<DotName, Set<DotName>> serviceLoaderCalls) {
+    private void detectServiceLoaderCalls(byte[] bytecode, String className,
+            Map<String, Set<String>> serviceLoaderCalls) {
         ClassReader reader = new ClassReader(bytecode);
         reader.accept(new ClassVisitor(Opcodes.ASM9) {
             @Override
@@ -694,7 +687,7 @@ public class PurgeProcessor {
                                 && lastClassConstant != null) {
                             serviceLoaderCalls
                                     .computeIfAbsent(className, k -> new HashSet<>())
-                                    .add(internalToDotName(lastClassConstant.getInternalName()));
+                                    .add(toClassName(lastClassConstant.getInternalName()));
                         }
                         lastClassConstant = null;
                     }
@@ -751,7 +744,7 @@ public class PurgeProcessor {
      * Handles class literals (e.g. {@code @Command(subcommands = {Foo.class})}),
      * enum constants, nested annotations, and arrays of these.
      */
-    private static org.objectweb.asm.AnnotationVisitor createAnnotationRefVisitor(Set<DotName> refs) {
+    private static org.objectweb.asm.AnnotationVisitor createAnnotationRefVisitor(Set<String> refs) {
         return new org.objectweb.asm.AnnotationVisitor(Opcodes.ASM9) {
             @Override
             public void visit(String name, Object value) {
@@ -780,24 +773,24 @@ public class PurgeProcessor {
 
     // ---- Helpers ----
 
-    private static DotName internalToDotName(String internalName) {
-        return DotName.createSimple(internalName.replace('/', '.'));
+    private static String toClassName(String internalName) {
+        return internalName.replace('/', '.');
     }
 
-    private static void addDescriptorType(String descriptor, Set<DotName> refs) {
+    private static void addDescriptorType(String descriptor, Set<String> refs) {
         org.objectweb.asm.Type type = org.objectweb.asm.Type.getType(descriptor);
         addAsmType(type, refs);
     }
 
-    private static void addMethodDescriptorTypes(String descriptor, Set<DotName> refs) {
+    private static void addMethodDescriptorTypes(String descriptor, Set<String> refs) {
         for (org.objectweb.asm.Type argType : org.objectweb.asm.Type.getArgumentTypes(descriptor)) {
             addAsmType(argType, refs);
         }
         addAsmType(org.objectweb.asm.Type.getReturnType(descriptor), refs);
     }
 
-    private static void addHandleType(Handle handle, Set<DotName> refs) {
-        refs.add(internalToDotName(handle.getOwner()));
+    private static void addHandleType(Handle handle, Set<String> refs) {
+        refs.add(toClassName(handle.getOwner()));
         int tag = handle.getTag();
         if (tag == Opcodes.H_GETFIELD || tag == Opcodes.H_GETSTATIC
                 || tag == Opcodes.H_PUTFIELD || tag == Opcodes.H_PUTSTATIC) {
@@ -813,21 +806,21 @@ public class PurgeProcessor {
      * that are not present in raw descriptors but can be resolved at runtime
      * via reflection on generic type metadata.
      */
-    private static void addSignatureTypes(String signature, Set<DotName> refs) {
+    private static void addSignatureTypes(String signature, Set<String> refs) {
         if (signature == null) {
             return;
         }
         new SignatureReader(signature).accept(new SignatureVisitor(Opcodes.ASM9) {
             @Override
             public void visitClassType(String name) {
-                refs.add(internalToDotName(name));
+                refs.add(toClassName(name));
             }
         });
     }
 
-    private static void addAsmType(org.objectweb.asm.Type type, Set<DotName> refs) {
+    private static void addAsmType(org.objectweb.asm.Type type, Set<String> refs) {
         if (type.getSort() == org.objectweb.asm.Type.OBJECT) {
-            refs.add(internalToDotName(type.getInternalName()));
+            refs.add(toClassName(type.getInternalName()));
         } else if (type.getSort() == org.objectweb.asm.Type.ARRAY) {
             addAsmType(type.getElementType(), refs);
         }
@@ -849,18 +842,16 @@ public class PurgeProcessor {
                 && !relativePath.endsWith("package-info.class");
     }
 
-    private static DotName classNameOf(String relativePath) {
-        return DotName.createSimple(
-                relativePath.substring(0, relativePath.length() - 6).replace('/', '.'));
+    private static String classNameOf(String relativePath) {
+        return relativePath.substring(0, relativePath.length() - 6).replace('/', '.');
     }
 
     private void parseServiceFile(Path file, String relativePath,
-            Map<DotName, Set<DotName>> serviceProviders) {
+            Map<String, Set<String>> serviceProviders) {
         String serviceInterface = relativePath.substring("META-INF/services/".length());
         if (serviceInterface.isEmpty() || serviceInterface.contains("/")) {
             return;
         }
-        DotName serviceKey = DotName.createSimple(serviceInterface);
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(Files.newInputStream(file), StandardCharsets.UTF_8))) {
             String line;
@@ -871,8 +862,8 @@ public class PurgeProcessor {
                 }
                 line = line.trim();
                 if (!line.isEmpty()) {
-                    serviceProviders.computeIfAbsent(serviceKey, k -> new HashSet<>())
-                            .add(DotName.createSimple(line));
+                    serviceProviders.computeIfAbsent(serviceInterface, k -> new HashSet<>())
+                            .add(line);
                 }
             }
         } catch (IOException e) {
@@ -911,7 +902,7 @@ public class PurgeProcessor {
         return found[0];
     }
 
-    private void parseSisuNamedFile(Path file, Set<DotName> sisuNamedClasses) {
+    private void parseSisuNamedFile(Path file, Set<String> sisuNamedClasses) {
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(Files.newInputStream(file), StandardCharsets.UTF_8))) {
             String line;
@@ -922,7 +913,7 @@ public class PurgeProcessor {
                 }
                 line = line.trim();
                 if (!line.isEmpty()) {
-                    sisuNamedClasses.add(DotName.createSimple(line));
+                    sisuNamedClasses.add(line);
                 }
             }
         } catch (IOException e) {
