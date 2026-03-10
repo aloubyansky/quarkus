@@ -35,9 +35,9 @@ import io.quarkus.deployment.pkg.builditem.JarBuildItem;
 import io.quarkus.deployment.pkg.builditem.JvmStartupOptimizerArchiveRequestedBuildItem;
 import io.quarkus.deployment.pkg.builditem.NativeImageSourceJarBuildItem;
 import io.quarkus.deployment.pkg.builditem.OutputTargetBuildItem;
+import io.quarkus.deployment.pkg.builditem.PurgeClassesBuildItem;
 import io.quarkus.deployment.pkg.builditem.UberJarIgnoredResourceBuildItem;
 import io.quarkus.deployment.pkg.builditem.UberJarMergedResourceBuildItem;
-import io.quarkus.deployment.pkg.builditem.UberJarPurgeBuildItem;
 import io.quarkus.deployment.pkg.jar.AotFastJarBuilder;
 import io.quarkus.deployment.pkg.jar.FastJarBuilder;
 import io.quarkus.deployment.pkg.jar.LegacyThinJarBuilder;
@@ -107,7 +107,7 @@ public class JarResultBuildStep {
             List<AdditionalApplicationArchiveBuildItem> additionalApplicationArchiveBuildItems,
             MainClassBuildItem mainClassBuildItem,
             Optional<JvmStartupOptimizerArchiveRequestedBuildItem> jvmStartupOptimizerArchiveRequested,
-            UberJarPurgeBuildItem purgeResult,
+            PurgeClassesBuildItem purgeResult,
             ExecutorService buildExecutor)
             throws Exception {
 

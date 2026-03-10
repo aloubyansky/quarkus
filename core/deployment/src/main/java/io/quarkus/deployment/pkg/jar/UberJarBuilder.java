@@ -31,9 +31,9 @@ import io.quarkus.deployment.pkg.PackageConfig;
 import io.quarkus.deployment.pkg.builditem.CurateOutcomeBuildItem;
 import io.quarkus.deployment.pkg.builditem.JarBuildItem;
 import io.quarkus.deployment.pkg.builditem.OutputTargetBuildItem;
+import io.quarkus.deployment.pkg.builditem.PurgeClassesBuildItem;
 import io.quarkus.deployment.pkg.builditem.UberJarIgnoredResourceBuildItem;
 import io.quarkus.deployment.pkg.builditem.UberJarMergedResourceBuildItem;
-import io.quarkus.deployment.pkg.builditem.UberJarPurgeBuildItem;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.maven.dependency.Dependency;
 import io.quarkus.maven.dependency.ResolvedDependency;
@@ -62,7 +62,7 @@ public class UberJarBuilder extends AbstractJarBuilder<JarBuildItem> {
 
     private final List<UberJarMergedResourceBuildItem> mergedResources;
     private final List<UberJarIgnoredResourceBuildItem> ignoredResources;
-    private final UberJarPurgeBuildItem purgeResult;
+    private final PurgeClassesBuildItem purgeResult;
 
     public UberJarBuilder(CurateOutcomeBuildItem curateOutcome,
             OutputTargetBuildItem outputTarget,
@@ -78,7 +78,7 @@ public class UberJarBuilder extends AbstractJarBuilder<JarBuildItem> {
             List<UberJarIgnoredResourceBuildItem> ignoredResources,
             ExecutorService executorService,
             ResolvedJVMRequirements jvmRequirements,
-            UberJarPurgeBuildItem purgeResult) {
+            PurgeClassesBuildItem purgeResult) {
         super(curateOutcome, outputTarget, applicationInfo, packageConfig, mainClass, applicationArchives, transformedClasses,
                 generatedClasses, generatedResources, removedArtifactKeys, executorService, jvmRequirements);
 

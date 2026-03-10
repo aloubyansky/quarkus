@@ -36,7 +36,7 @@ import io.quarkus.deployment.builditem.MainClassBuildItem;
 import io.quarkus.deployment.builditem.TransformedClassesBuildItem;
 import io.quarkus.deployment.pkg.PackageConfig;
 import io.quarkus.deployment.pkg.builditem.CurateOutcomeBuildItem;
-import io.quarkus.deployment.pkg.builditem.UberJarPurgeBuildItem;
+import io.quarkus.deployment.pkg.builditem.PurgeClassesBuildItem;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.maven.dependency.ResolvedDependency;
 
@@ -53,7 +53,7 @@ public class PurgeProcessor {
             MainClassBuildItem mainClass,
             List<GeneratedClassBuildItem> generatedClasses,
             TransformedClassesBuildItem transformedClasses,
-            BuildProducer<UberJarPurgeBuildItem> purgeProducer) {
+            BuildProducer<PurgeClassesBuildItem> purgeProducer) {
 
         final PackageConfig.JarConfig.PurgeLevel purgeLevel = packageConfig.jar().purge();
         // Disable purge for mutable jars: re-augmentation loads deployment classes that
@@ -61,16 +61,17 @@ public class PurgeProcessor {
         if (purgeLevel == PackageConfig.JarConfig.PurgeLevel.NONE
                 || packageConfig.jar().type() == PackageConfig.JarConfig.JarType.MUTABLE_JAR) {
             purgeProducer
-                    .produce(new UberJarPurgeBuildItem(PackageConfig.JarConfig.PurgeLevel.NONE, Set.of(), Set.of(), Map.of()));
+                    .produce(new PurgeClassesBuildItem(PackageConfig.JarConfig.PurgeLevel.NONE, Set.of(), Set.of(), Map.of()));
             return;
         }
 
+        final long start = System.currentTimeMillis();
         final ApplicationModel appModel = curateOutcome.getApplicationModel();
 
         // Build generated class bytecode map (dot-separated class name -> bytecode)
         final Map<String, byte[]> generatedBytecode = new HashMap<>();
         for (GeneratedClassBuildItem gen : generatedClasses) {
-            generatedBytecode.put(gen.getName().replace('/', '.'), gen.getClassData());
+            generatedBytecode.put(gen.binaryName().replace('/', '.'), gen.getClassData());
         }
 
         // Detect the application's minimum Java version from bytecode.
@@ -250,7 +251,6 @@ public class PurgeProcessor {
                 serviceProviders, serviceLoaderCalls, sisuNamedClasses, allKnownClasses, classToDep);
 
         // Determine which dependencies have reachable classes
-        final Set<String> reachableClassNames = reachable;
 
         final Map<ArtifactKey, Integer> depReachableCount = new HashMap<>();
         for (String className : reachable) {
@@ -317,8 +317,9 @@ public class PurgeProcessor {
             }
         }
         log.info("============================================================");
+        log.infof("Done in %s", (System.currentTimeMillis() - start));
 
-        purgeProducer.produce(new UberJarPurgeBuildItem(purgeLevel, reachableClassNames, usedDeps, removedClassesPerDep));
+        purgeProducer.produce(new PurgeClassesBuildItem(purgeLevel, reachable, usedDeps, removedClassesPerDep));
     }
 
     // ---- Reachability tracing ----
@@ -525,8 +526,7 @@ public class PurgeProcessor {
                         } else {
                             lastStringConstant = null;
                         }
-                        if (value instanceof org.objectweb.asm.Type) {
-                            org.objectweb.asm.Type type = (org.objectweb.asm.Type) value;
+                        if (value instanceof org.objectweb.asm.Type type) {
                             if (type.getSort() == org.objectweb.asm.Type.OBJECT) {
                                 refs.add(toClassName(type.getInternalName()));
                             } else if (type.getSort() == org.objectweb.asm.Type.ARRAY) {
@@ -670,8 +670,7 @@ public class PurgeProcessor {
 
                     @Override
                     public void visitLdcInsn(Object value) {
-                        if (value instanceof org.objectweb.asm.Type) {
-                            org.objectweb.asm.Type type = (org.objectweb.asm.Type) value;
+                        if (value instanceof org.objectweb.asm.Type type) {
                             if (type.getSort() == org.objectweb.asm.Type.OBJECT) {
                                 lastClassConstant = type;
                                 return;

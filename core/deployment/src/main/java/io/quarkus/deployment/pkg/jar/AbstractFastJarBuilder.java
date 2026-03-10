@@ -53,7 +53,7 @@ import io.quarkus.deployment.pkg.PackageConfig;
 import io.quarkus.deployment.pkg.builditem.CurateOutcomeBuildItem;
 import io.quarkus.deployment.pkg.builditem.JarBuildItem;
 import io.quarkus.deployment.pkg.builditem.OutputTargetBuildItem;
-import io.quarkus.deployment.pkg.builditem.UberJarPurgeBuildItem;
+import io.quarkus.deployment.pkg.builditem.PurgeClassesBuildItem;
 import io.quarkus.deployment.util.FileUtil;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.maven.dependency.GACT;
@@ -67,7 +67,7 @@ abstract class AbstractFastJarBuilder extends AbstractJarBuilder<JarBuildItem> {
 
     private final List<AdditionalApplicationArchiveBuildItem> additionalApplicationArchives;
     private final Set<ArtifactKey> parentFirstArtifactKeys;
-    private final UberJarPurgeBuildItem purgeResult;
+    private final PurgeClassesBuildItem purgeResult;
 
     AbstractFastJarBuilder(CurateOutcomeBuildItem curateOutcome,
             OutputTargetBuildItem outputTarget,
@@ -83,7 +83,7 @@ abstract class AbstractFastJarBuilder extends AbstractJarBuilder<JarBuildItem> {
             Set<ArtifactKey> removedArtifactKeys,
             ExecutorService executorService,
             ResolvedJVMRequirements jvmRequirements,
-            UberJarPurgeBuildItem purgeResult) {
+            PurgeClassesBuildItem purgeResult) {
         super(curateOutcome, outputTarget, applicationInfo, packageConfig, mainClass, applicationArchives, transformedClasses,
                 generatedClasses, generatedResources, removedArtifactKeys, executorService, jvmRequirements);
         this.additionalApplicationArchives = additionalApplicationArchives;
@@ -401,7 +401,7 @@ abstract class AbstractFastJarBuilder extends AbstractJarBuilder<JarBuildItem> {
             Consumer<Path> parentFirstDependenciesConsumer, boolean allowParentFirst, ResolvedDependency appDep,
             TransformedClassesBuildItem transformedClasses, Set<ArtifactKey> removedDeps,
             PackageConfig packageConfig, ApplicationManifestConfig.Builder manifestConfig, ExecutorService executorService,
-            UberJarPurgeBuildItem purgeResult)
+            PurgeClassesBuildItem purgeResult)
             throws IOException {
 
         // Exclude files that are not jars (typically, we can have XML files here, see https://github.com/quarkusio/quarkus/issues/2852)

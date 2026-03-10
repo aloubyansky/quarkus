@@ -15,14 +15,14 @@ import io.quarkus.maven.dependency.ArtifactKey;
  * the set of artifact keys for dependencies that have at least one reachable class,
  * and the sorted list of removed class resource paths per dependency.
  */
-public final class UberJarPurgeBuildItem extends SimpleBuildItem {
+public final class PurgeClassesBuildItem extends SimpleBuildItem {
 
     private final PurgeLevel level;
     private final Set<String> reachableClassNames;
     private final Set<ArtifactKey> usedDependencies;
     private final Map<ArtifactKey, List<String>> removedClasses;
 
-    public UberJarPurgeBuildItem(PurgeLevel level, Set<String> reachableClassNames, Set<ArtifactKey> usedDependencies,
+    public PurgeClassesBuildItem(PurgeLevel level, Set<String> reachableClassNames, Set<ArtifactKey> usedDependencies,
             Map<ArtifactKey, List<String>> removedClasses) {
         this.level = level;
         this.reachableClassNames = reachableClassNames;
