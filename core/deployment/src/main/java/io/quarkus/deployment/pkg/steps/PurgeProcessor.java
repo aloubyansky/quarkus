@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -97,7 +98,7 @@ public class PurgeProcessor {
             // For multi-release entries, we pick the highest version <= appJavaVersion,
             // matching what JarFile.runtimeVersion() resolves at runtime.
             dep.getContentTree().walkRaw(visit -> {
-                String relative = visit.getRelativePath("/");
+                String relative = visit.getRelativePath();
                 // Handle multi-release version entries (META-INF/versions/N/...)
                 if (relative.startsWith("META-INF/versions/")) {
                     String afterVersions = relative.substring("META-INF/versions/".length());
@@ -183,7 +184,7 @@ public class PurgeProcessor {
         // to dependency classes (e.g. app code using commons-io IOUtils).
         final Map<String, byte[]> appBytecode = new HashMap<>();
         appModel.getAppArtifact().getContentTree().walk(visit -> {
-            String relative = visit.getRelativePath("/");
+            String relative = visit.getRelativePath();
             if (isClassEntry(relative)) {
                 String className = classNameOf(relative);
                 detectServiceLoaderCalls(visit.getPath(), className, serviceLoaderCalls);
@@ -211,7 +212,7 @@ public class PurgeProcessor {
         for (ResolvedDependency dep : appModel.getRuntimeDependencies()) {
             if ("quarkus-bootstrap-runner".equals(dep.getArtifactId())) {
                 dep.getContentTree().walk(visit -> {
-                    String relative = visit.getRelativePath("/");
+                    String relative = visit.getRelativePath();
                     if (isClassEntry(relative)) {
                         roots.add(classNameOf(relative));
                     }
@@ -261,7 +262,7 @@ public class PurgeProcessor {
         }
 
         final Set<ArtifactKey> usedDeps = new HashSet<>();
-        final Map<ArtifactKey, int[]> usedDepsReport = new TreeMap<>((a, b) -> a.toString().compareTo(b.toString()));
+        final Map<ArtifactKey, int[]> usedDepsReport = new TreeMap<>(Comparator.comparing(ArtifactKey::toString));
         int unusedCount = 0;
         for (ResolvedDependency dep : appModel.getRuntimeDependencies()) {
             final ArtifactKey key = dep.getKey();
@@ -969,7 +970,7 @@ public class PurgeProcessor {
             if (majorVersion[0] > 0) {
                 return;
             }
-            String relative = visit.getRelativePath("/");
+            String relative = visit.getRelativePath();
             if (isClassEntry(relative)) {
                 try (InputStream is = Files.newInputStream(visit.getPath())) {
                     byte[] header = new byte[8];
