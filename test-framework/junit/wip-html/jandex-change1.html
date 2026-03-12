@@ -1,0 +1,1595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FacadeClassLoader: peekingClassLoader → Jandex Comparison</title>
+<style>
+  :root {
+    --old-bg: #fff5f5;
+    --old-border: #e53e3e;
+    --old-accent: #c53030;
+    --old-light: #feb2b2;
+    --new-bg: #f0fff4;
+    --new-border: #38a169;
+    --new-accent: #276749;
+    --new-light: #9ae6b4;
+    --neutral-bg: #ebf8ff;
+    --neutral-border: #3182ce;
+    --neutral-accent: #2c5282;
+    --gray-50: #f7fafc;
+    --gray-100: #edf2f7;
+    --gray-200: #e2e8f0;
+    --gray-300: #cbd5e0;
+    --gray-500: #718096;
+    --gray-700: #4a5568;
+    --gray-800: #2d3748;
+    --gray-900: #1a202c;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--gray-100);
+    color: var(--gray-800);
+    line-height: 1.6;
+  }
+  header {
+    background: linear-gradient(135deg, var(--gray-900), var(--gray-700));
+    color: white;
+    padding: 2rem 2rem 1.5rem;
+    text-align: center;
+  }
+  header h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 0.3rem; }
+  header p { font-size: 1rem; opacity: 0.85; }
+  .tabs {
+    display: flex;
+    justify-content: center;
+    gap: 0;
+    background: var(--gray-800);
+    padding: 0 1rem;
+    flex-wrap: wrap;
+  }
+  .tab {
+    padding: 0.75rem 1.5rem;
+    cursor: pointer;
+    color: rgba(255,255,255,0.7);
+    border-bottom: 3px solid transparent;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .tab:hover { color: white; background: rgba(255,255,255,0.05); }
+  .tab.active { color: white; border-bottom-color: #63b3ed; background: rgba(255,255,255,0.08); }
+  .content { max-width: 1400px; margin: 0 auto; padding: 1.5rem; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* Side-by-side layout */
+  .comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  @media (max-width: 900px) { .comparison { grid-template-columns: 1fr; } }
+
+  .side { border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  .side-header {
+    padding: 0.8rem 1.2rem;
+    font-weight: 700;
+    font-size: 1.05rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .side.old .side-header { background: var(--old-border); color: white; }
+  .side.new .side-header { background: var(--new-border); color: white; }
+  .side-body { padding: 1.2rem; background: white; }
+  .side.old { border: 2px solid var(--old-light); }
+  .side.new { border: 2px solid var(--new-light); }
+
+  /* Flow diagrams */
+  .flow { display: flex; flex-direction: column; gap: 0; align-items: center; }
+  .flow-step {
+    width: 100%;
+    max-width: 400px;
+    border-radius: 8px;
+    padding: 0.8rem 1rem;
+    text-align: center;
+    font-size: 0.85rem;
+    position: relative;
+  }
+  .flow-arrow {
+    width: 2px;
+    height: 24px;
+    background: var(--gray-300);
+    position: relative;
+  }
+  .flow-arrow::after {
+    content: '▼';
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.6rem;
+    color: var(--gray-500);
+  }
+
+  .step-bad {
+    background: var(--old-bg);
+    border: 1.5px solid var(--old-border);
+    color: var(--old-accent);
+  }
+  .step-good {
+    background: var(--new-bg);
+    border: 1.5px solid var(--new-border);
+    color: var(--new-accent);
+  }
+  .step-neutral {
+    background: var(--neutral-bg);
+    border: 1.5px solid var(--neutral-border);
+    color: var(--neutral-accent);
+  }
+  .step-gray {
+    background: var(--gray-50);
+    border: 1.5px solid var(--gray-300);
+    color: var(--gray-700);
+  }
+  .step-warn {
+    background: #fffff0;
+    border: 1.5px solid #d69e2e;
+    color: #975a16;
+  }
+
+  .step-label {
+    font-weight: 700;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.2rem;
+    opacity: 0.7;
+  }
+  .step-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem; }
+  .step-detail { font-size: 0.8rem; opacity: 0.85; }
+
+  /* Code blocks */
+  code, .mono {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.82rem;
+  }
+  .code-block {
+    background: var(--gray-900);
+    color: #e2e8f0;
+    border-radius: 6px;
+    padding: 0.8rem 1rem;
+    overflow-x: auto;
+    font-size: 0.78rem;
+    line-height: 1.65;
+    margin: 0.5rem 0;
+    tab-size: 4;
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  }
+  .code-block .kw { color: #90cdf4; font-weight: 600; }
+  .code-block .str { color: #9ae6b4; }
+  .code-block .cmt { color: #718096; font-style: italic; }
+  .code-block .typ { color: #fbd38d; }
+  .code-block .num { color: #feb2b2; }
+  .code-block .ann { color: #d6bcfa; }
+  .code-block .op { color: #cbd5e0; }
+  .code-block .punc { color: #a0aec0; }
+  .code-block .del { color: #feb2b2; text-decoration: line-through; opacity: 0.7; }
+  .code-block .add { color: #9ae6b4; font-weight: 600; }
+
+  /* Stats boxes */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  .stat-card {
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .stat-card.bad { background: var(--old-bg); border: 1px solid var(--old-light); }
+  .stat-card.good { background: var(--new-bg); border: 1px solid var(--new-light); }
+  .stat-card.neutral { background: var(--neutral-bg); border: 1px solid #90cdf4; }
+  .stat-number { font-size: 2rem; font-weight: 800; line-height: 1.1; }
+  .stat-card.bad .stat-number { color: var(--old-accent); }
+  .stat-card.good .stat-number { color: var(--new-accent); }
+  .stat-card.neutral .stat-number { color: var(--neutral-accent); }
+  .stat-label { font-size: 0.8rem; color: var(--gray-500); margin-top: 0.2rem; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th { background: var(--gray-200); text-align: left; padding: 0.6rem 0.8rem; font-weight: 700; }
+  td { padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--gray-200); vertical-align: top; }
+  tr:hover td { background: var(--gray-50); }
+  td.old-cell { background: #fff5f5; }
+  td.new-cell { background: #f0fff4; }
+
+  /* Diagram boxes */
+  .arch-diagram {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem;
+  }
+  .arch-box {
+    border-radius: 8px;
+    padding: 0.6rem 1.2rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: center;
+    min-width: 200px;
+  }
+  .arch-connector {
+    width: 2px;
+    height: 16px;
+    background: var(--gray-400);
+  }
+  .arch-row {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  /* Highlight box */
+  .highlight-box {
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    margin: 0.8rem 0;
+    font-size: 0.88rem;
+  }
+  .highlight-box.warn {
+    background: #fffff0;
+    border-left: 4px solid #d69e2e;
+    color: #975a16;
+  }
+  .highlight-box.info {
+    background: var(--neutral-bg);
+    border-left: 4px solid var(--neutral-border);
+    color: var(--neutral-accent);
+  }
+  .highlight-box.good {
+    background: var(--new-bg);
+    border-left: 4px solid var(--new-border);
+    color: var(--new-accent);
+  }
+  .highlight-box.bad {
+    background: var(--old-bg);
+    border-left: 4px solid var(--old-border);
+    color: var(--old-accent);
+  }
+
+  /* Section */
+  .section-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--gray-800);
+    margin: 1.5rem 0 0.8rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 2px solid var(--gray-200);
+  }
+  .section-subtitle {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--gray-700);
+    margin: 1rem 0 0.5rem;
+  }
+
+  ul.detail-list { padding-left: 1.2rem; margin: 0.5rem 0; }
+  ul.detail-list li { margin: 0.3rem 0; font-size: 0.85rem; }
+
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .badge.removed { background: var(--old-light); color: var(--old-accent); }
+  .badge.added { background: var(--new-light); color: var(--new-accent); }
+  .badge.changed { background: #fefcbf; color: #975a16; }
+  .badge.kept { background: var(--gray-200); color: var(--gray-700); }
+
+  .full-width {
+    background: white;
+    border-radius: 10px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    margin-bottom: 1.5rem;
+  }
+
+  .legend {
+    display: flex; gap: 1.5rem; flex-wrap: wrap;
+    padding: 0.8rem 1rem;
+    background: var(--gray-50);
+    border-radius: 6px;
+    margin-bottom: 1rem;
+    font-size: 0.8rem;
+  }
+  .legend-item { display: flex; align-items: center; gap: 0.4rem; }
+  .legend-dot {
+    width: 12px; height: 12px; border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>FacadeClassLoader: peekingClassLoader → Jandex</h1>
+  <p>How annotation inspection during JUnit test discovery was changed from class-loading to bytecode indexing</p>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-tab="overview">Overview</div>
+  <div class="tab" data-tab="constructor">Constructor</div>
+  <div class="tab" data-tab="loadclass">loadClass()</div>
+  <div class="tab" data-tab="annotations">Annotation Checks</div>
+  <div class="tab" data-tab="profiles">Profiles &amp; Keys</div>
+  <div class="tab" data-tab="impact">Impact &amp; Tradeoffs</div>
+</div>
+
+<div class="content">
+
+<!-- ═══════════════════════════════════ OVERVIEW TAB ═══════════════════════════════════ -->
+<div class="panel active" id="panel-overview">
+
+  <div class="section-title">The Core Problem</div>
+  <div class="full-width">
+    <p style="font-size:0.92rem; margin-bottom:1rem;">
+      During JUnit test discovery, <code>FacadeClassLoader.loadClass()</code> is called for <strong>every</strong> class
+      JUnit encounters. For each class, the FacadeClassLoader must determine: <em>Is this a @QuarkusTest?</em>
+      If yes, route it to a QuarkusClassLoader; if no, delegate to the parent (system) classloader.
+    </p>
+    <div class="highlight-box warn">
+      <strong>The question:</strong> How do you inspect a class's annotations to determine if it's a @QuarkusTest,
+      without triggering the heavy side-effects of actually loading the class?
+    </div>
+  </div>
+
+  <div class="section-title">Two Approaches</div>
+  <div class="comparison">
+    <div class="side old">
+      <div class="side-header">BEFORE: peekingClassLoader</div>
+      <div class="side-body">
+        <div class="arch-diagram">
+          <div class="arch-box" style="background:var(--old-bg);border:2px solid var(--old-border);color:var(--old-accent);">
+            JUnit calls <code>loadClass("com.example.MyTest")</code>
+          </div>
+          <div class="arch-connector"></div>
+          <div class="arch-box" style="background:#fff5f5;border:2px solid #fc8181;">
+            <strong>peekingClassLoader.loadClass(name)</strong><br>
+            <span style="font-size:0.78rem;">ParentLastURLClassLoader (URLClassLoader)<br>
+            Loads the class → runs bytecode verification,<br>resolves superclasses, triggers static refs</span>
+          </div>
+          <div class="arch-connector"></div>
+          <div class="arch-box" style="background:#fffff0;border:2px solid #d69e2e;color:#975a16;">
+            <strong>AnnotationSupport.isAnnotated()</strong><br>
+            <span style="font-size:0.78rem;">JUnit's reflection-based annotation scanner<br>
+            Uses Class&lt;?&gt; loaded by peeking CL</span>
+          </div>
+          <div class="arch-connector"></div>
+          <div class="arch-box" style="background:#fff5f5;border:2px solid #fc8181;">
+            <strong>If QuarkusTest → load AGAIN</strong><br>
+            <span style="font-size:0.78rem;">runtimeClassLoader.loadClass(name)<br>
+            Same class loaded a second time</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="side new">
+      <div class="side-header">AFTER: Jandex Index</div>
+      <div class="side-body">
+        <div class="arch-diagram">
+          <div class="arch-box" style="background:var(--new-bg);border:2px solid var(--new-border);color:var(--new-accent);">
+            JUnit calls <code>loadClass("com.example.MyTest")</code>
+          </div>
+          <div class="arch-connector"></div>
+          <div class="arch-box" style="background:#f0fff4;border:2px solid #68d391;">
+            <strong>jandexIndex.getClassByName(name)</strong><br>
+            <span style="font-size:0.78rem;">O(1) HashMap lookup → ClassInfo<br>
+            No class loading, no bytecode verification,<br>no side effects</span>
+          </div>
+          <div class="arch-connector"></div>
+          <div class="arch-box" style="background:#f0fff4;border:2px solid #68d391;">
+            <strong>classInfo.hasDeclaredAnnotation()</strong><br>
+            <span style="font-size:0.78rem;">Jandex bytecode-level annotation read<br>
+            Already parsed at index build time</span>
+          </div>
+          <div class="arch-connector"></div>
+          <div class="arch-box" style="background:var(--neutral-bg);border:2px solid var(--neutral-border);">
+            <strong>If QuarkusTest → load once</strong><br>
+            <span style="font-size:0.78rem;">runtimeClassLoader.loadClass(name)<br>
+            Only loading, no duplicate</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title">Key Metrics</div>
+  <div class="stats-row">
+    <div class="stat-card bad">
+      <div class="stat-number">2×</div>
+      <div class="stat-label">Class loads per test (before)</div>
+    </div>
+    <div class="stat-card good">
+      <div class="stat-number">1×</div>
+      <div class="stat-label">Class loads per test (after)</div>
+    </div>
+    <div class="stat-card bad">
+      <div class="stat-number">ALL</div>
+      <div class="stat-label">Classes loaded for inspection (before)</div>
+    </div>
+    <div class="stat-card good">
+      <div class="stat-number">0</div>
+      <div class="stat-label">Classes loaded for inspection (after)</div>
+    </div>
+    <div class="stat-card neutral">
+      <div class="stat-number">1</div>
+      <div class="stat-label">File deleted (ParentLastURLClassLoader)</div>
+    </div>
+    <div class="stat-card neutral">
+      <div class="stat-number">10+</div>
+      <div class="stat-label">Reflection fields eliminated</div>
+    </div>
+  </div>
+
+  <div class="section-title">What Changed at a Glance</div>
+  <div class="full-width">
+    <table>
+      <tr>
+        <th style="width:25%">Aspect</th>
+        <th style="width:37%">Before (peekingClassLoader)</th>
+        <th style="width:38%">After (Jandex)</th>
+      </tr>
+      <tr>
+        <td><strong>Annotation inspection tool</strong></td>
+        <td class="old-cell"><code>peekingClassLoader.loadClass()</code> + JUnit <code>AnnotationSupport</code></td>
+        <td class="new-cell"><code>jandexIndex.getClassByName()</code> + <code>ClassInfo</code> API</td>
+      </tr>
+      <tr>
+        <td><strong>Inspection mechanism</strong></td>
+        <td class="old-cell">Load class into JVM → use reflection</td>
+        <td class="new-cell">Read .class bytecode → parse at build time</td>
+      </tr>
+      <tr>
+        <td><strong>Non-test classes</strong></td>
+        <td class="old-cell">Loaded by peekingCL, then delegated to parent</td>
+        <td class="new-cell">Not in index → immediate <code>super.loadClass()</code></td>
+      </tr>
+      <tr>
+        <td><strong>Profile class handling</strong></td>
+        <td class="old-cell"><code>Map&lt;String, Class&lt;?&gt;&gt;</code> via peekingCL</td>
+        <td class="new-cell"><code>Map&lt;String, String&gt;</code> class names, loaded on demand</td>
+      </tr>
+      <tr>
+        <td><strong>Annotation class refs</strong></td>
+        <td class="old-cell">10 <code>Class&lt;? extends Annotation&gt;</code> fields + reflection Methods</td>
+        <td class="new-cell">10 <code>DotName</code> constants (compile-time strings)</td>
+      </tr>
+      <tr>
+        <td><strong>Meta-annotation support</strong></td>
+        <td class="old-cell">JUnit's <code>AnnotationSupport.isAnnotated()</code></td>
+        <td class="new-cell">Custom <code>hasAnnotationRecursive()</code> within index + reflection fallback</td>
+      </tr>
+      <tr>
+        <td><strong>Files</strong></td>
+        <td class="old-cell">FacadeClassLoader.java + ParentLastURLClassLoader.java</td>
+        <td class="new-cell">FacadeClassLoader.java only</td>
+      </tr>
+      <tr>
+        <td><strong>close()</strong></td>
+        <td class="old-cell"><code>peekingClassLoader.close()</code> (URLClassLoader)</td>
+        <td class="new-cell"><code>jandexIndex = null</code> (GC)</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ CONSTRUCTOR TAB ═══════════════════════════════════ -->
+<div class="panel" id="panel-constructor">
+
+  <div class="section-title">Constructor: Initialization Comparison</div>
+
+  <div class="comparison">
+    <div class="side old">
+      <div class="side-header">BEFORE: Constructor</div>
+      <div class="side-body">
+        <div class="flow">
+          <div class="flow-step step-bad">
+            <div class="step-label">Step 1</div>
+            <div class="step-title">Build URL array from classpath</div>
+            <div class="step-detail">Parse <code>java.class.path</code>, convert each entry to URL, handle trailing separators for IDEs</div>
+          </div>
+          <div class="flow-arrow"></div>
+          <div class="flow-step step-bad">
+            <div class="step-label">Step 2</div>
+            <div class="step-title">Create peekingClassLoader</div>
+            <div class="step-detail">
+              Branch on launcher vs isolated classloader:<br>
+              • Launcher: <code>new URLClassLoader(urls, null)</code><br>
+              • Normal: <code>new ParentLastURLClassLoader(urls, parent)</code>
+            </div>
+          </div>
+          <div class="flow-arrow"></div>
+          <div class="flow-step step-bad">
+            <div class="step-label">Step 3</div>
+            <div class="step-title">Load 10 annotation classes reflectively</div>
+            <div class="step-detail">
+              <code>annotationLoader.loadClass("...QuarkusTest")</code><br>
+              <code>annotationLoader.loadClass("...Disabled")</code><br>
+              <code>annotationLoader.loadClass("...DisabledOnOs")</code><br>
+              + <code>getMethod("value")</code>, <code>getMethod("isCurrentOs")</code><br>
+              + 7 more annotation Class&lt;?&gt; fields
+            </div>
+          </div>
+          <div class="flow-arrow"></div>
+          <div class="flow-step step-warn">
+            <div class="step-label">Step 4</div>
+            <div class="step-title">Load profile classes</div>
+            <div class="step-detail">
+              For continuous testing: <code>peekingClassLoader.loadClass(profileName)</code> for every profile → <code>Map&lt;String, Class&lt;?&gt;&gt;</code>
+            </div>
+          </div>
+          <div class="flow-arrow"></div>
+          <div class="flow-step step-gray">
+            <div class="step-label">Step 5</div>
+            <div class="step-title">Scan META-INF/services</div>
+            <div class="step-detail">Check for service-loader-based QuarkusTestExtension registration</div>
+          </div>
+        </div>
+
+        <div class="code-block" style="margin-top:1rem;">
+// Fields initialized
+private URLClassLoader peekingClassLoader;
+private Class&lt;? extends Annotation&gt; quarkusTestAnnotation;
+private Class&lt;? extends Annotation&gt; disabledAnnotation;
+private Class&lt;? extends Annotation&gt; disabledOnOsAnnotation;
+private Method disabledOnOsAnnotationValue;
+private Method osIsCurrent;
+private Class&lt;? extends Annotation&gt; quarkusIntTestAnnotation;
+private Class&lt;? extends Annotation&gt; profileAnnotation;
+private Class&lt;? extends Annotation&gt; nestedAnnotation;
+private Class&lt;? extends Annotation&gt; extendWithAnnotation;
+private Class&lt;? extends Annotation&gt; registerExtensionAnnotation;
+private Class&lt;? extends Annotation&gt; testAnnotation;
+private final Map&lt;String, Class&lt;?&gt;&gt; profiles;
+        </div>
+      </div>
+    </div>
+
+    <div class="side new">
+      <div class="side-header">AFTER: Constructor</div>
+      <div class="side-body">
+        <div class="flow">
+          <div class="flow-step step-good">
+            <div class="step-label">Step 1</div>
+            <div class="step-title">Build Jandex Index from directories</div>
+            <div class="step-detail">
+              Walk <code>java.class.path</code>, for each <strong>directory</strong> (not JAR):<br>
+              <code>Files.walkFileTree()</code> → index every <code>.class</code> file<br>
+              Reads bytecode only, no class loading
+            </div>
+          </div>
+          <div class="flow-arrow"></div>
+          <div class="flow-step step-good">
+            <div class="step-label">Step 2</div>
+            <div class="step-title">Check QuarkusTest availability</div>
+            <div class="step-detail">
+              Single <code>parent.loadClass("...QuarkusTest")</code><br>
+              Sets <code>quarkusTestAvailable</code> boolean
+            </div>
+          </div>
+          <div class="flow-arrow"></div>
+          <div class="flow-step step-gray">
+            <div class="step-label">Step 3</div>
+            <div class="step-title">Scan META-INF/services</div>
+            <div class="step-detail">Same as before — check for service-loader-based registration</div>
+          </div>
+          <div class="flow-arrow"></div>
+          <div class="flow-step step-good">
+            <div class="step-label">Step 4</div>
+            <div class="step-title">Copy profile names (strings only)</div>
+            <div class="step-detail">
+              <code>this.profileNames = new HashMap&lt;&gt;(profileNames)</code><br>
+              No class loading — just string copies
+            </div>
+          </div>
+        </div>
+
+        <div class="code-block" style="margin-top:1rem;">
+// Fields initialized
+private Index jandexIndex;
+private boolean quarkusTestAvailable;
+private final Map&lt;String, String&gt; profileNames;
+
+// Compile-time constants (no runtime loading needed)
+private static final DotName QUARKUS_TEST = ...;
+private static final DotName DISABLED = ...;
+private static final DotName DISABLED_ON_OS = ...;
+// ... 7 more DotName constants
+        </div>
+
+        <div class="highlight-box good" style="margin-top:0.8rem;">
+          <strong>Key difference:</strong> Annotation types are known at compile time as <code>DotName</code> string constants.
+          No reflection, no <code>getMethod()</code>, no <code>Class&lt;? extends Annotation&gt;</code> fields.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="full-width">
+    <div class="section-subtitle">What is Jandex Indexing?</div>
+    <p style="font-size:0.88rem; margin-bottom:0.8rem;">
+      The Jandex <code>Indexer</code> reads <code>.class</code> files as raw bytecode and parses out structural information
+      (class names, superclass, interfaces, annotations, fields, methods) without loading them into the JVM.
+      The result is an in-memory <code>Index</code> — a set of hash maps keyed by class name and annotation name.
+    </p>
+    <div class="code-block">
+Indexer indexer = new Indexer();
+for (String spec : classesPath.split(File.pathSeparator)) {
+    Path path = Path.of(spec);
+    if (Files.isDirectory(path)) {     // Only directories, not JARs
+        indexDirectory(indexer, path);  // Walk tree, index each .class file
+    }
+}
+jandexIndex = indexer.complete();       // Build immutable Index
+    </div>
+    <div class="highlight-box info">
+      <strong>Why only directories?</strong> Test classes always live in directories (<code>target/test-classes</code>,
+      <code>target/classes</code>), not in JARs. Classes from library JARs are never user test classes, so they
+      don't need to be indexed — they get the fast path (<code>super.loadClass()</code>) in <code>loadClass()</code>.
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ LOADCLASS TAB ═══════════════════════════════════ -->
+<div class="panel" id="panel-loadclass">
+
+  <div class="section-title">loadClass() Flow Comparison</div>
+  <p style="font-size:0.88rem; margin-bottom:1rem; color:var(--gray-700);">
+    This is the hot path — called for every class JUnit discovers. The critical difference is
+    how annotation information is obtained: class loading vs. index lookup.
+  </p>
+
+  <div class="comparison">
+    <div class="side old">
+      <div class="side-header">BEFORE: loadClass()</div>
+      <div class="side-body">
+        <div class="flow">
+          <div class="flow-step step-neutral">
+            <div class="step-title">Guard: peekingClassLoader != null</div>
+          </div>
+          <div class="flow-arrow"></div>
+          <div class="flow-step step-gray">
+            <div class="step-title">Service loader shortcut</div>
+            <div class="step-detail">If SPI mechanism + QuarkusTestExtension name</div>
+          </div>
+          <div class="flow-arrow"></div>
+          <div class="flow-step step-bad">
+            <div class="step-title">Load class for inspection</div>
+            <div class="step-detail">
+              <code>inspectionClass = peekingClassLoader.loadClass(name)</code><br>
+              <strong>Every class loaded</strong> — even non-test classes.<br>
+              Triggers bytecode verification, static resolution,<br>
+              potential NoClassDefFoundError
+            </div>
+          </div>
+          <div class="flow-arrow"></div>
+          <div class="flow-step step-warn">
+            <div class="step-title">Check annotations via reflection</div>
+            <div class="step-detail">
+              <code>AnnotationSupport.isAnnotated(inspectionClass, quarkusTestAnnotation)</code><br>
+              <code>AnnotationSupport.isAnnotated(inspectionClass, disabledAnnotation)</code><br>
+              <code>AnnotationSupport.findAnnotation(inspectionClass, profileAnnotation)</code><br>
+              Reflection + Method.invoke() for annotation values
+            </div>
+          </div>
+          <div class="flow-arrow"></div>
+          <div class="flow-step step-bad">
+            <div class="step-title">If QuarkusTest: load AGAIN</div>
+            <div class="step-detail">
+              <code>getQuarkusClassLoader(inspectionClass, profile)</code><br>
+              → <code>runtimeClassLoader.loadClass(name)</code><br>
+              <em>Same class, second load in a different CL</em>
+            </div>
+          </div>
+        </div>
+
+        <div class="highlight-box bad" style="margin-top:1rem;">
+          <strong>Problem 1:</strong> Every class on the classpath gets loaded by peekingCL —
+          including utility classes, configs, DTOs — just to check annotations.
+        </div>
+        <div class="highlight-box bad">
+          <strong>Problem 2:</strong> Classes with missing dependencies throw <code>NoClassDefFoundError</code>
+          during peeking load, requiring try/catch fallback.
+        </div>
+        <div class="highlight-box bad">
+          <strong>Problem 3:</strong> Static initializers and class-level side effects run during
+          peeking load, causing subtle bugs.
+        </div>
+      </div>
+    </div>
+
+    <div class="side new">
+      <div class="side-header">AFTER: loadClass()</div>
+      <div class="side-body">
+        <div class="flow">
+          <div class="flow-step step-neutral">
+            <div class="step-title">Guard: jandexIndex != null</div>
+          </div>
+          <div class="flow-arrow"></div>
+          <div class="flow-step step-gray">
+            <div class="step-title">Service loader shortcut</div>
+            <div class="step-detail">Same — uses QUARKUS_TEST_EXTENSION_NAME constant</div>
+          </div>
+          <div class="flow-arrow"></div>
+          <div class="flow-step step-good">
+            <div class="step-title">Index lookup (no class loading)</div>
+            <div class="step-detail">
+              <code>ClassInfo classInfo = jandexIndex.getClassByName(name)</code><br>
+              <strong>O(1) hash map lookup</strong> — returns null for<br>
+              classes not in directories → immediate<br>
+              <code>super.loadClass(name)</code> fast path
+            </div>
+          </div>
+          <div class="flow-arrow"></div>
+          <div class="flow-step step-good">
+            <div class="step-title">Check annotations via Jandex</div>
+            <div class="step-detail">
+              <code>classInfo.hasDeclaredAnnotation(QUARKUS_TEST)</code><br>
+              <code>hasAnnotation(classInfo, DISABLED)</code><br>
+              <code>getTestProfileClassName(classInfo)</code><br>
+              All pre-parsed bytecode data, no reflection
+            </div>
+          </div>
+          <div class="flow-arrow"></div>
+          <div class="flow-step step-good">
+            <div class="step-title">If QuarkusTest: load once</div>
+            <div class="step-detail">
+              <code>getQuarkusClassLoader(name, profileClassName)</code><br>
+              → loads Class&lt;?&gt; from parent CL on demand<br>
+              → <code>runtimeClassLoader.loadClass(name)</code><br>
+              <em>Only one real class load</em>
+            </div>
+          </div>
+        </div>
+
+        <div class="highlight-box good" style="margin-top:1rem;">
+          <strong>Fast path:</strong> Classes not in directories (from JARs) → <code>classInfo == null</code>
+          → <code>super.loadClass(name)</code> immediately. No inspection overhead at all.
+        </div>
+        <div class="highlight-box good">
+          <strong>No side effects:</strong> Jandex reads raw bytecode. No class initialization,
+          no static blocks, no dependency resolution, no NoClassDefFoundError.
+        </div>
+        <div class="highlight-box good">
+          <strong>Single load:</strong> Only QuarkusTest classes are loaded (once), and only from
+          the runtime classloader — the correct one.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="full-width">
+    <div class="section-subtitle">Continuous Testing Path</div>
+    <p style="font-size:0.88rem; margin-bottom:0.5rem;">
+      In continuous testing mode, the set of QuarkusTest classes is pre-computed by <code>JunitTestRunner</code>
+      and passed into the constructor. The key change here is simpler:
+    </p>
+    <div class="comparison" style="margin-top:0.8rem;">
+      <div style="padding:0.8rem;">
+        <div class="section-subtitle" style="margin-top:0;">Before</div>
+        <div class="code-block">
+if (isContinuousTesting) {
+    isQuarkusTest = quarkusTestClasses.contains(name);
+    profile = profiles.get(name); // Class&lt;?&gt;
+    if (isQuarkusTest) {
+        <span class="del">inspectionClass = peekingClassLoader.loadClass(name);</span>
+        // Still loaded class for inspection!
+    }
+}
+        </div>
+      </div>
+      <div style="padding:0.8rem;">
+        <div class="section-subtitle" style="margin-top:0;">After</div>
+        <div class="code-block">
+if (isContinuousTesting) {
+    isQuarkusTest = quarkusTestClasses.contains(name);
+    <span class="add">profileClassName = profileNames != null</span>
+        <span class="add">? profileNames.get(name) : null;</span>
+    // No class loading at all!
+}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ ANNOTATIONS TAB ═══════════════════════════════════ -->
+<div class="panel" id="panel-annotations">
+
+  <div class="section-title">Annotation Detection Methods</div>
+  <p style="font-size:0.88rem; margin-bottom:1rem; color:var(--gray-700);">
+    Each annotation check was reimplemented to work with Jandex's <code>ClassInfo</code> instead of
+    loaded <code>Class&lt;?&gt;</code> objects.
+  </p>
+
+  <!-- isQuarkusTest -->
+  <div class="full-width">
+    <div class="section-subtitle">1. isQuarkusTest()</div>
+    <div class="comparison">
+      <div>
+        <span class="badge removed">Before</span>
+        <div class="code-block">
+private boolean isQuarkusTest(Class&lt;?&gt; inspectionClass) {
+    boolean isQuarkusAtTopLevel =
+        AnnotationSupport.isAnnotated(
+                inspectionClass, quarkusTestAnnotation)
+        || registersQuarkusTestExtensionWithExtendsWith(inspectionClass)
+        || registersQuarkusTestExtensionOnField(inspectionClass);
+
+    if (isQuarkusAtTopLevel) return true;
+
+    // Nested class check
+    boolean isNested = AnnotationSupport.isAnnotated(
+            inspectionClass, nestedAnnotation);
+    if (isNested) {
+        String parentName = inspectionClass.getName()
+                .substring(0, inspectionClass.getName().lastIndexOf("$"));
+        Class&lt;?&gt; parent = <span class="del">peekingClassLoader.loadClass(parentName);</span>
+        return isQuarkusTest(parent);
+    }
+    return false;
+}
+        </div>
+      </div>
+      <div>
+        <span class="badge added">After</span>
+        <div class="code-block">
+private boolean isQuarkusTest(ClassInfo classInfo) {
+    if (hasQuarkusTestMarker(classInfo)) return true;
+
+    // Walk superclass hierarchy (NEW!)
+    DotName superName = classInfo.superName();
+    while (superName != null && !OBJECT_NAME.equals(superName)) {
+        ClassInfo superInfo = jandexIndex.getClassByName(superName);
+        if (superInfo != null) {
+            if (hasQuarkusTestMarker(superInfo)) return true;
+            superName = superInfo.superName();
+        } else {
+            // Not in index → reflection fallback
+            if (<span class="add">isQuarkusTestViaReflection</span>(superName.toString()))
+                return true;
+            break;
+        }
+    }
+
+    // Nested class check via enclosingClass()
+    if (classInfo.hasDeclaredAnnotation(NESTED)) {
+        DotName enc = classInfo.<span class="add">enclosingClass()</span>;
+        // No string manipulation, no class loading
+        ...
+    }
+}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- hasAnnotation (meta-annotation walking) -->
+  <div class="full-width">
+    <div class="section-subtitle">2. Meta-Annotation Walking</div>
+    <div class="comparison">
+      <div>
+        <span class="badge removed">Before</span>
+        <p style="font-size:0.85rem; margin:0.5rem 0;">
+          JUnit's <code>AnnotationSupport.isAnnotated()</code> handles meta-annotations automatically
+          by walking the annotation hierarchy using reflection on loaded <code>Class&lt;?&gt;</code> objects.
+        </p>
+        <div class="code-block">
+// Single call handles meta-annotations
+AnnotationSupport.isAnnotated(
+    inspectionClass, quarkusTestAnnotation);
+// But requires the class AND annotation
+// to be loaded in the same classloader
+        </div>
+      </div>
+      <div>
+        <span class="badge added">After</span>
+        <p style="font-size:0.85rem; margin:0.5rem 0;">
+          Custom recursive meta-annotation walking within the Jandex index.
+          Only annotations that are themselves in the index are walked.
+        </p>
+        <div class="code-block">
+private boolean hasAnnotation(
+        ClassInfo classInfo, DotName target) {
+    if (classInfo.hasDeclaredAnnotation(target))
+        return true;
+    // Walk meta-annotations within index
+    for (AnnotationInstance ann :
+              classInfo.declaredAnnotations()) {
+        ClassInfo annCI = jandexIndex.getClassByName(ann.name());
+        if (annCI != null &&
+                hasAnnotationRecursive(annCI, target, new HashSet<>()))
+            return true;
+    }
+    return false;
+}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- @DisabledOnOs -->
+  <div class="full-width">
+    <div class="section-subtitle">3. @DisabledOnOs Check</div>
+    <div class="comparison">
+      <div>
+        <span class="badge removed">Before</span>
+        <div class="code-block">
+private boolean isDisabledOnOs(Class&lt;?&gt; inspectionClass) {
+    Optional&lt;?&gt; ma = AnnotationSupport.findAnnotation(
+            inspectionClass, disabledOnOsAnnotation);
+    if (ma.isPresent()) {
+        Object values = <span class="del">disabledOnOsAnnotationValue.invoke(a);</span>
+        // Array reflection because OS enum is
+        // in a different classloader
+        int length = Array.getLength(values);
+        for (int i = 0; i &lt; length; i++) {
+            Object value = Array.get(values, i);
+            boolean matches =
+                    (boolean) <span class="del">osIsCurrent.invoke(value);</span>
+            ...
+        }
+    }
+}
+        </div>
+      </div>
+      <div>
+        <span class="badge added">After</span>
+        <div class="code-block">
+private boolean isDisabledOnCurrentOs(ClassInfo classInfo) {
+    AnnotationInstance ann =
+            classInfo.declaredAnnotation(DISABLED_ON_OS);
+    if (ann == null) return false;
+    AnnotationValue value = ann.value();
+    if (value == null) return false;
+    for (String osName : value.<span class="add">asEnumArray()</span>) {
+        if (OS.valueOf(osName).<span class="add">isCurrentOs()</span>)
+            return true;
+    }
+    return false;
+}
+// No reflection, no Array manipulation,
+// no cross-classloader enum issues
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- @ExtendWith & @RegisterExtension -->
+  <div class="full-width">
+    <div class="section-subtitle">4. @ExtendWith & @RegisterExtension</div>
+    <div class="comparison">
+      <div>
+        <span class="badge removed">Before</span>
+        <div class="code-block">
+// @ExtendWith - string matching on toString()
+Optional&lt;?&gt; a = AnnotationSupport.findAnnotation(
+    inspectionClass, extendWithAnnotation);
+return a.isPresent() &&
+    a.get().<span class="del">toString()</span>.contains(
+        QuarkusTestExtension.class.getName());
+
+// @RegisterExtension - field scanning via reflection
+List&lt;Field&gt; fields = AnnotationSupport
+    .findAnnotatedFields(inspectionClass,
+        registerExtensionAnnotation,
+        f -> f.getType().getName().equals(...));
+// Sometimes throws NoClassDefFoundError!
+        </div>
+      </div>
+      <div>
+        <span class="badge added">After</span>
+        <div class="code-block">
+// @ExtendWith - type-safe class array check
+AnnotationInstance ann =
+        classInfo.declaredAnnotation(EXTEND_WITH);
+for (Type type : ann.value().<span class="add">asClassArray()</span>) {
+    if (type.name().toString()
+            .equals(QUARKUS_TEST_EXTENSION_NAME))
+        return true;
+}
+
+// @RegisterExtension - Jandex field info
+for (FieldInfo field : classInfo.fields()) {
+    if (field.hasAnnotation(REGISTER_EXTENSION) &&
+            field.type().name().toString()
+                    .equals(QUARKUS_TEST_EXTENSION_NAME))
+        return true;
+}
+// No NoClassDefFoundError possible!
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ PROFILES TAB ═══════════════════════════════════ -->
+<div class="panel" id="panel-profiles">
+
+  <div class="section-title">Profile &amp; ClassLoader Key Management</div>
+
+  <div class="full-width">
+    <div class="section-subtitle">Profile Data Flow</div>
+    <p style="font-size:0.88rem; margin-bottom:1rem;">
+      The profile class determines which Quarkus application (and classloader) a test runs in.
+      The key change is <strong>deferring Class&lt;?&gt; loading</strong> until it's actually needed.
+    </p>
+
+    <div class="comparison">
+      <div class="side old">
+        <div class="side-header">BEFORE: Eager Class Loading</div>
+        <div class="side-body">
+          <div class="flow">
+            <div class="flow-step step-bad">
+              <div class="step-label">Constructor</div>
+              <div class="step-title">Load all profile classes eagerly</div>
+              <div class="step-detail">
+                <code>peekingClassLoader.loadClass(profileName)</code><br>
+                → <code>Map&lt;String, Class&lt;?&gt;&gt; profiles</code>
+              </div>
+            </div>
+            <div class="flow-arrow"></div>
+            <div class="flow-step step-warn">
+              <div class="step-label">loadClass()</div>
+              <div class="step-title">Get profile via reflection</div>
+              <div class="step-detail">
+                <code>AnnotationSupport.findAnnotation(inspectionClass, profileAnnotation)</code><br>
+                <code>Method m = profileDeclaration.get().getClass().getMethod("value")</code><br>
+                <code>profile = (Class&lt;?&gt;) m.invoke(profileDeclaration.get())</code>
+              </div>
+            </div>
+            <div class="flow-arrow"></div>
+            <div class="flow-step step-warn">
+              <div class="step-label">getProfileKey()</div>
+              <div class="step-title">Uses Class&lt;?&gt;.getName()</div>
+              <div class="step-detail"><code>profile != null ? profile.getName() : NO_PROFILE</code></div>
+            </div>
+            <div class="flow-arrow"></div>
+            <div class="flow-step step-bad">
+              <div class="step-label">getQuarkusClassLoader()</div>
+              <div class="step-title">Receives Class&lt;?&gt; directly</div>
+              <div class="step-detail">
+                <code>getQuarkusClassLoader(Class&lt;?&gt; requiredTestClass, Class&lt;?&gt; profile)</code><br>
+                Both already loaded by peekingCL
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="side new">
+        <div class="side-header">AFTER: Deferred Class Loading</div>
+        <div class="side-body">
+          <div class="flow">
+            <div class="flow-step step-good">
+              <div class="step-label">Constructor</div>
+              <div class="step-title">Store profile names only</div>
+              <div class="step-detail">
+                <code>this.profileNames = new HashMap&lt;&gt;(profileNames)</code><br>
+                → <code>Map&lt;String, String&gt;</code> — no class loading
+              </div>
+            </div>
+            <div class="flow-arrow"></div>
+            <div class="flow-step step-good">
+              <div class="step-label">loadClass()</div>
+              <div class="step-title">Get profile name from Jandex</div>
+              <div class="step-detail">
+                <code>getTestProfileClassName(classInfo)</code><br>
+                → reads <code>@TestProfile</code> annotation value as <code>Type.name().toString()</code><br>
+                Returns a String, no class loading
+              </div>
+            </div>
+            <div class="flow-arrow"></div>
+            <div class="flow-step step-good">
+              <div class="step-label">getProfileKey()</div>
+              <div class="step-title">Uses String directly</div>
+              <div class="step-detail"><code>profileClassName != null ? profileClassName : NO_PROFILE</code></div>
+            </div>
+            <div class="flow-arrow"></div>
+            <div class="flow-step step-good">
+              <div class="step-label">getQuarkusClassLoader()</div>
+              <div class="step-title">Loads Class&lt;?&gt; on demand</div>
+              <div class="step-detail">
+                <code>getQuarkusClassLoader(String testClassName, String profileClassName)</code><br>
+                Inside: <code>Class&lt;?&gt; testClass = getParent().loadClass(testClassName)</code><br>
+                <em>Only when actually needed for downstream APIs</em>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="full-width">
+    <div class="section-subtitle">getQuarkusClassLoader() Signature Change</div>
+    <div class="code-block">
+// BEFORE:
+<span class="del">private QuarkusClassLoader getQuarkusClassLoader(Class&lt;?&gt; requiredTestClass, Class&lt;?&gt; profile)</span>
+
+// AFTER:
+<span class="add">private QuarkusClassLoader getQuarkusClassLoader(String testClassName, String profileClassName)</span>
+// Inside the method, loads Class&lt;?&gt; from parent CL on demand:
+<span class="add">Class&lt;?&gt; testClass = getParent().loadClass(testClassName);</span>
+<span class="add">Class&lt;?&gt; profileClass = profileClassName != null ? getParent().loadClass(profileClassName) : null;</span>
+    </div>
+    <div class="highlight-box info">
+      <strong>Why load from parent CL?</strong> Downstream APIs (<code>TestResourceUtil.getReloadGroupIdentifier()</code>,
+      <code>TestProfileAndProperties.of()</code>, <code>AppMakerHelper</code>) require <code>Class&lt;?&gt;</code> objects.
+      By loading from the parent (system) CL instead of peekingCL, we avoid the second parallel classloader
+      and load only the specific test/profile classes that are actually QuarkusTests — not every discovered class.
+    </div>
+  </div>
+
+  <div class="full-width">
+    <div class="section-subtitle">close() Cleanup</div>
+    <div class="comparison">
+      <div>
+        <span class="badge removed">Before</span>
+        <div class="code-block">
+public void close() {
+    if (peekingClassLoader != null) {
+        <span class="del">peekingClassLoader.close();</span>  // URLClassLoader.close()
+        peekingClassLoader = null;
+    }
+    keyMakerClassLoader = null;
+    runtimeClassLoaders.clear();
+}
+        </div>
+      </div>
+      <div>
+        <span class="badge added">After</span>
+        <div class="code-block">
+public void close() {
+    <span class="add">jandexIndex = null;</span>  // Just nullify for GC
+    keyMakerClassLoader = null;
+    runtimeClassLoaders.clear();
+}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ IMPACT TAB ═══════════════════════════════════ -->
+<div class="panel" id="panel-impact">
+
+  <div class="section-title">Impact &amp; Tradeoffs</div>
+
+  <div class="full-width">
+    <div class="section-subtitle">Benefits</div>
+    <table>
+      <tr>
+        <th style="width:22%">Category</th>
+        <th style="width:39%">Before (Problem)</th>
+        <th style="width:39%">After (Solution)</th>
+      </tr>
+      <tr>
+        <td><strong>Performance</strong></td>
+        <td class="old-cell">Every class loaded twice: once by peekingCL for inspection, once by runtimeCL for execution. URLClassLoader overhead for each.</td>
+        <td class="new-cell">Annotation inspection via O(1) index lookup. Only QuarkusTest classes loaded (once). Non-test classes get immediate delegation.</td>
+      </tr>
+      <tr>
+        <td><strong>Stability</strong></td>
+        <td class="old-cell"><code>NoClassDefFoundError</code> when peekingCL loads classes with missing transitive dependencies. Required try/catch workarounds.</td>
+        <td class="new-cell">Jandex reads raw bytecode — no dependency resolution. Missing classes simply don't appear in the index.</td>
+      </tr>
+      <tr>
+        <td><strong>Side effects</strong></td>
+        <td class="old-cell">Static initializers run during peeking load. Class-level side effects (resource loading, registration) triggered prematurely.</td>
+        <td class="new-cell">No class loading = no JVM class initialization = no side effects during inspection.</td>
+      </tr>
+      <tr>
+        <td><strong>Cross-CL issues</strong></td>
+        <td class="old-cell">Annotations loaded by peekingCL incompatible with parent CL's versions. Required reflective <code>getMethod("value").invoke()</code> and <code>Array.get()</code> for enum values.</td>
+        <td class="new-cell">DotName constants are plain strings — no classloader boundary issues. Enum values read directly as strings from bytecode.</td>
+      </tr>
+      <tr>
+        <td><strong>Code complexity</strong></td>
+        <td class="old-cell">~13 mutable fields (Class&lt;?&gt; + Method refs). Special handling for isolated vs launcher classloaders. ParentLastURLClassLoader workaround class.</td>
+        <td class="new-cell">1 <code>Index</code> field + 1 boolean + 10 <code>DotName</code> constants (static final). ParentLastURLClassLoader deleted.</td>
+      </tr>
+      <tr>
+        <td><strong>Memory</strong></td>
+        <td class="old-cell">URLClassLoader holds open file handles to all classpath entries. All classes loaded into metaspace by peekingCL (eventually GC'd).</td>
+        <td class="new-cell">Jandex Index is a pure data structure — no file handles, no metaspace pressure. Nullified on close() for immediate GC.</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="full-width">
+    <div class="section-subtitle">Tradeoffs &amp; Edge Cases</div>
+    <table>
+      <tr>
+        <th style="width:30%">Consideration</th>
+        <th>Details</th>
+      </tr>
+      <tr>
+        <td><strong>Index build time</strong></td>
+        <td>Jandex walks <code>target/test-classes</code> and <code>target/classes</code> directories at construction time, reading every <code>.class</code> file. For large projects this is fast (Jandex is optimized for this), but it's a new upfront cost that replaces the per-class cost of peekingCL. Net effect is typically positive because the upfront scan is cheaper than loading hundreds of classes.</td>
+      </tr>
+      <tr>
+        <td><strong>Meta-annotations from JARs</strong></td>
+        <td>Custom annotations defined in library JARs (not in test directories) that are themselves annotated with <code>@QuarkusTest</code> won't be found via Jandex meta-annotation walking, because the annotation class isn't in the index. This is a very rare edge case — the <code>isQuarkusTestViaReflection()</code> fallback handles the <strong>superclass</strong> case but not the <strong>JAR-defined meta-annotation</strong> case.</td>
+      </tr>
+      <tr>
+        <td><strong>JARs on classpath</strong></td>
+        <td>Only directories are indexed, not JARs. This is by design — test classes always live in directories. But if someone had test classes inside a JAR on the classpath, they wouldn't be discovered as QuarkusTests. This matches previous behavior since peekingCL also primarily targeted directory-based classes.</td>
+      </tr>
+      <tr>
+        <td><strong>Jandex dependency</strong></td>
+        <td>Jandex (<code>io.smallrye:jandex</code>) is already a transitive dependency of the test framework module. No new dependency added. It's also heavily used throughout the Quarkus codebase for build-time indexing.</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="full-width">
+    <div class="section-subtitle">Files Changed</div>
+    <table>
+      <tr>
+        <th>File</th>
+        <th>Change</th>
+        <th>Details</th>
+      </tr>
+      <tr>
+        <td><code style="font-size:0.75rem;">FacadeClassLoader.java</code></td>
+        <td><span class="badge changed">Modified</span></td>
+        <td>Core rewrite: peekingClassLoader → Jandex Index. Changed constructor, loadClass(), all annotation check methods, profile handling, close().</td>
+      </tr>
+      <tr>
+        <td><code style="font-size:0.75rem;">ParentLastURLClassLoader.java</code></td>
+        <td><span class="badge removed">Deleted</span></td>
+        <td>No longer needed — was only used as peekingClassLoader within FacadeClassLoader.</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="full-width">
+    <div class="section-subtitle">Removed Dependencies (imports)</div>
+    <div class="comparison">
+      <div>
+        <span class="badge removed">Removed</span>
+        <ul class="detail-list">
+          <li><code>java.lang.annotation.Annotation</code></li>
+          <li><code>java.lang.reflect.Array</code></li>
+          <li><code>java.lang.reflect.Field</code></li>
+          <li><code>java.net.MalformedURLException</code></li>
+          <li><code>java.net.URLClassLoader</code></li>
+          <li><code>java.util.Arrays</code></li>
+          <li><code>org.junit.jupiter.api.Disabled</code></li>
+          <li><code>org.junit.jupiter.api.Nested</code></li>
+          <li><code>org.junit.jupiter.api.Test</code></li>
+          <li><code>org.junit.jupiter.api.condition.DisabledOnOs</code></li>
+          <li><code>org.junit.jupiter.api.extension.ExtendWith</code></li>
+          <li><code>org.junit.jupiter.api.extension.RegisterExtension</code></li>
+          <li><code>o.j.platform.commons.support.AnnotationSupport</code></li>
+          <li><code>o.j.platform.commons.support.HierarchyTraversalMode</code></li>
+        </ul>
+      </div>
+      <div>
+        <span class="badge added">Added</span>
+        <ul class="detail-list">
+          <li><code>org.jboss.jandex.AnnotationInstance</code></li>
+          <li><code>org.jboss.jandex.AnnotationValue</code></li>
+          <li><code>org.jboss.jandex.ClassInfo</code></li>
+          <li><code>org.jboss.jandex.DotName</code></li>
+          <li><code>org.jboss.jandex.FieldInfo</code></li>
+          <li><code>org.jboss.jandex.Index</code></li>
+          <li><code>org.jboss.jandex.Indexer</code></li>
+          <li><code>org.jboss.jandex.Type</code></li>
+          <li><code>java.nio.file.FileVisitResult</code></li>
+          <li><code>java.nio.file.FileVisitor</code></li>
+          <li><code>java.nio.file.Files</code></li>
+          <li><code>java.nio.file.StandardOpenOption</code></li>
+          <li><code>java.nio.file.attribute.BasicFileAttributes</code></li>
+          <li><code>java.util.HashSet</code></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="full-width">
+    <div class="section-subtitle">Visualizing the Loading Difference</div>
+    <p style="font-size:0.88rem; margin-bottom:1rem;">
+      Imagine JUnit discovers 200 classes during test discovery, of which 15 are @QuarkusTest classes:
+    </p>
+    <div class="comparison">
+      <div class="side old">
+        <div class="side-header">BEFORE: 200 + 15 = 215 loads</div>
+        <div class="side-body" style="text-align:center;">
+          <svg viewBox="0 0 300 180" style="max-width:300px;margin:0 auto;">
+            <!-- peekingCL loads -->
+            <rect x="10" y="10" width="280" height="60" rx="6" fill="#fff5f5" stroke="#e53e3e" stroke-width="1.5"/>
+            <text x="150" y="30" text-anchor="middle" font-size="11" font-weight="bold" fill="#c53030">peekingClassLoader</text>
+            <text x="150" y="48" text-anchor="middle" font-size="20" font-weight="800" fill="#c53030">200 class loads</text>
+            <text x="150" y="62" text-anchor="middle" font-size="9" fill="#c53030">(all classes, for annotation inspection)</text>
+            <!-- arrow -->
+            <line x1="150" y1="70" x2="150" y2="90" stroke="#cbd5e0" stroke-width="2"/>
+            <polygon points="145,88 155,88 150,95" fill="#cbd5e0"/>
+            <!-- runtimeCL loads -->
+            <rect x="60" y="95" width="180" height="60" rx="6" fill="#fff5f5" stroke="#e53e3e" stroke-width="1.5"/>
+            <text x="150" y="115" text-anchor="middle" font-size="11" font-weight="bold" fill="#c53030">runtimeClassLoader</text>
+            <text x="150" y="133" text-anchor="middle" font-size="20" font-weight="800" fill="#c53030">15 class loads</text>
+            <text x="150" y="147" text-anchor="middle" font-size="9" fill="#c53030">(QuarkusTest classes, loaded again)</text>
+            <!-- total -->
+            <text x="150" y="175" text-anchor="middle" font-size="12" font-weight="800" fill="#c53030">Total: 215 class loads</text>
+          </svg>
+        </div>
+      </div>
+      <div class="side new">
+        <div class="side-header">AFTER: 0 + 15 = 15 loads</div>
+        <div class="side-body" style="text-align:center;">
+          <svg viewBox="0 0 300 180" style="max-width:300px;margin:0 auto;">
+            <!-- Jandex lookup -->
+            <rect x="10" y="10" width="280" height="60" rx="6" fill="#f0fff4" stroke="#38a169" stroke-width="1.5"/>
+            <text x="150" y="30" text-anchor="middle" font-size="11" font-weight="bold" fill="#276749">Jandex Index</text>
+            <text x="150" y="48" text-anchor="middle" font-size="20" font-weight="800" fill="#276749">200 index lookups</text>
+            <text x="150" y="62" text-anchor="middle" font-size="9" fill="#276749">(O(1) hash lookups, zero class loading)</text>
+            <!-- arrow -->
+            <line x1="150" y1="70" x2="150" y2="90" stroke="#cbd5e0" stroke-width="2"/>
+            <polygon points="145,88 155,88 150,95" fill="#cbd5e0"/>
+            <!-- runtimeCL loads -->
+            <rect x="60" y="95" width="180" height="60" rx="6" fill="#f0fff4" stroke="#38a169" stroke-width="1.5"/>
+            <text x="150" y="115" text-anchor="middle" font-size="11" font-weight="bold" fill="#276749">runtimeClassLoader</text>
+            <text x="150" y="133" text-anchor="middle" font-size="20" font-weight="800" fill="#276749">15 class loads</text>
+            <text x="150" y="147" text-anchor="middle" font-size="9" fill="#276749">(QuarkusTest classes, loaded once)</text>
+            <!-- total -->
+            <text x="150" y="175" text-anchor="middle" font-size="12" font-weight="800" fill="#276749">Total: 15 class loads</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</div><!-- end .content -->
+
+<script>
+// Tab switching
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// Java syntax highlighter — processes text nodes inside .code-block,
+// preserving existing semantic spans (.del, .add, .cmt, etc.)
+(function() {
+  const KEYWORDS = new Set([
+    'abstract','assert','boolean','break','byte','case','catch','char','class',
+    'const','continue','default','do','double','else','enum','extends','final',
+    'finally','float','for','goto','if','implements','import','instanceof','int',
+    'interface','long','native','new','package','private','protected','public',
+    'return','short','static','strictfp','super','switch','synchronized','this',
+    'throw','throws','try','void','volatile','while','var'
+  ]);
+  const LITERALS = new Set(['true','false','null']);
+  const BUILTIN_TYPES = new Set([
+    'String','Object','Class','Method','Field','Optional','List','Map','Set',
+    'HashMap','HashSet','ArrayList','Path','File','URL','IOException',
+    'ClassLoader','URLClassLoader','Exception','RuntimeException',
+    'ClassNotFoundException','NoClassDefFoundError','InvocationTargetException',
+    'IllegalAccessException','NoSuchMethodException','IllegalArgumentException',
+    'SecurityException','Annotation','Closeable','InputStream',
+    // Jandex types
+    'Index','Indexer','ClassInfo','DotName','AnnotationInstance','AnnotationValue',
+    'FieldInfo','Type',
+    // JUnit types
+    'OS',
+    // Quarkus types
+    'QuarkusClassLoader','CuratedApplication','StartupAction',
+    'TestProfileAndProperties','TestProfileConfigSource','TestResourceUtil',
+    'AppMakerHelper','QuarkusTestExtension','FacadeClassLoaderProvider',
+    // Generics placeholders
+    'T'
+  ]);
+
+  function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function highlightJava(text) {
+    // Tokenize: comments, strings, annotations, words, numbers, operators, whitespace, other
+    const tokens = [];
+    let i = 0;
+    while (i < text.length) {
+      // Line comment
+      if (text[i] === '/' && text[i+1] === '/') {
+        let end = text.indexOf('\n', i);
+        if (end === -1) end = text.length;
+        tokens.push({ type: 'comment', value: text.slice(i, end) });
+        i = end;
+        continue;
+      }
+      // Block comment
+      if (text[i] === '/' && text[i+1] === '*') {
+        let end = text.indexOf('*/', i + 2);
+        if (end === -1) end = text.length; else end += 2;
+        tokens.push({ type: 'comment', value: text.slice(i, end) });
+        i = end;
+        continue;
+      }
+      // String literal
+      if (text[i] === '"') {
+        let j = i + 1;
+        while (j < text.length && text[j] !== '"') {
+          if (text[j] === '\\') j++;
+          j++;
+        }
+        j = Math.min(j + 1, text.length);
+        tokens.push({ type: 'string', value: text.slice(i, j) });
+        i = j;
+        continue;
+      }
+      // Char literal
+      if (text[i] === "'") {
+        let j = i + 1;
+        while (j < text.length && text[j] !== "'") {
+          if (text[j] === '\\') j++;
+          j++;
+        }
+        j = Math.min(j + 1, text.length);
+        tokens.push({ type: 'string', value: text.slice(i, j) });
+        i = j;
+        continue;
+      }
+      // Annotation
+      if (text[i] === '@') {
+        let j = i + 1;
+        while (j < text.length && /[\w.]/.test(text[j])) j++;
+        tokens.push({ type: 'annotation', value: text.slice(i, j) });
+        i = j;
+        continue;
+      }
+      // Word (identifier or keyword)
+      if (/[a-zA-Z_$]/.test(text[i])) {
+        let j = i;
+        while (j < text.length && /[\w$]/.test(text[j])) j++;
+        const word = text.slice(i, j);
+        if (KEYWORDS.has(word)) {
+          tokens.push({ type: 'keyword', value: word });
+        } else if (LITERALS.has(word)) {
+          tokens.push({ type: 'keyword', value: word });
+        } else if (BUILTIN_TYPES.has(word) || (word[0] === word[0].toUpperCase() && word[0] !== word[0].toLowerCase() && word.length > 1 && !/^[A-Z_]+$/.test(word))) {
+          tokens.push({ type: 'type', value: word });
+        } else {
+          tokens.push({ type: 'ident', value: word });
+        }
+        i = j;
+        continue;
+      }
+      // Number
+      if (/[0-9]/.test(text[i])) {
+        let j = i;
+        while (j < text.length && /[0-9.xXa-fA-FLl_]/.test(text[j])) j++;
+        tokens.push({ type: 'number', value: text.slice(i, j) });
+        i = j;
+        continue;
+      }
+      // Whitespace
+      if (/\s/.test(text[i])) {
+        let j = i;
+        while (j < text.length && /\s/.test(text[j])) j++;
+        tokens.push({ type: 'ws', value: text.slice(i, j) });
+        i = j;
+        continue;
+      }
+      // Operators / punctuation
+      if ('{}()[];,'.includes(text[i])) {
+        tokens.push({ type: 'punc', value: text[i] });
+        i++;
+        continue;
+      }
+      if ('<>=!+-*/%&|^~?:.'.includes(text[i])) {
+        let j = i;
+        while (j < text.length && '<>=!+-*/%&|^~?:.'.includes(text[j])) j++;
+        tokens.push({ type: 'op', value: text.slice(i, j) });
+        i = j;
+        continue;
+      }
+      // Other
+      tokens.push({ type: 'other', value: text[i] });
+      i++;
+    }
+
+    // Render
+    let html = '';
+    for (const tok of tokens) {
+      const escaped = escapeHtml(tok.value);
+      switch (tok.type) {
+        case 'keyword':    html += '<span class="kw">' + escaped + '</span>'; break;
+        case 'type':       html += '<span class="typ">' + escaped + '</span>'; break;
+        case 'string':     html += '<span class="str">' + escaped + '</span>'; break;
+        case 'comment':    html += '<span class="cmt">' + escaped + '</span>'; break;
+        case 'number':     html += '<span class="num">' + escaped + '</span>'; break;
+        case 'annotation': html += '<span class="ann">' + escaped + '</span>'; break;
+        case 'punc':       html += '<span class="punc">' + escaped + '</span>'; break;
+        case 'op':         html += '<span class="op">' + escaped + '</span>'; break;
+        default:           html += escaped; break;
+      }
+    }
+    return html;
+  }
+
+  // Process each .code-block: walk text nodes, highlight them,
+  // but preserve existing spans (.del, .add, .cmt, etc.) — highlight their contents too.
+  function processNode(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      if (!node.textContent.trim() && !node.textContent.includes('\n')) return;
+      const highlighted = highlightJava(node.textContent);
+      if (highlighted !== escapeHtml(node.textContent)) {
+        const wrapper = document.createElement('span');
+        wrapper.innerHTML = highlighted;
+        node.parentNode.replaceChild(wrapper, node);
+      }
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const tag = node.tagName.toLowerCase();
+      if (tag === 'span') {
+        const cls = node.className;
+        // For semantic spans (.del, .add), highlight their text content
+        // For already-highlighted spans (.kw, .typ, .str, .cmt, .ann, .num, .op, .punc), skip
+        const syntaxClasses = ['kw','typ','str','cmt','ann','num','op','punc'];
+        if (syntaxClasses.includes(cls)) return;
+        // For .del and .add spans, highlight inner text but wrap result in same class
+        if (cls === 'del' || cls === 'add') {
+          const inner = highlightJava(node.textContent);
+          node.innerHTML = inner;
+          return;
+        }
+      }
+      // Process children (copy to array since we modify DOM)
+      const children = Array.from(node.childNodes);
+      children.forEach(processNode);
+    }
+  }
+
+  document.querySelectorAll('.code-block').forEach(block => {
+    // First, trim leading/trailing whitespace caused by HTML indentation.
+    // We need to do this before highlighting so text nodes are clean.
+    trimCodeBlock(block);
+    processNode(block);
+  });
+
+  // Trim leading/trailing blank lines and common indent from code blocks
+  function trimCodeBlock(block) {
+    // Get all text content, split into lines
+    const html = block.innerHTML;
+    // Trim leading and trailing newlines (but preserve inner structure)
+    block.innerHTML = html.replace(/^\s*\n/, '').replace(/\n\s*$/, '');
+  }
+})();
+</script>
+
+</body>
+</html>

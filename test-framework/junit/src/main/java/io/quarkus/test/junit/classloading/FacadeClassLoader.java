@@ -8,36 +8,36 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.annotation.Annotation;
-import java.lang.reflect.Array;
-import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.net.MalformedURLException;
 import java.net.URL;
-import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
+import java.nio.file.FileVisitor;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.ServiceLoader;
 import java.util.Set;
 
+import org.jboss.jandex.AnnotationInstance;
+import org.jboss.jandex.AnnotationValue;
+import org.jboss.jandex.ClassInfo;
+import org.jboss.jandex.DotName;
+import org.jboss.jandex.FieldInfo;
+import org.jboss.jandex.Index;
+import org.jboss.jandex.Indexer;
+import org.jboss.jandex.Type;
 import org.jboss.logging.Logger;
-import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.condition.OS;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.api.extension.RegisterExtension;
-import org.junit.platform.commons.support.AnnotationSupport;
-import org.junit.platform.commons.support.HierarchyTraversalMode;
 
 import io.quarkus.bootstrap.app.CuratedApplication;
 import io.quarkus.bootstrap.app.StartupAction;
@@ -79,42 +79,36 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
     private final Map<String, QuarkusClassLoader> runtimeClassLoaders = new HashMap<>();
     private static final String NO_PROFILE = "no-profile";
 
-    /*
-     * A 'disposable' loader for holding temporary instances of the classes to allow us to inspect them.
-     *
-     * It seems kind of wasteful to load every class twice; that's true, but it's been the case (by a different mechanism)
-     * ever since Quarkus 1.2 and the move to isolated classloaders, because the test extension would reload classes into the
-     * runtime classloader.
-     * In the future, https://openjdk.org/jeps/466 might allow us to avoid loading the classes to avoid a double load in the
-     * delegating classloader. Whether that's actually better than using a disposable classloader + reflection, I don't know.
-     * The solution referenced by
-     * https://github.com/junit-team/junit5/discussions/4203,https://github.com/marcphilipp/gradle-sandbox/blob/
-     * baaa1972e939f5817f54a3d287611cef0601a58d/classloader-per-test-class/src/test/java/org/example/
-     * ClassLoaderReplacingLauncherSessionListener.java#L23-L44
-     * does use a similar approach, although they have a default loader rather than a canary loader.
-     */
-    private URLClassLoader peekingClassLoader;
+    // Jandex annotation DotName constants
+    private static final DotName QUARKUS_TEST = DotName.createSimple("io.quarkus.test.junit.QuarkusTest");
+    private static final DotName QUARKUS_INTEGRATION_TEST = DotName.createSimple(QuarkusIntegrationTest.class.getName());
+    private static final DotName TEST_PROFILE = DotName.createSimple(TestProfile.class.getName());
+    private static final DotName DISABLED = DotName.createSimple("org.junit.jupiter.api.Disabled");
+    private static final DotName DISABLED_ON_OS = DotName.createSimple("org.junit.jupiter.api.condition.DisabledOnOs");
+    private static final DotName NESTED = DotName.createSimple("org.junit.jupiter.api.Nested");
+    private static final DotName EXTEND_WITH = DotName.createSimple("org.junit.jupiter.api.extension.ExtendWith");
+    private static final DotName REGISTER_EXTENSION = DotName.createSimple("org.junit.jupiter.api.extension.RegisterExtension");
+    private static final DotName TEST_ANNOTATION = DotName.createSimple("org.junit.jupiter.api.Test");
+    private static final DotName OBJECT_NAME = DotName.createSimple(Object.class.getName());
 
-    // Ideally these would be final, but we initialise them in a try-catch block and sometimes they will be caught
+    private static final String QUARKUS_TEST_EXTENSION_NAME = QuarkusTestExtension.class.getName();
+
+    /*
+     * A Jandex index built from the classpath directories (not JARs) at construction time.
+     * Used to inspect test class annotations without loading classes, replacing the previous
+     * peekingClassLoader approach. This avoids loading every class twice during discovery
+     * and eliminates NoClassDefFoundError issues from class loading side effects.
+     */
+    private Index jandexIndex;
 
     // JUnit extensions can be registered by a service loader - see https://docs.junit.org/current/user-guide/#extensions-registration
     private boolean isServiceLoaderMechanism;
-    private Method osIsCurrent;
 
-    // These annotations can't be statically loaded because they need to be on the inspection classloader
-    private Class<? extends Annotation> quarkusTestAnnotation;
-    private Class<? extends Annotation> disabledAnnotation;
-    private Class<? extends Annotation> disabledOnOsAnnotation;
-    private Method disabledOnOsAnnotationValue;
-    private Class<? extends Annotation> quarkusIntegrationTestAnnotation;
-    private Class<? extends Annotation> profileAnnotation;
-    private Class<? extends Annotation> nestedAnnotation;
-    private Class<? extends Annotation> extendWithAnnotation;
-    private Class<? extends Annotation> registerExtensionAnnotation;
-    private Class<? extends Annotation> testAnnotation;
+    // Whether the @QuarkusTest annotation is on the classpath at all
+    private boolean quarkusTestAvailable;
 
     // TODO maybe refactor this into a ContinuousFacadeClassLoader subclass
-    private final Map<String, Class<?>> profiles;
+    private final Map<String, String> profileNames;
     private final Set<String> quarkusTestClasses;
     private final boolean isAuxiliaryApplication;
     private QuarkusClassLoader keyMakerClassLoader;
@@ -149,67 +143,36 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
         this.quarkusTestClasses = quarkusTestClasses;
         this.isAuxiliaryApplication = isAuxiliaryApplication;
 
-        URL[] urls = Arrays.stream(classesPath.split(File.pathSeparator))
-                .map(spec -> {
-                    try {
-                        // This manipulation is needed to work in IDEs
-                        if (!spec.endsWith("jar") && !spec.endsWith(File.separator)) {
-                            spec = spec + File.separator;
-                        }
-
-                        return Path.of(spec)
-                                .toUri()
-                                .toURL();
-                    } catch (MalformedURLException e) {
-                        throw new RuntimeException(e);
-                    }
-                })
-                .toArray(URL[]::new);
-
-        // If this is launched with a launcher, java.class.path may be very minimal - see https://maven.apache.org/surefire/maven-surefire-plugin/examples/class-loading.html
-        // Tests using an isolated classloader do not work correctly with continuous testing, but this issue predates the facade classloader - see https://github.com/quarkusio/quarkus/issues/46478
-        // What kind of tests use an isolated classloader? Maven will create one (and also a normal classloader) for tests with `@WithFunction`
-        // TODO this special casing is pretty fragile and pretty ugly; without it, @WithFunction tests do not pass, such as google cloud functions
-        boolean launcherClassloader = !(classesPath.contains(File.pathSeparator));
-
-        ClassLoader annotationLoader;
-        if (launcherClassloader) {
-            // If the classloader is isolated, putting the parent into the peeking classloader will just load all classes with the parent, which isn't what's wanted (and causes @WithFunction tests to fail)
-            peekingClassLoader = new URLClassLoader(urls, null);
-            // ... but we need some way to load annotations, because they won't be visible on the classpath property
-            annotationLoader = parent;
-        } else {
-            peekingClassLoader = new ParentLastURLClassLoader(urls, parent);
-            annotationLoader = peekingClassLoader;
+        // Build a Jandex index from classpath directories (not JARs) for annotation inspection.
+        // Test classes live in directories (e.g. target/test-classes), not in JARs.
+        // This replaces the peekingClassLoader: instead of loading every class to inspect annotations,
+        // we read bytecode directly via Jandex - no class loading, no static initializers, no dependency resolution.
+        Indexer indexer = new Indexer();
+        for (String spec : classesPath.split(File.pathSeparator)) {
+            Path path = Path.of(spec);
+            // Only index directories, not JARs - test classes are always in directories
+            if (Files.isDirectory(path)) {
+                indexDirectory(indexer, path);
+            }
         }
+        jandexIndex = indexer.complete();
 
-        // In the isolated classloader case, we actually never discover any quarkus tests, and a new instance gets created;
-        // but to be safe, initialise our instance variables. We can't use the peekingClassLoader because it can't see JUnit classes, so just use the parent
-        // We have to use reflection because the peekingclassloader may have different versions of the JUnit classes than this class, especially when running with gradle
+        // Check if QuarkusTest is reachable at all
         try {
-            extendWithAnnotation = (Class<? extends Annotation>) annotationLoader.loadClass(ExtendWith.class.getName());
-            disabledAnnotation = (Class<? extends Annotation>) annotationLoader.loadClass(Disabled.class.getName());
-            disabledOnOsAnnotation = (Class<? extends Annotation>) annotationLoader.loadClass(DisabledOnOs.class.getName());
-            Class<?> osClass = annotationLoader.loadClass(OS.class.getName());
-            osIsCurrent = osClass.getMethod("isCurrentOs");
-            disabledOnOsAnnotationValue = disabledOnOsAnnotation.getMethod("value");
-            registerExtensionAnnotation = (Class<? extends Annotation>) annotationLoader
-                    .loadClass(RegisterExtension.class.getName());
-            quarkusTestAnnotation = (Class<? extends Annotation>) annotationLoader
-                    .loadClass("io.quarkus.test.junit.QuarkusTest");
-            quarkusIntegrationTestAnnotation = (Class<? extends Annotation>) annotationLoader
-                    .loadClass(QuarkusIntegrationTest.class.getName());
-            profileAnnotation = (Class<? extends Annotation>) annotationLoader
-                    .loadClass(TestProfile.class.getName());
-            nestedAnnotation = (Class<? extends Annotation>) annotationLoader
-                    .loadClass(Nested.class.getName());
-            testAnnotation = (Class<? extends Annotation>) annotationLoader.loadClass(Test.class.getName());
-        } catch (ClassNotFoundException | NoSuchMethodException e) {
-            // If QuarkusTest is not on the classpath, that's fine; it just means we definitely won't have QuarkusTests. That means we can bypass a whole bunch of logic.
-            log.debug("Could not load annotations for FacadeClassLoader: " + e);
+            parent.loadClass("io.quarkus.test.junit.QuarkusTest");
+            quarkusTestAvailable = true;
+        } catch (ClassNotFoundException e) {
+            // If QuarkusTest is not on the classpath, that's fine; it just means we definitely won't have QuarkusTests
+            log.debug("QuarkusTest not on classpath: " + e);
+            quarkusTestAvailable = false;
         }
+
+        // Determine the annotation loader - need this to scan META-INF/services
+        // If this is launched with a launcher, java.class.path may be very minimal - see https://maven.apache.org/surefire/maven-surefire-plugin/examples/class-loading.html
+        ClassLoader annotationLoader = parent;
+
         // We want to see what services are registered, but without going through the service loader, since that results in a huge catastrophe of class not found exceptions
-        // as the servoce loader tries to instantiate things in a nobbled loader. Instead, do it in a crude, safe, way by looking for the resource files and reading them.
+        // as the service loader tries to instantiate things in a nobbled loader. Instead, do it in a crude, safe, way by looking for the resource files and reading them.
         try {
             Enumeration<URL> declaredExtensions = annotationLoader
                     .getResources("META-INF/services/org.junit.jupiter.api.extension.Extension");
@@ -217,8 +180,7 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
                 URL url = declaredExtensions.nextElement();
                 try (InputStream in = url.openStream()) {
                     String contents = new String(in.readAllBytes(), StandardCharsets.UTF_8).trim();
-                    if (QuarkusTestExtension.class.getName()
-                            .equals(contents)) {
+                    if (QUARKUS_TEST_EXTENSION_NAME.equals(contents)) {
                         isServiceLoaderMechanism = true;
                     }
                 }
@@ -229,23 +191,10 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
         }
 
         if (profileNames != null) {
-            this.profiles = new HashMap<>();
-
-            profileNames.forEach((k, profileName) -> {
-                Class<?> profile;
-                if (profileName != null) {
-                    try {
-                        profile = peekingClassLoader.loadClass(profileName);
-                    } catch (ClassNotFoundException e1) {
-                        throw new RuntimeException(e1);
-                    }
-                    this.profiles.put(k, profile);
-                }
-
-            });
+            this.profileNames = new HashMap<>(profileNames);
         } else {
             // We set it to null so we know not to look in it
-            this.profiles = null;
+            this.profileNames = null;
         }
 
         facadeClassLoaderProviders = new ArrayList<>();
@@ -269,15 +218,14 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
         // and nothing will be logged here; it will look like classloading didn't happen, but the problem is actually a stale instance
         log.debugf("Facade classloader loading %s for the first time\n", name);
 
-        if (peekingClassLoader == null) {
+        if (jandexIndex == null) {
             throw new RuntimeException("Attempted to load classes with a closed classloader: " + this);
         }
         boolean isQuarkusTest = false;
         boolean isIntegrationTest = false;
-        Class<?> inspectionClass = null;
 
         // If the service loader mechanism is being used, QuarkusTestExtension gets loaded before any extensions which use it. We need to make sure it's on the right classloader.
-        if (isServiceLoaderMechanism && (name.equals(QuarkusTestExtension.class.getName()))) {
+        if (isServiceLoaderMechanism && (name.equals(QUARKUS_TEST_EXTENSION_NAME))) {
             try {
                 // We don't have enough information to make a runtime classloader yet, but we can make a curated application and a base classloader
                 QuarkusClassLoader runtimeClassLoader = getOrCreateBaseClassLoader(getProfileKey(null), null);
@@ -289,73 +237,48 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
 
         try {
 
-            Class<?> profile = null;
+            String profileClassName = null;
             if (isContinuousTesting && !isServiceLoaderMechanism) {
                 isQuarkusTest = quarkusTestClasses.contains(name);
-
-                profile = profiles.get(name);
-
-                // In continuous testing, only load an inspection version of the class if it's a QuarkusTest
-                if (isQuarkusTest) {
-                    try {
-                        inspectionClass = peekingClassLoader.loadClass(name);
-                    } catch (ClassNotFoundException | NoClassDefFoundError e) {
-                        return super.loadClass(name);
-                    }
-                }
-
+                profileClassName = profileNames != null ? profileNames.get(name) : null;
             } else {
-                if (quarkusTestAnnotation != null) {
-                    // If it's not continuous testing, we need to load everything in order to decide if it's a QuarkusTest
-                    try {
-                        inspectionClass = peekingClassLoader.loadClass(name);
-                    } catch (ClassNotFoundException | NoClassDefFoundError e) {
+                if (quarkusTestAvailable) {
+                    // Use the Jandex index to inspect annotations without loading the class
+                    ClassInfo classInfo = jandexIndex.getClassByName(name);
+
+                    if (classInfo == null) {
+                        // Class is not in test classes directories (it's from a JAR or not on the classpath).
+                        // It can't be a user test class, so delegate to parent.
                         return super.loadClass(name);
                     }
 
-                    if (!inspectionClass.isAnnotation()) {
+                    if (!classInfo.isAnnotation()) {
 
                         if (isServiceLoaderMechanism) {
-                            List<Method> anns = AnnotationSupport.findAnnotatedMethods(inspectionClass, testAnnotation,
-                                    HierarchyTraversalMode.BOTTOM_UP);
                             // If a service loader was used to register QuarkusTestExtension, every JUnit test is a QuarkusTest
-                            isQuarkusTest = !anns.isEmpty();
+                            isQuarkusTest = hasTestMethods(classInfo);
                         }
 
                         // Because (until we do https://github.com/quarkusio/quarkus/issues/45785) we start dev services for disabled tests when we load them with the quarkus classloader, and those dev services often fail, put in some
                         // bypasses.
                         // These bypasses are also useful for performance.
-                        // Ideally we would check for every way of disabling a test, but we don't want to recreate the JUnit logic, so just do common ones that might be guarding classes with classloading or dev-service-starting issues
-                        // That does mean our behaviour in this area is slightly inconsistent between annotations; for some we will augment before giving up and for some we won't
-                        boolean isDisabled = AnnotationSupport.isAnnotated(inspectionClass, disabledAnnotation)
-                                || isDisabledOnOs(inspectionClass);
+                        boolean isDisabled = hasAnnotation(classInfo, DISABLED)
+                                || isDisabledOnCurrentOs(classInfo);
 
                         // If a whole test class has an @Disabled annotation, do not bother creating a quarkus app for it
                         // Pragmatically, this fixes a LinkageError in grpc-cli which only reproduces in CI, but it's also probably what users would expect
                         if (!isDisabled) {
                             // There are several ways a test could be identified as a QuarkusTest:
                             // A Quarkus Test could be annotated with @QuarkusTest or with @ExtendWith[... QuarkusTestExtension.class ] or @RegisterExtension (or the service loader mechanism could be used)
-                            // An @interface isn't a quarkus test, and doesn't want its own application; to detect it, just check if it has a superclass
 
                             isQuarkusTest = isQuarkusTest
-                                    || isQuarkusTest(inspectionClass);
+                                    || isQuarkusTest(classInfo);
 
                             if (isQuarkusTest) {
                                 // Many integration tests have Quarkus higher up in the hierarchy, but they do not count as QuarkusTests and have to be run differently
-                                isIntegrationTest = !inspectionClass.isAnnotation()
-                                        && (AnnotationSupport.isAnnotated(inspectionClass, quarkusIntegrationTestAnnotation));
+                                isIntegrationTest = hasAnnotation(classInfo, QUARKUS_INTEGRATION_TEST);
 
-                                Optional<? extends Annotation> profileDeclaration = AnnotationSupport.findAnnotation(
-                                        inspectionClass,
-                                        profileAnnotation);
-                                if (profileDeclaration.isPresent()) {
-
-                                    Method m = profileDeclaration.get()
-                                            .getClass()
-                                            .getMethod(VALUE);
-                                    // We can't be specific about what the class extends, because it's loaded with another classloader
-                                    profile = (Class<?>) m.invoke(profileDeclaration.get());
-                                }
+                                profileClassName = getTestProfileClassName(classInfo);
                             }
                         }
                     }
@@ -363,7 +286,7 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
             }
 
             if (isQuarkusTest && !isIntegrationTest) {
-                QuarkusClassLoader runtimeClassLoader = getQuarkusClassLoader(inspectionClass, profile);
+                QuarkusClassLoader runtimeClassLoader = getQuarkusClassLoader(name, profileClassName);
                 return runtimeClassLoader.loadClass(name);
             } else {
                 for (FacadeClassLoaderProvider p : facadeClassLoaderProviders) {
@@ -376,126 +299,300 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
                 return super.loadClass(name);
             }
 
-        } catch (NoSuchMethodException e) {
-            log.error("Could not get method " + e);
-            throw new RuntimeException(e);
-        } catch (InvocationTargetException e) {
-            log.error("Could not invoke " + e);
-            throw new RuntimeException(e);
-        } catch (IllegalAccessException e) {
-            log.error("Could not access " + e);
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (ClassNotFoundException e) {
+            throw e;
+        } catch (Exception e) {
             throw new RuntimeException(e);
         }
 
     }
 
-    private boolean isQuarkusTest(Class<?> inspectionClass) throws ClassNotFoundException {
-        boolean isQuarkusAtTopLevel = AnnotationSupport.isAnnotated(inspectionClass,
-                quarkusTestAnnotation) // AnnotationSupport picks up cases where a class is annotated with an annotation which itself includes the annotation we care about
-                || registersQuarkusTestExtensionWithExtendsWith(inspectionClass)
-                || registersQuarkusTestExtensionOnField(inspectionClass);
-
-        if (isQuarkusAtTopLevel) {
+    /**
+     * Checks whether a class is a QuarkusTest using the Jandex index.
+     * Walks class hierarchy and meta-annotations within the index,
+     * with a reflection fallback for superclasses not in the index.
+     */
+    private boolean isQuarkusTest(ClassInfo classInfo) {
+        if (hasQuarkusTestMarker(classInfo)) {
             return true;
-        } else {
-            // Normally we wouldn't load nested classes but when launched in an IDE at package level, they're sometimes included; make sure we identify them correctly
-            boolean isNested = AnnotationSupport.isAnnotated(inspectionClass, nestedAnnotation);
-            if (isNested) {
-                String parentName = inspectionClass.getName().substring(0,
-                        inspectionClass.getName().lastIndexOf("$"));
-                Class<?> inspectionParentClass = peekingClassLoader.loadClass(parentName);
-                return isQuarkusTest(inspectionParentClass);
+        }
+
+        // Walk superclass hierarchy
+        DotName superName = classInfo.superName();
+        while (superName != null && !OBJECT_NAME.equals(superName)) {
+            ClassInfo superInfo = jandexIndex.getClassByName(superName);
+            if (superInfo != null) {
+                if (hasQuarkusTestMarker(superInfo)) {
+                    return true;
+                }
+                superName = superInfo.superName();
             } else {
-                return false;
+                // Superclass not in index (from a JAR) - fall back to reflection for the rest of the hierarchy.
+                // This is a targeted load of just this superclass, not every class.
+                if (isQuarkusTestViaReflection(superName.toString())) {
+                    return true;
+                }
+                break;
             }
         }
 
+        // Check @Nested parent
+        if (classInfo.hasDeclaredAnnotation(NESTED)) {
+            DotName enclosingName = classInfo.enclosingClass();
+            if (enclosingName != null) {
+                ClassInfo parentInfo = jandexIndex.getClassByName(enclosingName);
+                if (parentInfo != null) {
+                    return isQuarkusTest(parentInfo);
+                }
+            }
+        }
+
+        return false;
     }
 
-    private boolean isDisabledOnOs(Class<?> inspectionClass) {
-        Optional<? extends Annotation> ma = AnnotationSupport.findAnnotation(inspectionClass, disabledOnOsAnnotation);
-        if (ma.isPresent()) {
-            Annotation a = ma.get();
-            try {
-                Object values = disabledOnOsAnnotationValue.invoke(a);
-                if (values.getClass().isArray()) {
-                    int length = Array.getLength(values);
-                    for (int i = 0; i < length; i++) {
-                        Object value = Array.get(values, i); // an OS, but we can't cast to it because it's in a different classloader
-                        boolean matches = (boolean) osIsCurrent.invoke(value);
-                        if (matches) {
-                            return true;
-                        }
-                    }
-                }
-            } catch (IllegalAccessException | InvocationTargetException e) {
-                throw new RuntimeException(e);
+    /**
+     * Checks if a class has any of the markers that make it a QuarkusTest:
+     * {@code @QuarkusTest} (including via meta-annotation within the index),
+     * {@code @ExtendWith(QuarkusTestExtension.class)}, or
+     * {@code @RegisterExtension} field of type QuarkusTestExtension.
+     */
+    private boolean hasQuarkusTestMarker(ClassInfo classInfo) {
+        // Direct checks on this class
+        if (classInfo.hasDeclaredAnnotation(QUARKUS_TEST)) {
+            return true;
+        }
+        if (hasExtendWithQuarkusTestExtensionDirect(classInfo)) {
+            return true;
+        }
+        // Check @RegisterExtension fields with QuarkusTestExtension type
+        if (hasRegisterExtensionField(classInfo)) {
+            return true;
+        }
+        // Walk meta-annotations looking for @QuarkusTest or @ExtendWith(QuarkusTestExtension.class)
+        for (AnnotationInstance ann : classInfo.declaredAnnotations()) {
+            ClassInfo annClassInfo = jandexIndex.getClassByName(ann.name());
+            if (annClassInfo != null && hasQuarkusTestMarkerRecursive(annClassInfo, new HashSet<>())) {
+                return true;
             }
         }
         return false;
     }
 
-    private boolean registersQuarkusTestExtensionWithExtendsWith(Class<?> inspectionClass) {
-
-        Optional<? extends Annotation> a = AnnotationSupport.findAnnotation(inspectionClass, extendWithAnnotation);
-        // This toString looks sloppy, but we cannot do an equals() because there might be multiple JUnit extensions, and getting the annotation value would need a reflective call, which may not be any cheaper or prettier than doing the string
-        return (a.isPresent() && a.get().toString().contains(QuarkusTestExtension.class.getName()));
-
-    }
-
-    private boolean registersQuarkusTestExtensionOnField(Class<?> inspectionClass) {
-
-        try {
-            // We are looking for an instance of QuarkusTestExtension with a @RegistersExtension annotation
-            List<Field> fields = AnnotationSupport.findAnnotatedFields(inspectionClass, registerExtensionAnnotation,
-                    f -> f.getType()
-                            .getName()
-                            .equals(QuarkusTestExtension.class.getName()));
-
-            return fields != null && !fields.isEmpty();
-        } catch (NoClassDefFoundError e) {
-            // Under the covers, JUnit calls getDefinedFields, and that sometimes throws class-related in native mode
-            // With -Dnative loading the KeycloakRealmResourceManager gives a class not found exception for junit's TestRule
-            // java.lang.RuntimeException: java.lang.NoClassDefFoundError: org/junit/rules/TestRule
-            // TODO it would be nice to diagnose why that's happening
-            log.warn("Could not discover field annotations: " + e);
+    /**
+     * Recursively walks meta-annotations in the Jandex index looking for
+     * {@code @QuarkusTest} or {@code @ExtendWith(QuarkusTestExtension.class)}.
+     */
+    private boolean hasQuarkusTestMarkerRecursive(ClassInfo annotationClassInfo, Set<DotName> visited) {
+        if (!visited.add(annotationClassInfo.name())) {
             return false;
         }
-
+        if (annotationClassInfo.hasDeclaredAnnotation(QUARKUS_TEST)) {
+            return true;
+        }
+        if (hasExtendWithQuarkusTestExtensionDirect(annotationClassInfo)) {
+            return true;
+        }
+        for (AnnotationInstance ann : annotationClassInfo.declaredAnnotations()) {
+            ClassInfo nextAnn = jandexIndex.getClassByName(ann.name());
+            if (nextAnn != null && hasQuarkusTestMarkerRecursive(nextAnn, visited)) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    private QuarkusClassLoader getQuarkusClassLoader(Class<?> requiredTestClass, Class<?> profile) {
-        String profileKey = getProfileKey(profile);
+    /**
+     * Checks whether a class has a given annotation, including via meta-annotations
+     * (annotations on annotations) within the Jandex index.
+     */
+    private boolean hasAnnotation(ClassInfo classInfo, DotName annotationName) {
+        if (classInfo.hasDeclaredAnnotation(annotationName)) {
+            return true;
+        }
+        // Walk meta-annotations: check if any annotation on this class is itself annotated with the target
+        for (AnnotationInstance ann : classInfo.declaredAnnotations()) {
+            ClassInfo annClassInfo = jandexIndex.getClassByName(ann.name());
+            if (annClassInfo != null && hasAnnotationRecursive(annClassInfo, annotationName, new HashSet<>())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasAnnotationRecursive(ClassInfo annotationClassInfo, DotName target, Set<DotName> visited) {
+        if (!visited.add(annotationClassInfo.name())) {
+            return false;
+        }
+        if (annotationClassInfo.hasDeclaredAnnotation(target)) {
+            return true;
+        }
+        for (AnnotationInstance ann : annotationClassInfo.declaredAnnotations()) {
+            ClassInfo nextAnn = jandexIndex.getClassByName(ann.name());
+            if (nextAnn != null && hasAnnotationRecursive(nextAnn, target, visited)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Fallback for checking @QuarkusTest on superclasses that are not in the Jandex index
+     * (e.g., base test classes in library JARs). Loads only the specific superclass via parent CL.
+     */
+    private boolean isQuarkusTestViaReflection(String className) {
+        try {
+            Class<?> cls = getParent().loadClass(className);
+            // Walk up until we find @QuarkusTest or reach Object
+            while (cls != null && cls != Object.class) {
+                for (java.lang.annotation.Annotation ann : cls.getDeclaredAnnotations()) {
+                    String annName = ann.annotationType().getName();
+                    if (annName.equals(QUARKUS_TEST.toString())) {
+                        return true;
+                    }
+                    // Check meta-annotations one level deep (covers @QuarkusTest on custom annotations)
+                    for (java.lang.annotation.Annotation metaAnn : ann.annotationType().getDeclaredAnnotations()) {
+                        if (metaAnn.annotationType().getName().equals(QUARKUS_TEST.toString())) {
+                            return true;
+                        }
+                    }
+                }
+                // Also check @ExtendWith
+                for (java.lang.annotation.Annotation ann : cls.getDeclaredAnnotations()) {
+                    if (ann.annotationType().getName().equals(EXTEND_WITH.toString())) {
+                        if (ann.toString().contains(QUARKUS_TEST_EXTENSION_NAME)) {
+                            return true;
+                        }
+                    }
+                }
+                cls = cls.getSuperclass();
+            }
+        } catch (ClassNotFoundException | NoClassDefFoundError e) {
+            log.debugf("Could not load superclass %s for QuarkusTest check: %s", className, e);
+        }
+        return false;
+    }
+
+    /**
+     * Check if any methods have @Test annotation (for service loader mechanism).
+     */
+    private boolean hasTestMethods(ClassInfo classInfo) {
+        return classInfo.methods().stream().anyMatch(m -> m.hasAnnotation(TEST_ANNOTATION));
+    }
+
+    private boolean isDisabledOnCurrentOs(ClassInfo classInfo) {
+        AnnotationInstance ann = classInfo.declaredAnnotation(DISABLED_ON_OS);
+        if (ann == null) {
+            return false;
+        }
+        AnnotationValue value = ann.value();
+        if (value == null) {
+            return false;
+        }
+        for (String osName : value.asEnumArray()) {
+            try {
+                if (OS.valueOf(osName).isCurrentOs()) {
+                    return true;
+                }
+            } catch (IllegalArgumentException e) {
+                // Unknown OS enum constant - ignore
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Checks if this specific class/annotation has {@code @ExtendWith(QuarkusTestExtension.class)} directly declared.
+     * Does NOT walk meta-annotations — that is handled by {@link #hasQuarkusTestMarkerRecursive}.
+     */
+    private boolean hasExtendWithQuarkusTestExtensionDirect(ClassInfo classInfo) {
+        AnnotationInstance ann = classInfo.declaredAnnotation(EXTEND_WITH);
+        if (ann == null) {
+            return false;
+        }
+        AnnotationValue value = ann.value();
+        if (value == null) {
+            return false;
+        }
+        for (Type type : value.asClassArray()) {
+            if (type.name().toString().equals(QUARKUS_TEST_EXTENSION_NAME)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasRegisterExtensionField(ClassInfo classInfo) {
+        for (FieldInfo field : classInfo.fields()) {
+            if (field.hasAnnotation(REGISTER_EXTENSION)
+                    && field.type().name().toString().equals(QUARKUS_TEST_EXTENSION_NAME)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Extracts the @TestProfile value class name from a ClassInfo, or null if not present.
+     * Walks meta-annotations and enclosing classes for @Nested tests.
+     */
+    private String getTestProfileClassName(ClassInfo classInfo) {
+        // Direct check
+        AnnotationInstance profileAnn = classInfo.declaredAnnotation(TEST_PROFILE);
+        if (profileAnn != null) {
+            AnnotationValue value = profileAnn.value();
+            if (value != null) {
+                return value.asClass().name().toString();
+            }
+        }
+        // For @Nested classes, check enclosing class
+        if (classInfo.hasDeclaredAnnotation(NESTED)) {
+            DotName enclosingName = classInfo.enclosingClass();
+            if (enclosingName != null) {
+                ClassInfo enclosing = jandexIndex.getClassByName(enclosingName);
+                if (enclosing != null) {
+                    return getTestProfileClassName(enclosing);
+                }
+            }
+        }
+        return null;
+    }
+
+    private QuarkusClassLoader getQuarkusClassLoader(String testClassName, String profileClassName) {
+        String profileKey = getProfileKey(profileClassName);
 
         try {
             String key;
             QuarkusClassLoader classLoader;
 
+            // Load test class from parent CL for downstream APIs that need Class<?>
+            Class<?> testClass = getParent().loadClass(testClassName);
+            Class<?> profileClass = profileClassName != null ? getParent().loadClass(profileClassName) : null;
+
             // We cannot directly access TestResourceUtil as long as we're in the core module, but the app classloaders can.
             // But, chicken-and-egg, we may not have an app classloader yet. However, if we don't, we won't need to worry about restarts, but this instance clearly cannot need a restart
-
-            // TODO do the experiment - can it now work to use the peekingclassloader instead of the keymaker?
 
             // If we make a classloader with a null profile, we get the problem of starting dev services multiple times, which is very bad (if temporary) - once that issue is fixed, could reconsider
             if (keyMakerClassLoader == null) {
                 // Making a classloader uses the profile key to look up a curated application
-                classLoader = getOrCreateRuntimeClassLoader(profileKey, requiredTestClass, Optional.ofNullable(profile));
+                classLoader = getOrCreateRuntimeClassLoader(profileKey, testClass, Optional.ofNullable(profileClass));
                 keyMakerClassLoader = classLoader;
 
                 // We cannot use the startup action one because it's a base runtime classloader and so will not have the right access to application classes (they're in its banned list)
-                final String resourceKey = requiredTestClass != null ? getResourceKey(requiredTestClass, profile) : null;
+                final String resourceKey = getResourceKey(testClass, profileClass);
 
                 // The resource key might be null, and that's ok
                 key = profileKey + resourceKey;
             } else {
-                final String resourceKey = requiredTestClass != null ? getResourceKey(requiredTestClass, profile) : null;
+                final String resourceKey = getResourceKey(testClass, profileClass);
 
                 // The resource key might be null, and that's ok
                 key = profileKey + resourceKey;
                 classLoader = runtimeClassLoaders.get(key);
                 if (classLoader == null) {
                     // Making a classloader uses the profile key to look up a curated application
-                    classLoader = getOrCreateRuntimeClassLoader(profileKey, requiredTestClass, Optional.ofNullable(profile));
+                    classLoader = getOrCreateRuntimeClassLoader(profileKey, testClass, Optional.ofNullable(profileClass));
                 }
             }
 
@@ -512,9 +609,8 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
         }
     }
 
-    private static String getProfileKey(Class<?> profile) {
-        final String profileName = profile != null ? profile.getName() : NO_PROFILE;
-        return KEY_PREFIX + profileName;
+    private static String getProfileKey(String profileClassName) {
+        return KEY_PREFIX + (profileClassName != null ? profileClassName : NO_PROFILE);
     }
 
     private String getResourceKey(Class<?> requiredTestClass, Class<?> profile)
@@ -524,7 +620,6 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
 
         ClassLoader classLoader = keyMakerClassLoader;
         // We have to access TestResourceUtil reflectively, because if we used this class's classloader, it might be an augmentation classloader without access to application classes
-        // TODO check this is true, try skipping reflection and also using the peeking loader
         Method method = Class
                 .forName(TestResourceUtil.class.getName(), true, classLoader)
                 .getMethod("getReloadGroupIdentifier", Class.class, Class.class);
@@ -602,15 +697,46 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
 
     @Override
     public void close() throws IOException {
-
-        if (peekingClassLoader != null) {
-            peekingClassLoader.close();
-            peekingClassLoader = null;
-        }
+        jandexIndex = null;
 
         // Null out the keymaker classloader and runtime classloaders, but don't close them, since we assume they will be closed by the test framework closing the owning application
         keyMakerClassLoader = null;
         runtimeClassLoaders.clear();
 
+    }
+
+    private static void indexDirectory(Indexer indexer, Path directory) {
+        try {
+            Files.walkFileTree(directory, new FileVisitor<>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    if (file.getFileName().toString().endsWith(".class")) {
+                        try (InputStream in = Files.newInputStream(file, StandardOpenOption.READ)) {
+                            indexer.index(in);
+                        } catch (Exception e) {
+                            // ignore - class files that can't be indexed are skipped
+                        }
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult postVisitDirectory(Path dir, IOException exc) {
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException e) {
+            log.debug("Could not index directory " + directory + ": " + e);
+        }
     }
 }

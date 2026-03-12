@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quarkus JUnit Integration &amp; ClassLoading Setup</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --surface2: #334155;
+    --border: #475569;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --accent: #38bdf8;
+    --accent2: #818cf8;
+    --accent3: #a78bfa;
+    --green: #4ade80;
+    --orange: #fb923c;
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --pink: #f472b6;
+    --teal: #2dd4bf;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 2rem;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .subtitle {
+    text-align: center;
+    color: var(--text-dim);
+    margin-bottom: 2rem;
+    font-size: 0.95rem;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .tab {
+    padding: 0.5rem 1.2rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+  }
+
+  .tab:hover { border-color: var(--accent); color: var(--text); }
+  .tab.active {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #fff;
+    border-color: transparent;
+  }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* Diagram containers */
+  .diagram-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    overflow-x: auto;
+  }
+
+  .diagram-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    color: var(--accent);
+  }
+
+  /* SVG diagrams */
+  svg text { font-family: 'Inter', system-ui, sans-serif; }
+
+  /* Flow steps */
+  .flow-section {
+    margin-bottom: 2rem;
+  }
+
+  .flow-section h3 {
+    color: var(--accent2);
+    font-size: 1.1rem;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent2);
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .code-ref {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.82rem;
+    background: var(--surface2);
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    color: var(--yellow);
+    border: 1px solid var(--border);
+  }
+
+  .detail-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 0.75rem 0;
+    font-size: 0.9rem;
+  }
+
+  .detail-box p { margin-bottom: 0.5rem; }
+  .detail-box p:last-child { margin-bottom: 0; }
+
+  .highlight { color: var(--accent); font-weight: 600; }
+  .highlight2 { color: var(--green); font-weight: 600; }
+  .highlight3 { color: var(--orange); font-weight: 600; }
+  .highlight4 { color: var(--pink); font-weight: 600; }
+  .highlight5 { color: var(--teal); font-weight: 600; }
+
+  ul { padding-left: 1.5rem; margin: 0.5rem 0; }
+  li { margin-bottom: 0.3rem; font-size: 0.9rem; }
+
+  .arrow-label {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    font-style: italic;
+  }
+
+  /* Classloader hierarchy boxes */
+  .cl-box {
+    border: 2px solid;
+    border-radius: 10px;
+    padding: 1rem;
+    margin: 0.5rem;
+    position: relative;
+  }
+
+  .cl-name {
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin-bottom: 0.4rem;
+  }
+
+  .cl-desc {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+  }
+
+  /* Two column layout */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+
+  @media (max-width: 900px) {
+    .two-col { grid-template-columns: 1fr; }
+  }
+
+  .legend {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+  }
+
+  .legend-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    border: 2px solid;
+  }
+
+  .file-path {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    word-break: break-all;
+  }
+</style>
+</head>
+<body>
+
+<h1>Quarkus JUnit Integration &amp; ClassLoading</h1>
+<p class="subtitle">How Quarkus sets up classloaders and bootstraps an application before running @QuarkusTest tests</p>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('overview')">Overview Flow</div>
+  <div class="tab" onclick="showTab('classloaders')">ClassLoader Hierarchy</div>
+  <div class="tab" onclick="showTab('lifecycle')">JUnit Lifecycle</div>
+  <div class="tab" onclick="showTab('discovery')">Discovery &amp; Loading</div>
+  <div class="tab" onclick="showTab('bootstrap')">Bootstrap &amp; Augmentation</div>
+  <div class="tab" onclick="showTab('files')">Key Source Files</div>
+</div>
+
+<!-- ======================== OVERVIEW TAB ======================== -->
+<div id="overview" class="panel active">
+  <div class="diagram-container">
+    <div class="diagram-title">End-to-End Flow: From @QuarkusTest to Test Execution</div>
+    <svg viewBox="0 0 1200 1050" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:1200px;margin:0 auto;display:block">
+      <defs>
+        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#38bdf8"/>
+        </marker>
+        <marker id="arrowhead-green" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#4ade80"/>
+        </marker>
+        <marker id="arrowhead-orange" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#fb923c"/>
+        </marker>
+        <marker id="arrowhead-purple" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa"/>
+        </marker>
+        <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" style="stop-color:#38bdf8;stop-opacity:0.15"/>
+          <stop offset="100%" style="stop-color:#818cf8;stop-opacity:0.15"/>
+        </linearGradient>
+        <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" style="stop-color:#4ade80;stop-opacity:0.15"/>
+          <stop offset="100%" style="stop-color:#2dd4bf;stop-opacity:0.15"/>
+        </linearGradient>
+        <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" style="stop-color:#fb923c;stop-opacity:0.15"/>
+          <stop offset="100%" style="stop-color:#f87171;stop-opacity:0.15"/>
+        </linearGradient>
+      </defs>
+
+      <!-- Phase labels -->
+      <rect x="20" y="10" width="1160" height="200" rx="10" fill="url(#grad1)" stroke="#38bdf8" stroke-opacity="0.3"/>
+      <text x="40" y="35" fill="#38bdf8" font-size="14" font-weight="700">PHASE 1: JUnit Platform Initialization</text>
+
+      <rect x="20" y="230" width="1160" height="260" rx="10" fill="url(#grad2)" stroke="#4ade80" stroke-opacity="0.3"/>
+      <text x="40" y="255" fill="#4ade80" font-size="14" font-weight="700">PHASE 2: Test Discovery &amp; ClassLoader Setup</text>
+
+      <rect x="20" y="510" width="1160" height="220" rx="10" fill="url(#grad3)" stroke="#fb923c" stroke-opacity="0.3"/>
+      <text x="40" y="535" fill="#fb923c" font-size="14" font-weight="700">PHASE 3: Application Bootstrap &amp; Augmentation</text>
+
+      <rect x="20" y="750" width="1160" height="280" rx="10" fill="url(#grad1)" stroke="#a78bfa" stroke-opacity="0.3"/>
+      <text x="40" y="775" fill="#a78bfa" font-size="14" font-weight="700">PHASE 4: Test Execution</text>
+
+      <!-- Phase 1 boxes -->
+      <rect x="50" y="50" width="240" height="65" rx="8" fill="#1e293b" stroke="#38bdf8" stroke-width="2"/>
+      <text x="170" y="73" fill="#38bdf8" font-size="12" font-weight="600" text-anchor="middle">ConfigLauncherSession</text>
+      <text x="170" y="93" fill="#94a3b8" font-size="10" text-anchor="middle">LauncherSessionListener</text>
+      <text x="170" y="106" fill="#94a3b8" font-size="10" text-anchor="middle">Registers SmallRye Config</text>
+
+      <line x1="290" y1="82" x2="350" y2="82" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+      <rect x="355" y="50" width="280" height="65" rx="8" fill="#1e293b" stroke="#38bdf8" stroke-width="2"/>
+      <text x="495" y="73" fill="#38bdf8" font-size="12" font-weight="600" text-anchor="middle">CustomLauncherInterceptor</text>
+      <text x="495" y="93" fill="#94a3b8" font-size="10" text-anchor="middle">LauncherSessionListener +</text>
+      <text x="495" y="106" fill="#94a3b8" font-size="10" text-anchor="middle">LauncherDiscoveryListener + TestExecutionListener</text>
+
+      <line x1="635" y1="82" x2="695" y2="82" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+      <rect x="700" y="50" width="220" height="65" rx="8" fill="#1e293b" stroke="#f472b6" stroke-width="2"/>
+      <text x="810" y="73" fill="#f472b6" font-size="12" font-weight="600" text-anchor="middle">Creates FacadeClassLoader</text>
+      <text x="810" y="93" fill="#94a3b8" font-size="10" text-anchor="middle">Sets as TCCL on main thread</text>
+      <text x="810" y="106" fill="#94a3b8" font-size="10" text-anchor="middle">parent = System ClassLoader</text>
+
+      <!-- Phase 1 detail -->
+      <rect x="50" y="130" width="870" height="60" rx="8" fill="#334155" stroke="#475569"/>
+      <text x="70" y="152" fill="#fbbf24" font-size="11" font-weight="600">Key point:</text>
+      <text x="155" y="152" fill="#e2e8f0" font-size="11">TCCL is set to FacadeClassLoader BEFORE discovery starts. This is critical because JUnit</text>
+      <text x="70" y="170" fill="#e2e8f0" font-size="11">uses the TCCL to load test classes. FacadeClassLoader intercepts loadClass() to route tests to QuarkusClassLoaders.</text>
+
+      <!-- Phase 2 boxes -->
+      <rect x="50" y="270" width="300" height="80" rx="8" fill="#1e293b" stroke="#4ade80" stroke-width="2"/>
+      <text x="200" y="293" fill="#4ade80" font-size="12" font-weight="600" text-anchor="middle">FacadeClassLoader.loadClass(name)</text>
+      <text x="200" y="311" fill="#94a3b8" font-size="10" text-anchor="middle">JUnit discovers test classes via TCCL</text>
+      <text x="200" y="327" fill="#94a3b8" font-size="10" text-anchor="middle">Every class load goes through FacadeClassLoader</text>
+      <text x="200" y="343" fill="#94a3b8" font-size="10" text-anchor="middle">Uses peekingClassLoader (URLClassLoader) to inspect</text>
+
+      <line x1="350" y1="310" x2="420" y2="310" stroke="#4ade80" stroke-width="2" marker-end="url(#arrowhead-green)"/>
+
+      <rect x="425" y="270" width="250" height="80" rx="8" fill="#1e293b" stroke="#fbbf24" stroke-width="2"/>
+      <text x="550" y="293" fill="#fbbf24" font-size="12" font-weight="600" text-anchor="middle">Is it a @QuarkusTest?</text>
+      <text x="550" y="313" fill="#94a3b8" font-size="10" text-anchor="middle">Checks: @QuarkusTest annotation</text>
+      <text x="550" y="329" fill="#94a3b8" font-size="10" text-anchor="middle">@ExtendWith(QuarkusTestExtension)</text>
+      <text x="550" y="345" fill="#94a3b8" font-size="10" text-anchor="middle">@RegisterExtension on field</text>
+
+      <!-- Yes branch -->
+      <line x1="550" y1="350" x2="550" y2="380" stroke="#4ade80" stroke-width="2" marker-end="url(#arrowhead-green)"/>
+      <text x="565" y="372" fill="#4ade80" font-size="10" font-weight="600">Yes</text>
+
+      <!-- No branch -->
+      <line x1="675" y1="310" x2="740" y2="310" stroke="#f87171" stroke-width="2"/>
+      <text x="695" y="302" fill="#f87171" font-size="10" font-weight="600">No</text>
+      <rect x="745" y="285" width="200" height="50" rx="8" fill="#1e293b" stroke="#f87171" stroke-width="2"/>
+      <text x="845" y="307" fill="#f87171" font-size="11" text-anchor="middle">super.loadClass(name)</text>
+      <text x="845" y="323" fill="#94a3b8" font-size="10" text-anchor="middle">Delegate to parent (System CL)</text>
+
+      <rect x="350" y="385" width="400" height="90" rx="8" fill="#1e293b" stroke="#4ade80" stroke-width="2"/>
+      <text x="550" y="408" fill="#4ade80" font-size="12" font-weight="600" text-anchor="middle">getQuarkusClassLoader(inspectionClass, profile)</text>
+      <text x="550" y="428" fill="#94a3b8" font-size="10" text-anchor="middle">1. Determine profile key from @TestProfile</text>
+      <text x="550" y="443" fill="#94a3b8" font-size="10" text-anchor="middle">2. getOrCreateRuntimeClassLoader(profileKey, ...)</text>
+      <text x="550" y="458" fill="#94a3b8" font-size="10" text-anchor="middle">3. Calls AppMakerHelper to create CuratedApplication + StartupAction</text>
+      <text x="550" y="473" fill="#94a3b8" font-size="10" text-anchor="middle">4. Returns startupAction.getClassLoader() (QuarkusClassLoader)</text>
+
+      <!-- Phase 3 boxes -->
+      <rect x="50" y="550" width="270" height="75" rx="8" fill="#1e293b" stroke="#fb923c" stroke-width="2"/>
+      <text x="185" y="573" fill="#fb923c" font-size="12" font-weight="600" text-anchor="middle">AppMakerHelper.makeCuratedApp()</text>
+      <text x="185" y="591" fill="#94a3b8" font-size="10" text-anchor="middle">Resolves app model (Maven/Gradle)</text>
+      <text x="185" y="607" fill="#94a3b8" font-size="10" text-anchor="middle">QuarkusBootstrap.builder().bootstrap()</text>
+      <text x="185" y="620" fill="#94a3b8" font-size="10" text-anchor="middle">Mode=TEST, isolateDeployment=true</text>
+
+      <line x1="320" y1="587" x2="380" y2="587" stroke="#fb923c" stroke-width="2" marker-end="url(#arrowhead-orange)"/>
+
+      <rect x="385" y="550" width="270" height="75" rx="8" fill="#1e293b" stroke="#fb923c" stroke-width="2"/>
+      <text x="520" y="573" fill="#fb923c" font-size="12" font-weight="600" text-anchor="middle">AppMakerHelper.prepare()</text>
+      <text x="520" y="591" fill="#94a3b8" font-size="10" text-anchor="middle">Index test classes (Jandex)</text>
+      <text x="520" y="607" fill="#94a3b8" font-size="10" text-anchor="middle">createAugmentor(TestBuildChainFunction)</text>
+      <text x="520" y="620" fill="#94a3b8" font-size="10" text-anchor="middle">Returns PrepareResult</text>
+
+      <line x1="655" y1="587" x2="715" y2="587" stroke="#fb923c" stroke-width="2" marker-end="url(#arrowhead-orange)"/>
+
+      <rect x="720" y="550" width="280" height="75" rx="8" fill="#1e293b" stroke="#fb923c" stroke-width="2"/>
+      <text x="860" y="573" fill="#fb923c" font-size="12" font-weight="600" text-anchor="middle">augmentAction.createInitialRuntimeApp()</text>
+      <text x="860" y="591" fill="#94a3b8" font-size="10" text-anchor="middle">Runs Quarkus build steps (augmentation)</text>
+      <text x="860" y="607" fill="#94a3b8" font-size="10" text-anchor="middle">Generates bytecode, config sources</text>
+      <text x="860" y="620" fill="#94a3b8" font-size="10" text-anchor="middle">Creates Runtime ClassLoader (StartupAction)</text>
+
+      <rect x="50" y="645" width="950" height="55" rx="8" fill="#334155" stroke="#475569"/>
+      <text x="70" y="665" fill="#fbbf24" font-size="11" font-weight="600">Key point:</text>
+      <text x="155" y="665" fill="#e2e8f0" font-size="11">Augmentation happens during discovery (inside FacadeClassLoader.loadClass()). By the time JUnit calls</text>
+      <text x="70" y="683" fill="#e2e8f0" font-size="11">beforeAll(), the application's classloaders are already built. The test class returned to JUnit is loaded from the Runtime QuarkusClassLoader.</text>
+
+      <!-- Phase 4 boxes -->
+      <rect x="50" y="790" width="250" height="80" rx="8" fill="#1e293b" stroke="#a78bfa" stroke-width="2"/>
+      <text x="175" y="813" fill="#a78bfa" font-size="12" font-weight="600" text-anchor="middle">beforeAll(context)</text>
+      <text x="175" y="833" fill="#94a3b8" font-size="10" text-anchor="middle">Calls ensureStarted(context)</text>
+      <text x="175" y="848" fill="#94a3b8" font-size="10" text-anchor="middle">doJavaStart() -> starts the app</text>
+      <text x="175" y="863" fill="#94a3b8" font-size="10" text-anchor="middle">startupAction.run() -> RunningQuarkusApp</text>
+
+      <line x1="300" y1="830" x2="360" y2="830" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrowhead-purple)"/>
+
+      <rect x="365" y="790" width="290" height="80" rx="8" fill="#1e293b" stroke="#a78bfa" stroke-width="2"/>
+      <text x="510" y="813" fill="#a78bfa" font-size="12" font-weight="600" text-anchor="middle">interceptTestClassConstructor()</text>
+      <text x="510" y="833" fill="#94a3b8" font-size="10" text-anchor="middle">JUnit creates test instance (wrong CL)</text>
+      <text x="510" y="848" fill="#94a3b8" font-size="10" text-anchor="middle">initTestState() creates actual instance</text>
+      <text x="510" y="863" fill="#94a3b8" font-size="10" text-anchor="middle">from Arc CDI container (right CL)</text>
+
+      <line x1="655" y1="830" x2="720" y2="830" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrowhead-purple)"/>
+
+      <rect x="725" y="790" width="270" height="80" rx="8" fill="#1e293b" stroke="#a78bfa" stroke-width="2"/>
+      <text x="860" y="813" fill="#a78bfa" font-size="12" font-weight="600" text-anchor="middle">interceptTestMethod()</text>
+      <text x="860" y="833" fill="#94a3b8" font-size="10" text-anchor="middle">runExtensionMethod()</text>
+      <text x="860" y="848" fill="#94a3b8" font-size="10" text-anchor="middle">Finds method on TCCL-loaded class</text>
+      <text x="860" y="863" fill="#94a3b8" font-size="10" text-anchor="middle">Invokes on actualTestInstance</text>
+
+      <rect x="50" y="890" width="945" height="55" rx="8" fill="#334155" stroke="#475569"/>
+      <text x="70" y="910" fill="#fbbf24" font-size="11" font-weight="600">Key point:</text>
+      <text x="155" y="910" fill="#e2e8f0" font-size="11">JUnit sees a test class loaded from the QuarkusClassLoader. QuarkusTestExtension intercepts all method</text>
+      <text x="70" y="928" fill="#e2e8f0" font-size="11">invocations and re-routes them to an actual test instance obtained from the Quarkus CDI container (RunningQuarkusApplication.instance()).</text>
+
+      <rect x="50" y="960" width="945" height="60" rx="8" fill="#334155" stroke="#475569"/>
+      <text x="70" y="980" fill="#fbbf24" font-size="11" font-weight="600">afterAll(context):</text>
+      <text x="180" y="980" fill="#e2e8f0" font-size="11">Pops mock context, runs after-all callbacks. Application stays running for next test class with same profile.</text>
+      <text x="70" y="1000" fill="#fbbf24" font-size="11" font-weight="600">ExtensionState.close():</text>
+      <text x="210" y="1000" fill="#e2e8f0" font-size="11">When profile changes or tests finish: closes RunningQuarkusApplication, test resources, and classloaders.</text>
+    </svg>
+  </div>
+</div>
+
+<!-- ======================== CLASSLOADERS TAB ======================== -->
+<div id="classloaders" class="panel">
+  <div class="diagram-container">
+    <div class="diagram-title">ClassLoader Hierarchy in Quarkus Test Mode</div>
+    <svg viewBox="0 0 1100 920" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:1100px;margin:0 auto;display:block">
+      <defs>
+        <marker id="arr-down" markerWidth="10" markerHeight="7" refX="5" refY="0" orient="auto">
+          <polygon points="0 0, 10 0, 5 7" fill="#94a3b8"/>
+        </marker>
+        <marker id="arr-down-blue" markerWidth="10" markerHeight="7" refX="5" refY="0" orient="auto">
+          <polygon points="0 0, 10 0, 5 7" fill="#38bdf8"/>
+        </marker>
+      </defs>
+
+      <!-- System CL -->
+      <rect x="350" y="20" width="300" height="70" rx="10" fill="#1e293b" stroke="#94a3b8" stroke-width="2"/>
+      <text x="500" y="47" fill="#94a3b8" font-size="14" font-weight="700" text-anchor="middle">System ClassLoader</text>
+      <text x="500" y="67" fill="#64748b" font-size="11" text-anchor="middle">JDK's AppClassLoader (java.class.path)</text>
+      <text x="500" y="82" fill="#64748b" font-size="11" text-anchor="middle">All Maven/Gradle test classpath JARs</text>
+
+      <!-- Arrow down to Facade -->
+      <line x1="500" y1="90" x2="500" y2="130" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr-down)"/>
+      <text x="510" y="115" fill="#94a3b8" font-size="10">parent</text>
+
+      <!-- FacadeClassLoader -->
+      <rect x="300" y="135" width="400" height="90" rx="10" fill="#1e293b" stroke="#f472b6" stroke-width="2.5"/>
+      <text x="500" y="160" fill="#f472b6" font-size="14" font-weight="700" text-anchor="middle">FacadeClassLoader</text>
+      <text x="500" y="178" fill="#94a3b8" font-size="11" text-anchor="middle">Set as TCCL before JUnit discovery</text>
+      <text x="500" y="194" fill="#94a3b8" font-size="11" text-anchor="middle">Routes @QuarkusTest classes -> QuarkusClassLoader</text>
+      <text x="500" y="210" fill="#94a3b8" font-size="11" text-anchor="middle">Non-Quarkus tests -> super.loadClass() (System CL)</text>
+
+      <!-- peekingClassLoader side -->
+      <rect x="750" y="150" width="290" height="60" rx="8" fill="#334155" stroke="#64748b" stroke-dasharray="4"/>
+      <text x="895" y="172" fill="#94a3b8" font-size="11" font-weight="600" text-anchor="middle">peekingClassLoader (URLClassLoader)</text>
+      <text x="895" y="190" fill="#64748b" font-size="10" text-anchor="middle">ParentLast: loads class to inspect annotations</text>
+      <line x1="700" y1="180" x2="750" y2="180" stroke="#64748b" stroke-dasharray="4"/>
+      <text x="720" y="172" fill="#64748b" font-size="9">uses</text>
+
+      <!-- Arrow from Facade down to Augment and Base Runtime -->
+      <line x1="370" y1="225" x2="200" y2="290" stroke="#38bdf8" stroke-width="2" marker-end="url(#arr-down-blue)"/>
+      <text x="250" y="260" fill="#38bdf8" font-size="10" font-weight="600">creates via</text>
+      <text x="240" y="273" fill="#38bdf8" font-size="10" font-weight="600">CuratedApplication</text>
+
+      <line x1="630" y1="225" x2="780" y2="290" stroke="#38bdf8" stroke-width="2" marker-end="url(#arr-down-blue)"/>
+
+      <!-- Augmentation CL -->
+      <rect x="30" y="295" width="340" height="105" rx="10" fill="#1e293b" stroke="#fb923c" stroke-width="2.5"/>
+      <text x="200" y="320" fill="#fb923c" font-size="14" font-weight="700" text-anchor="middle">Augmentation ClassLoader</text>
+      <text x="200" y="340" fill="#94a3b8" font-size="11" text-anchor="middle">Parent: System CL (parentFirst=!isolateDeployment)</text>
+      <text x="200" y="356" fill="#94a3b8" font-size="11" text-anchor="middle">Contains: deployment deps, extension processors</text>
+      <text x="200" y="372" fill="#94a3b8" font-size="11" text-anchor="middle">Excludes: runtime-only deps, user app classes</text>
+      <text x="200" y="388" fill="#94a3b8" font-size="11" text-anchor="middle">Used by: AugmentActionImpl (build steps)</text>
+
+      <!-- Base Runtime CL -->
+      <rect x="620" y="295" width="380" height="105" rx="10" fill="#1e293b" stroke="#4ade80" stroke-width="2.5"/>
+      <text x="810" y="320" fill="#4ade80" font-size="14" font-weight="700" text-anchor="middle">Base Runtime ClassLoader</text>
+      <text x="810" y="340" fill="#94a3b8" font-size="11" text-anchor="middle">Parent: System CL (parentFirst=false, child-first)</text>
+      <text x="810" y="356" fill="#94a3b8" font-size="11" text-anchor="middle">Contains: runtime deps, framework classes</text>
+      <text x="810" y="372" fill="#94a3b8" font-size="11" text-anchor="middle">Banned: app classes (loaded as ClassFilteredBannedElement)</text>
+      <text x="810" y="388" fill="#94a3b8" font-size="11" text-anchor="middle">Has resettable MemoryClassPathElement for gen'd code</text>
+
+      <!-- Deployment CL -->
+      <line x1="200" y1="400" x2="200" y2="440" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr-down)"/>
+      <text x="210" y="425" fill="#94a3b8" font-size="10">parent</text>
+
+      <rect x="30" y="445" width="340" height="85" rx="10" fill="#1e293b" stroke="#fbbf24" stroke-width="2"/>
+      <text x="200" y="470" fill="#fbbf24" font-size="14" font-weight="700" text-anchor="middle">Deployment ClassLoader</text>
+      <text x="200" y="490" fill="#94a3b8" font-size="11" text-anchor="middle">Parent: Augmentation CL (parentFirst=false)</text>
+      <text x="200" y="506" fill="#94a3b8" font-size="11" text-anchor="middle">Adds: app classes, reloadable deps, resources</text>
+      <text x="200" y="522" fill="#94a3b8" font-size="11" text-anchor="middle">Used by: build steps that need user code visibility</text>
+
+      <!-- Runtime CL -->
+      <line x1="810" y1="400" x2="810" y2="440" stroke="#4ade80" stroke-width="2" marker-end="url(#arr-down)"/>
+      <text x="820" y="425" fill="#4ade80" font-size="10">parent</text>
+
+      <rect x="580" y="445" width="420" height="105" rx="10" fill="#1e293b" stroke="#38bdf8" stroke-width="3"/>
+      <text x="790" y="470" fill="#38bdf8" font-size="14" font-weight="700" text-anchor="middle">Runtime ClassLoader (QuarkusClassLoader)</text>
+      <text x="790" y="490" fill="#94a3b8" font-size="11" text-anchor="middle">Parent: Base Runtime CL (parentFirst=false, child-first)</text>
+      <text x="790" y="506" fill="#94a3b8" font-size="11" text-anchor="middle">Contains: app classes, generated bytecode, transformed classes</text>
+      <text x="790" y="522" fill="#94a3b8" font-size="11" text-anchor="middle">MemoryClassPathElement with augmentation output</text>
+      <text x="790" y="538" fill="#38bdf8" font-size="12" font-weight="700" text-anchor="middle">THIS is the classloader test classes are loaded with</text>
+
+      <!-- Annotation: returned by StartupAction -->
+      <rect x="580" y="565" width="420" height="40" rx="6" fill="#334155" stroke="#38bdf8" stroke-dasharray="4"/>
+      <text x="790" y="590" fill="#38bdf8" font-size="11" text-anchor="middle">startupAction.getClassLoader() returns this CL. Linked to CuratedApplication.</text>
+
+      <!-- Key relationships -->
+      <rect x="30" y="640" width="1040" height="260" rx="10" fill="#1e293b" stroke="#475569"/>
+      <text x="50" y="670" fill="#38bdf8" font-size="14" font-weight="700">ClassLoader Delegation &amp; Class Partitioning</text>
+
+      <!-- Child-first explanation -->
+      <rect x="50" y="685" width="490" height="200" rx="8" fill="#334155" stroke="#475569"/>
+      <text x="70" y="710" fill="#4ade80" font-size="12" font-weight="600">Child-First Loading (default for QuarkusClassLoader)</text>
+      <text x="70" y="730" fill="#e2e8f0" font-size="11">1. Check banned list - if banned, skip this CL entirely</text>
+      <text x="70" y="748" fill="#e2e8f0" font-size="11">2. Check if parentFirst for this specific class/resource</text>
+      <text x="70" y="766" fill="#e2e8f0" font-size="11">3. If child-first: look in own elements first, then parent</text>
+      <text x="70" y="784" fill="#e2e8f0" font-size="11">4. normalPriorityElements checked before lesserPriorityElements</text>
+      <text x="70" y="802" fill="#e2e8f0" font-size="11">5. transformedClasses and resettableElement (generated code)</text>
+      <text x="70" y="820" fill="#e2e8f0" font-size="11">   are checked before classpath elements</text>
+      <text x="70" y="842" fill="#fbbf24" font-size="11">parentFirst exceptions: io/quarkus/devservices/crossclassloader</text>
+      <text x="70" y="860" fill="#fbbf24" font-size="11">and artifacts in configuredClassLoading.parentFirstArtifacts</text>
+      <text x="70" y="878" fill="#fbbf24" font-size="11">(bridges between running app and dev mode code)</text>
+
+      <!-- What goes where -->
+      <rect x="560" y="685" width="490" height="200" rx="8" fill="#334155" stroke="#475569"/>
+      <text x="580" y="710" fill="#fb923c" font-size="12" font-weight="600">Class Partitioning Strategy</text>
+      <text x="580" y="733" fill="#fb923c" font-size="11" font-weight="600">Augmentation CL:</text>
+      <text x="730" y="733" fill="#e2e8f0" font-size="11">Extension processors, deployment deps</text>
+      <text x="580" y="755" fill="#4ade80" font-size="11" font-weight="600">Base Runtime CL:</text>
+      <text x="730" y="755" fill="#e2e8f0" font-size="11">Framework runtime classes (non-reloadable)</text>
+      <text x="580" y="777" fill="#fbbf24" font-size="11" font-weight="600">Deployment CL:</text>
+      <text x="730" y="777" fill="#e2e8f0" font-size="11">Aug CL + user app code (for build steps)</text>
+      <text x="580" y="799" fill="#38bdf8" font-size="11" font-weight="600">Runtime CL:</text>
+      <text x="730" y="799" fill="#e2e8f0" font-size="11">App classes + generated/transformed code</text>
+      <text x="580" y="830" fill="#f472b6" font-size="11" font-weight="600">ClassFilteredBannedElement:</text>
+      <text x="774" y="830" fill="#e2e8f0" font-size="11">App .class files banned in Base</text>
+      <text x="580" y="848" fill="#e2e8f0" font-size="11">Runtime CL, but non-class resources (like config) still</text>
+      <text x="580" y="866" fill="#e2e8f0" font-size="11">accessible. This prevents duplicate loading while allowing</text>
+      <text x="580" y="884" fill="#e2e8f0" font-size="11">library code to find resources via getClass().getClassLoader().</text>
+    </svg>
+  </div>
+</div>
+
+<!-- ======================== LIFECYCLE TAB ======================== -->
+<div id="lifecycle" class="panel">
+  <div class="diagram-container">
+    <div class="diagram-title">JUnit 5 Lifecycle Callbacks in QuarkusTestExtension</div>
+
+    <div class="flow-section">
+      <h3><span class="step-num">1</span> LauncherSessionListener.launcherSessionOpened()</h3>
+      <div class="detail-box">
+        <p><span class="highlight4">ConfigLauncherSession</span> (registered via SPI in junit-config module):</p>
+        <ul>
+          <li>Creates a <span class="code-ref">SmallRyeConfigProviderResolver</span> and registers initial test Config</li>
+          <li>Config registered against <span class="highlight">SystemClassLoader</span> and TCCL</li>
+          <li>Sets <span class="code-ref">LaunchMode.TEST</span> during config build</li>
+        </ul>
+        <p><span class="highlight4">CustomLauncherInterceptor</span> (registered via SPI in junit module):</p>
+        <ul>
+          <li>Creates a <span class="code-ref">FacadeClassLoader(currentCl)</span> with System CL as parent</li>
+          <li>Sets <span class="code-ref">Thread.currentThread().setContextClassLoader(facadeLoader)</span></li>
+          <li>For Gradle: this happens <em>before</em> discovery starts, because Gradle loads classes early</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="flow-section">
+      <h3><span class="step-num">2</span> LauncherDiscoveryListener.launcherDiscoveryStarted()</h3>
+      <div class="detail-box">
+        <p><span class="highlight4">CustomLauncherInterceptor</span>:</p>
+        <ul>
+          <li>Ensures FacadeClassLoader is created and set as TCCL (idempotent)</li>
+          <li>Sets <span class="code-ref">java.util.concurrent.ForkJoinPool.common.threadFactory</span> to <span class="code-ref">QuarkusForkJoinWorkerThreadFactory</span> so ForkJoin threads also have the right TCCL</li>
+        </ul>
+        <p><span class="highlight">Discovery phase</span>: JUnit scans for test classes using TCCL.loadClass(). Each call goes through <span class="code-ref">FacadeClassLoader.loadClass()</span> which:</p>
+        <ul>
+          <li>Uses <span class="highlight2">peekingClassLoader</span> (a ParentLast URLClassLoader) to load a temporary copy for annotation inspection</li>
+          <li>If @QuarkusTest detected: creates/reuses a <span class="highlight">QuarkusClassLoader</span> (Runtime CL) and loads the test class from it</li>
+          <li>If not a QuarkusTest: delegates to parent (System CL)</li>
+          <li>This is where <span class="highlight3">CuratedApplication</span> and <span class="highlight3">StartupAction</span> are created (augmentation happens here!)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="flow-section">
+      <h3><span class="step-num">3</span> LauncherDiscoveryListener.launcherDiscoveryFinished()</h3>
+      <div class="detail-box">
+        <p><span class="highlight4">CustomLauncherInterceptor</span>:</p>
+        <ul>
+          <li>If not service-loader mechanism: resets TCCL back to original classloader</li>
+          <li>Validates that <span class="code-ref">QuarkusTestProfileAwareClassOrderer</span> is configured when multiple classloaders exist (critical for correct test ordering)</li>
+          <li>Throws if class orderer is misconfigured - tests with different profiles MUST be grouped together</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="flow-section">
+      <h3><span class="step-num">4</span> ExecutionCondition.evaluateExecutionCondition()</h3>
+      <div class="detail-box">
+        <p><span class="highlight4">AbstractJvmQuarkusTestExtension</span>:</p>
+        <ul>
+          <li>Checks <span class="code-ref">quarkus.profile.test.tags</span> config against <span class="code-ref">QuarkusTestProfile.tags()</span></li>
+          <li>Disables tests whose profile tags don't match the configured tags</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="flow-section">
+      <h3><span class="step-num">5</span> BeforeAllCallback.beforeAll(context)</h3>
+      <div class="detail-box">
+        <p><span class="highlight4">QuarkusTestExtension</span>:</p>
+        <ul>
+          <li>Pushes test class onto <span class="code-ref">currentTestClassStack</span></li>
+          <li>Sets <span class="code-ref">LaunchMode.set(LaunchMode.TEST)</span></li>
+          <li>Calls <span class="highlight">ensureStarted(context)</span> which calls <span class="highlight">doJavaStart(context)</span> on first invocation:</li>
+        </ul>
+        <p><span class="highlight">doJavaStart()</span> - the main bootstrap method:</p>
+        <ul>
+          <li>Sets up hang detection timer (10 min default, configurable via <span class="code-ref">quarkus.test.hang-detection-timeout</span>)</li>
+          <li>Gets the <span class="code-ref">QuarkusClassLoader</span> from the test class (<span class="code-ref">requiredTestClass.getClassLoader()</span>)</li>
+          <li>Gets the <span class="code-ref">StartupAction</span> from that classloader</li>
+          <li>Applies module configuration to augment and base runtime classloaders</li>
+          <li>Creates <span class="code-ref">TestResourceManager</span> (loaded from runtime CL for correct class visibility)</li>
+          <li>Starts test resources, overrides config with their properties</li>
+          <li>Populates callbacks and test method invokers (via ServiceLoader on runtime CL)</li>
+          <li>Calls <span class="code-ref">startupAction.run()</span> -> <span class="highlight2">RunningQuarkusApplication</span></li>
+          <li>Stores ValueRegistry in JUnit extension store</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="flow-section">
+      <h3><span class="step-num">6</span> InvocationInterceptor.interceptTestClassConstructor()</h3>
+      <div class="detail-box">
+        <p>JUnit creates a test instance (from the class it discovered). The extension then:</p>
+        <ul>
+          <li>Calls <span class="code-ref">initTestState()</span> -> <span class="code-ref">createActualTestInstance()</span></li>
+          <li>Gets the CDI-managed instance: <span class="code-ref">runningQuarkusApplication.instance(testClass)</span></li>
+          <li>Injects ValueRegistry values, HTTP resource URLs, and test resource manager fields</li>
+          <li>Stores as <span class="code-ref">actualTestInstance</span> (this is the real instance used for test method invocation)</li>
+          <li>For @Nested: creates outer instances and maintains <span class="code-ref">outerInstances</span> deque</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="flow-section">
+      <h3><span class="step-num">7</span> BeforeEachCallback.beforeEach() + interceptTestMethod()</h3>
+      <div class="detail-box">
+        <ul>
+          <li><span class="highlight">beforeEach()</span>: pushes mock context, configures RestAssured URL, sets up test scope</li>
+          <li><span class="highlight">interceptTestMethod()</span>: calls <span class="code-ref">runExtensionMethod()</span></li>
+          <li><span class="code-ref">runExtensionMethod()</span> finds the equivalent method on the TCCL-loaded test class, then invokes it on <span class="code-ref">actualTestInstance</span></li>
+          <li>JUnit's original invocation is skipped (<span class="code-ref">invocation.skip()</span>)</li>
+          <li>Server-side exceptions are attached as suppressed exceptions on test failures</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="flow-section">
+      <h3><span class="step-num">8</span> AfterEachCallback.afterEach() + AfterAllCallback.afterAll()</h3>
+      <div class="detail-box">
+        <ul>
+          <li><span class="highlight">afterEach()</span>: pops mock context, clears RestAssured state, tears down test scope</li>
+          <li><span class="highlight">afterAll()</span>: pops mock context, pops <span class="code-ref">currentTestClassStack</span></li>
+          <li>Application stays running between test classes with the same profile</li>
+          <li><span class="highlight3">When profile changes</span>: <span class="code-ref">ensureStarted()</span> detects it, closes old app (<span class="code-ref">state.close()</span>), calls <span class="code-ref">doJavaStart()</span> for new app</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="flow-section">
+      <h3><span class="step-num">9</span> TestExecutionListener.testPlanExecutionFinished()</h3>
+      <div class="detail-box">
+        <p><span class="highlight4">CustomLauncherInterceptor</span>:</p>
+        <ul>
+          <li>Resets TCCL to original classloader</li>
+          <li>Closes FacadeClassLoader (which closes peekingClassLoader, nulls runtime classloader refs)</li>
+          <li>Note: runtime classloaders are closed by the application shutdown, not by FacadeClassLoader</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================== DISCOVERY TAB ======================== -->
+<div id="discovery" class="panel">
+  <div class="diagram-container">
+    <div class="diagram-title">Test Discovery: How FacadeClassLoader Routes Classes</div>
+    <svg viewBox="0 0 1100 780" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:1100px;margin:0 auto;display:block">
+      <defs>
+        <marker id="arr2" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#38bdf8"/>
+        </marker>
+        <marker id="arr2g" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#4ade80"/>
+        </marker>
+        <marker id="arr2r" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#f87171"/>
+        </marker>
+        <marker id="arr2o" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#fb923c"/>
+        </marker>
+        <marker id="arr2d" markerWidth="8" markerHeight="6" refX="4" refY="0" orient="auto">
+          <polygon points="0 0, 8 0, 4 6" fill="#38bdf8"/>
+        </marker>
+      </defs>
+
+      <!-- Entry -->
+      <rect x="350" y="15" width="350" height="50" rx="8" fill="#1e293b" stroke="#f472b6" stroke-width="2"/>
+      <text x="525" y="37" fill="#f472b6" font-size="13" font-weight="700" text-anchor="middle">FacadeClassLoader.loadClass(name)</text>
+      <text x="525" y="55" fill="#94a3b8" font-size="10" text-anchor="middle">Called by JUnit for every test class discovered</text>
+
+      <line x1="525" y1="65" x2="525" y2="95" stroke="#38bdf8" stroke-width="2" marker-end="url(#arr2d)"/>
+
+      <!-- Service loader check -->
+      <rect x="350" y="100" width="350" height="45" rx="8" fill="#334155" stroke="#475569"/>
+      <text x="525" y="120" fill="#fbbf24" font-size="11" font-weight="600" text-anchor="middle">Is ServiceLoader mechanism &amp;&amp; name == QuarkusTestExtension?</text>
+      <text x="525" y="136" fill="#94a3b8" font-size="10" text-anchor="middle">(Extension registered via META-INF/services)</text>
+
+      <line x1="700" y1="122" x2="790" y2="122" stroke="#4ade80" stroke-width="2" marker-end="url(#arr2g)"/>
+      <text x="740" y="115" fill="#4ade80" font-size="10">Yes</text>
+
+      <rect x="795" y="100" width="250" height="45" rx="8" fill="#1e293b" stroke="#4ade80" stroke-width="2"/>
+      <text x="920" y="120" fill="#4ade80" font-size="11" text-anchor="middle">getOrCreateBaseClassLoader()</text>
+      <text x="920" y="136" fill="#94a3b8" font-size="10" text-anchor="middle">Load from base CL (no full augmentation yet)</text>
+
+      <line x1="525" y1="145" x2="525" y2="175" stroke="#38bdf8" stroke-width="2" marker-end="url(#arr2d)"/>
+      <text x="535" y="163" fill="#f87171" font-size="10">No</text>
+
+      <!-- Peek -->
+      <rect x="330" y="180" width="390" height="50" rx="8" fill="#1e293b" stroke="#818cf8" stroke-width="2"/>
+      <text x="525" y="200" fill="#818cf8" font-size="12" font-weight="600" text-anchor="middle">inspectionClass = peekingClassLoader.loadClass(name)</text>
+      <text x="525" y="218" fill="#94a3b8" font-size="10" text-anchor="middle">Load a temporary copy for annotation inspection</text>
+
+      <line x1="525" y1="230" x2="525" y2="255" stroke="#38bdf8" stroke-width="2" marker-end="url(#arr2d)"/>
+
+      <!-- Check disabled -->
+      <rect x="380" y="260" width="290" height="40" rx="8" fill="#334155" stroke="#475569"/>
+      <text x="525" y="280" fill="#fbbf24" font-size="11" font-weight="600" text-anchor="middle">@Disabled or @DisabledOnOs(current)?</text>
+      <text x="525" y="294" fill="#94a3b8" font-size="10" text-anchor="middle">Skip augmentation for disabled tests</text>
+
+      <line x1="670" y1="280" x2="790" y2="280" stroke="#f87171" stroke-width="2" marker-end="url(#arr2r)"/>
+      <text x="720" y="273" fill="#f87171" font-size="10">Yes</text>
+
+      <rect x="795" y="260" width="200" height="40" rx="8" fill="#1e293b" stroke="#f87171" stroke-width="2"/>
+      <text x="895" y="285" fill="#f87171" font-size="11" text-anchor="middle">super.loadClass(name)</text>
+
+      <line x1="525" y1="300" x2="525" y2="330" stroke="#38bdf8" stroke-width="2" marker-end="url(#arr2d)"/>
+      <text x="535" y="318" fill="#4ade80" font-size="10">No</text>
+
+      <!-- QuarkusTest check -->
+      <rect x="320" y="335" width="410" height="65" rx="8" fill="#1e293b" stroke="#fbbf24" stroke-width="2"/>
+      <text x="525" y="358" fill="#fbbf24" font-size="12" font-weight="600" text-anchor="middle">isQuarkusTest(inspectionClass)?</text>
+      <text x="525" y="376" fill="#94a3b8" font-size="10" text-anchor="middle">Check 1: @QuarkusTest (or meta-annotation containing it)</text>
+      <text x="525" y="391" fill="#94a3b8" font-size="10" text-anchor="middle">Check 2: @ExtendWith containing QuarkusTestExtension.class</text>
+
+      <!-- Not a quarkus test -->
+      <line x1="730" y1="370" x2="790" y2="370" stroke="#f87171" stroke-width="2" marker-end="url(#arr2r)"/>
+      <text x="750" y="363" fill="#f87171" font-size="10">No</text>
+      <rect x="795" y="350" width="200" height="40" rx="8" fill="#1e293b" stroke="#f87171" stroke-width="2"/>
+      <text x="895" y="375" fill="#f87171" font-size="11" text-anchor="middle">super.loadClass(name)</text>
+
+      <!-- Integration test check -->
+      <line x1="525" y1="400" x2="525" y2="430" stroke="#38bdf8" stroke-width="2" marker-end="url(#arr2d)"/>
+      <text x="535" y="418" fill="#4ade80" font-size="10">Yes</text>
+
+      <rect x="380" y="435" width="290" height="40" rx="8" fill="#334155" stroke="#475569"/>
+      <text x="525" y="455" fill="#fbbf24" font-size="11" font-weight="600" text-anchor="middle">@QuarkusIntegrationTest?</text>
+      <text x="525" y="469" fill="#94a3b8" font-size="10" text-anchor="middle">Integration tests run differently</text>
+
+      <line x1="670" y1="455" x2="790" y2="455" stroke="#f87171" stroke-width="2" marker-end="url(#arr2r)"/>
+      <text x="720" y="448" fill="#f87171" font-size="10">Yes</text>
+      <rect x="795" y="435" width="200" height="40" rx="8" fill="#1e293b" stroke="#f87171" stroke-width="2"/>
+      <text x="895" y="460" fill="#f87171" font-size="11" text-anchor="middle">super.loadClass(name)</text>
+
+      <line x1="525" y1="475" x2="525" y2="500" stroke="#38bdf8" stroke-width="2" marker-end="url(#arr2d)"/>
+      <text x="535" y="492" fill="#4ade80" font-size="10">No</text>
+
+      <!-- Profile detection -->
+      <rect x="340" y="505" width="370" height="50" rx="8" fill="#1e293b" stroke="#fb923c" stroke-width="2"/>
+      <text x="525" y="525" fill="#fb923c" font-size="12" font-weight="600" text-anchor="middle">Detect @TestProfile</text>
+      <text x="525" y="543" fill="#94a3b8" font-size="10" text-anchor="middle">Extract profile class via reflection on peeking CL</text>
+
+      <line x1="525" y1="555" x2="525" y2="585" stroke="#38bdf8" stroke-width="2" marker-end="url(#arr2d)"/>
+
+      <!-- getQuarkusClassLoader -->
+      <rect x="280" y="590" width="490" height="80" rx="8" fill="#1e293b" stroke="#4ade80" stroke-width="2.5"/>
+      <text x="525" y="613" fill="#4ade80" font-size="13" font-weight="700" text-anchor="middle">getQuarkusClassLoader(inspectionClass, profile)</text>
+      <text x="525" y="633" fill="#94a3b8" font-size="10" text-anchor="middle">1. profileKey = "QuarkusTest-" + (profileClassName || "no-profile")</text>
+      <text x="525" y="648" fill="#94a3b8" font-size="10" text-anchor="middle">2. resourceKey = TestResourceUtil.getReloadGroupIdentifier() (per-test resources need separate CL)</text>
+      <text x="525" y="663" fill="#94a3b8" font-size="10" text-anchor="middle">3. getOrCreateRuntimeClassLoader(profileKey, testClass, profile)</text>
+
+      <line x1="525" y1="670" x2="525" y2="700" stroke="#38bdf8" stroke-width="2" marker-end="url(#arr2d)"/>
+
+      <!-- Final load -->
+      <rect x="320" y="705" width="410" height="60" rx="10" fill="#1e293b" stroke="#38bdf8" stroke-width="3"/>
+      <text x="525" y="728" fill="#38bdf8" font-size="13" font-weight="700" text-anchor="middle">return runtimeClassLoader.loadClass(name)</text>
+      <text x="525" y="748" fill="#94a3b8" font-size="10" text-anchor="middle">Test class loaded from QuarkusClassLoader (Runtime CL)</text>
+      <text x="525" y="763" fill="#94a3b8" font-size="10" text-anchor="middle">JUnit will use this class for all subsequent lifecycle operations</text>
+    </svg>
+
+    <div class="detail-box" style="margin-top:1rem">
+      <p><span class="highlight3">Important</span>: Each class is essentially loaded twice during discovery:</p>
+      <ul>
+        <li><span class="highlight">peekingClassLoader</span> (disposable URLClassLoader) - just for annotation inspection</li>
+        <li><span class="highlight2">QuarkusClassLoader</span> (Runtime CL) - the actual class returned to JUnit</li>
+      </ul>
+      <p>This double-loading has existed since Quarkus 1.2 when isolated classloaders were introduced. The peekingClassLoader uses a <span class="code-ref">ParentLastURLClassLoader</span> to avoid loading from parent first, ensuring annotations are inspected on the correct version of the class.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ======================== BOOTSTRAP TAB ======================== -->
+<div id="bootstrap" class="panel">
+  <div class="diagram-container">
+    <div class="diagram-title">Application Bootstrap &amp; Augmentation Sequence</div>
+    <svg viewBox="0 0 1100 700" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:1100px;margin:0 auto;display:block">
+      <defs>
+        <marker id="arr3" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#38bdf8"/>
+        </marker>
+        <marker id="arr3d" markerWidth="8" markerHeight="6" refX="4" refY="0" orient="auto">
+          <polygon points="0 0, 8 0, 4 6" fill="#fb923c"/>
+        </marker>
+      </defs>
+
+      <!-- Step 1 -->
+      <rect x="30" y="20" width="1040" height="95" rx="10" fill="#1e293b" stroke="#fb923c" stroke-width="2"/>
+      <text x="50" y="45" fill="#fb923c" font-size="13" font-weight="700">Step 1: AppMakerHelper.makeCuratedApplication()</text>
+      <text x="50" y="65" fill="#e2e8f0" font-size="11">Resolves the application model (Maven or Gradle) using BootstrapAppModelFactory</text>
+      <text x="50" y="83" fill="#e2e8f0" font-size="11">Builds QuarkusBootstrap with: mode=TEST, isolateDeployment=true, applicationRoot=test+app class paths</text>
+      <text x="50" y="101" fill="#e2e8f0" font-size="11">Calls bootstrap() -> creates CuratedApplication (holds app model, configured class loading, creates CL builders)</text>
+
+      <line x1="550" y1="115" x2="550" y2="140" stroke="#fb923c" stroke-width="2" marker-end="url(#arr3d)"/>
+
+      <!-- Step 2 -->
+      <rect x="30" y="145" width="1040" height="95" rx="10" fill="#1e293b" stroke="#fb923c" stroke-width="2"/>
+      <text x="50" y="170" fill="#fb923c" font-size="13" font-weight="700">Step 2: AppMakerHelper.prepare()</text>
+      <text x="50" y="190" fill="#e2e8f0" font-size="11">Indexes test classes with Jandex, writes index to disk for cross-classloader access</text>
+      <text x="50" y="208" fill="#e2e8f0" font-size="11">Calls curatedApplication.getOrCreateBaseRuntimeClassLoader() - creates the Base Runtime CL</text>
+      <text x="50" y="226" fill="#e2e8f0" font-size="11">Creates augmentor via curatedApplication.createAugmentor(TestBuildChainFunction, props) - loads AugmentActionImpl in Augmentation CL</text>
+
+      <line x1="550" y1="240" x2="550" y2="265" stroke="#fb923c" stroke-width="2" marker-end="url(#arr3d)"/>
+
+      <!-- Step 3 -->
+      <rect x="30" y="270" width="1040" height="115" rx="10" fill="#1e293b" stroke="#4ade80" stroke-width="2"/>
+      <text x="50" y="295" fill="#4ade80" font-size="13" font-weight="700">Step 3: augmentAction.createInitialRuntimeApplication()</text>
+      <text x="50" y="315" fill="#e2e8f0" font-size="11">Runs Quarkus build steps (augmentation) using the Deployment ClassLoader</text>
+      <text x="50" y="333" fill="#e2e8f0" font-size="11">Build steps generate bytecode, config sources, transformed classes -> stored as Map&lt;String, byte[]&gt;</text>
+      <text x="50" y="351" fill="#e2e8f0" font-size="11">Creates Runtime ClassLoader: curatedApplication.createRuntimeClassLoader(generatedResources, transformedClasses)</text>
+      <text x="50" y="369" fill="#e2e8f0" font-size="11">Returns StartupAction which wraps the Runtime CL and knows how to start the application</text>
+
+      <line x1="550" y1="385" x2="550" y2="410" stroke="#fb923c" stroke-width="2" marker-end="url(#arr3d)"/>
+
+      <!-- Step 4 -->
+      <rect x="30" y="415" width="1040" height="95" rx="10" fill="#1e293b" stroke="#38bdf8" stroke-width="2"/>
+      <text x="50" y="440" fill="#38bdf8" font-size="13" font-weight="700">Step 4: doJavaStart() in QuarkusTestExtension (during beforeAll)</text>
+      <text x="50" y="460" fill="#e2e8f0" font-size="11">Gets StartupAction from test class's QuarkusClassLoader: getClassLoaderFromTestClass(testClass).getStartupAction()</text>
+      <text x="50" y="478" fill="#e2e8f0" font-size="11">Creates TestResourceManager (loaded from runtime CL), starts test resources, overrides config</text>
+      <text x="50" y="496" fill="#e2e8f0" font-size="11">Calls startupAction.run() -> RunningQuarkusApplication (Quarkus app is now live, CDI container is running)</text>
+
+      <line x1="550" y1="510" x2="550" y2="535" stroke="#fb923c" stroke-width="2" marker-end="url(#arr3d)"/>
+
+      <!-- Step 5 -->
+      <rect x="30" y="540" width="1040" height="75" rx="10" fill="#1e293b" stroke="#a78bfa" stroke-width="2"/>
+      <text x="50" y="565" fill="#a78bfa" font-size="13" font-weight="700">Step 5: Test Instance Creation (interceptTestClassConstructor)</text>
+      <text x="50" y="585" fill="#e2e8f0" font-size="11">runningQuarkusApplication.instance(testClass) -> creates CDI-managed test instance with injection</text>
+      <text x="50" y="603" fill="#e2e8f0" font-size="11">Injects: @Inject fields (CDI), @TestHTTPEndpoint, @ConfigProperty, ValueRegistry, TestResourceManager fields</text>
+
+      <!-- Profile change box -->
+      <rect x="30" y="635" width="1040" height="50" rx="8" fill="#334155" stroke="#fbbf24"/>
+      <text x="50" y="658" fill="#fbbf24" font-size="12" font-weight="600">Profile Changes:</text>
+      <text x="195" y="658" fill="#e2e8f0" font-size="11">When ensureStarted() detects a different profile or different test resources, it closes the current RunningQuarkusApplication</text>
+      <text x="50" y="676" fill="#e2e8f0" font-size="11">and calls doJavaStart() again. The new test class already has its own QuarkusClassLoader (created during discovery), so a new StartupAction is used.</text>
+    </svg>
+  </div>
+
+  <div class="diagram-container">
+    <div class="diagram-title">CuratedApplication Creates ClassLoaders</div>
+    <div class="two-col">
+      <div>
+        <h3 style="color:var(--fb923c);margin-bottom:1rem">getOrCreateAugmentClassLoader()</h3>
+        <div class="detail-box">
+          <p><span class="highlight3">Name</span>: "Augmentation Class Loader: TEST for ..."</p>
+          <p><span class="highlight3">Parent</span>: System ClassLoader (baseClassLoader)</p>
+          <p><span class="highlight3">parentFirst</span>: <code>!isolateDeployment</code> (false in test mode, so child-first)</p>
+          <p><span class="highlight3">Elements</span>:</p>
+          <ul>
+            <li>All dependencies from app model (except removed and reloadable)</li>
+            <li>Additional deployment archives</li>
+            <li>Banned: removed resources as MemoryClassPathElement</li>
+            <li>Parent-first: artifacts in <code>configuredClassLoading.parentFirstArtifacts</code></li>
+          </ul>
+        </div>
+
+        <h3 style="color:var(--fbbf24);margin-bottom:1rem;margin-top:1.5rem">createDeploymentClassLoader()</h3>
+        <div class="detail-box">
+          <p><span class="highlight3">Name</span>: "Deployment Class Loader: TEST for ..."</p>
+          <p><span class="highlight3">Parent</span>: Augmentation ClassLoader</p>
+          <p><span class="highlight3">parentFirst</span>: false (child-first)</p>
+          <p><span class="highlight3">Adds</span>: application root paths, reloadable deps, additional archives</p>
+          <p><span class="highlight3">Purpose</span>: gives build steps access to user application code</p>
+        </div>
+      </div>
+      <div>
+        <h3 style="color:var(--green);margin-bottom:1rem">getOrCreateBaseRuntimeClassLoader()</h3>
+        <div class="detail-box">
+          <p><span class="highlight2">Name</span>: "Quarkus Base Runtime ClassLoader: TEST for ..."</p>
+          <p><span class="highlight2">Parent</span>: System ClassLoader</p>
+          <p><span class="highlight2">parentFirst</span>: false (child-first)</p>
+          <p><span class="highlight2">Elements</span>:</p>
+          <ul>
+            <li>Runtime-cp dependencies (non-reloadable)</li>
+            <li><span class="highlight4">Banned</span>: app classes via ClassFilteredBannedElement (bans .class but not resources)</li>
+            <li>Resettable MemoryClassPathElement (for generated code)</li>
+            <li>Has CuratedApplication reference</li>
+          </ul>
+          <p style="margin-top:0.5rem"><span class="highlight2">Flat test classpath mode</span>: if enabled, app root paths are added as normal elements (no restart needed)</p>
+        </div>
+
+        <h3 style="color:var(--accent);margin-bottom:1rem;margin-top:1.5rem">createRuntimeClassLoader()</h3>
+        <div class="detail-box">
+          <p><span class="highlight">Name</span>: "Quarkus Runtime ClassLoader: TEST for ... restart no: N"</p>
+          <p><span class="highlight">Parent</span>: Base Runtime ClassLoader</p>
+          <p><span class="highlight">parentFirst</span>: false (child-first)</p>
+          <p><span class="highlight">Adds</span>:</p>
+          <ul>
+            <li>Generated resources (MemoryClassPathElement from augmentation)</li>
+            <li>Transformed classes (bytecode transformations)</li>
+            <li>Application root paths</li>
+            <li>Hot-reloadable additional archives</li>
+            <li>Reloadable workspace dependencies</li>
+          </ul>
+          <p style="margin-top:0.5rem"><span class="highlight">This is the classloader test classes are loaded from.</span></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================== FILES TAB ======================== -->
+<div id="files" class="panel">
+  <div class="diagram-container">
+    <div class="diagram-title">Key Source Files</div>
+
+    <div class="two-col">
+      <div>
+        <h3 style="color:var(--accent);margin-bottom:1rem">JUnit Integration (test-framework/junit/)</h3>
+
+        <div class="detail-box">
+          <p class="highlight4" style="font-weight:700">FacadeClassLoader.java</p>
+          <p class="file-path">test-framework/junit/src/main/java/io/quarkus/test/junit/classloading/FacadeClassLoader.java</p>
+          <p>The critical classloader bridge. Set as TCCL before JUnit discovery. Intercepts loadClass() to route @QuarkusTest classes to QuarkusClassLoaders. Creates CuratedApplications and StartupActions during discovery.</p>
+        </div>
+
+        <div class="detail-box">
+          <p class="highlight4" style="font-weight:700">CustomLauncherInterceptor.java</p>
+          <p class="file-path">test-framework/junit/src/main/java/io/quarkus/test/junit/launcher/CustomLauncherInterceptor.java</p>
+          <p>Implements LauncherSessionListener, LauncherDiscoveryListener, TestExecutionListener. Creates FacadeClassLoader and manages TCCL throughout the JUnit platform lifecycle.</p>
+        </div>
+
+        <div class="detail-box">
+          <p class="highlight4" style="font-weight:700">QuarkusTestExtension.java</p>
+          <p class="file-path">test-framework/junit/src/main/java/io/quarkus/test/junit/QuarkusTestExtension.java</p>
+          <p>Main JUnit 5 extension. Implements all lifecycle callbacks. doJavaStart() bootstraps the app. Intercepts method invocations to route to CDI-managed test instances.</p>
+        </div>
+
+        <div class="detail-box">
+          <p class="highlight4" style="font-weight:700">AbstractJvmQuarkusTestExtension.java</p>
+          <p class="file-path">test-framework/junit/src/main/java/io/quarkus/test/junit/AbstractJvmQuarkusTestExtension.java</p>
+          <p>Base class for QuarkusTestExtension. Handles test profiles, execution conditions, Config initialization for non-system classloaders.</p>
+        </div>
+
+        <div class="detail-box">
+          <p class="highlight4" style="font-weight:700">AppMakerHelper.java</p>
+          <p class="file-path">test-framework/junit/src/main/java/io/quarkus/test/junit/AppMakerHelper.java</p>
+          <p>Creates CuratedApplications (resolves Maven/Gradle app model, builds QuarkusBootstrap). prepare() indexes test classes and creates augmentors. getStartupAction() runs augmentation.</p>
+        </div>
+      </div>
+
+      <div>
+        <h3 style="color:var(--accent);margin-bottom:1rem">Bootstrap &amp; ClassLoading (independent-projects/bootstrap/)</h3>
+
+        <div class="detail-box">
+          <p class="highlight2" style="font-weight:700">QuarkusClassLoader.java</p>
+          <p class="file-path">independent-projects/bootstrap/core/src/main/java/io/quarkus/bootstrap/classloading/QuarkusClassLoader.java</p>
+          <p>The custom classloader used in dev/test mode. Supports child-first loading, banned elements, parent-first elements, lesser-priority elements, resettable/transformed class memory elements. Linked to CuratedApplication.</p>
+        </div>
+
+        <div class="detail-box">
+          <p class="highlight2" style="font-weight:700">CuratedApplication.java</p>
+          <p class="file-path">independent-projects/bootstrap/core/src/main/java/io/quarkus/bootstrap/app/CuratedApplication.java</p>
+          <p>Factory for all classloaders: Augmentation CL, Base Runtime CL, Deployment CL, Runtime CL. Configures class partitioning based on dependency flags and ConfiguredClassLoading. Contains ClassFilteredBannedElement hack.</p>
+        </div>
+
+        <div class="detail-box">
+          <p class="highlight2" style="font-weight:700">StartupAction.java</p>
+          <p class="file-path">independent-projects/bootstrap/core/src/main/java/io/quarkus/bootstrap/app/StartupAction.java</p>
+          <p>Interface returned by augmentation. Provides the Runtime ClassLoader, run()/runMainClass() to start the app, config override, dev services initialization, module configuration.</p>
+        </div>
+
+        <div class="detail-box">
+          <p class="highlight2" style="font-weight:700">RunningQuarkusApplication.java</p>
+          <p class="file-path">independent-projects/bootstrap/core/src/main/java/io/quarkus/bootstrap/app/RunningQuarkusApplication.java</p>
+          <p>The running application handle. Provides getClassLoader(), instance() for CDI beans, getConfigValue(), valueRegistry(), close().</p>
+        </div>
+
+        <h3 style="color:var(--accent);margin-bottom:1rem;margin-top:1.5rem">Config (test-framework/junit-config/)</h3>
+
+        <div class="detail-box">
+          <p class="highlight3" style="font-weight:700">ConfigLauncherSession.java</p>
+          <p class="file-path">test-framework/junit-config/src/main/java/io/quarkus/test/config/ConfigLauncherSession.java</p>
+          <p>LauncherSessionListener that registers initial SmallRye Config before any test code runs. Registered against SystemClassLoader and TCCL.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="detail-box" style="margin-top:1.5rem">
+      <p><span class="highlight" style="font-weight:700">Service Loader Registrations:</span></p>
+      <ul>
+        <li><span class="code-ref">META-INF/services/org.junit.platform.launcher.LauncherSessionListener</span> -> CustomLauncherInterceptor (junit module) + ConfigLauncherSession (junit-config module)</li>
+        <li><span class="code-ref">META-INF/services/org.junit.platform.launcher.LauncherDiscoveryListener</span> -> CustomLauncherInterceptor</li>
+        <li><span class="code-ref">META-INF/services/org.junit.platform.launcher.TestExecutionListener</span> -> CustomLauncherInterceptor</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+function showTab(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+
+</body>
+</html>
