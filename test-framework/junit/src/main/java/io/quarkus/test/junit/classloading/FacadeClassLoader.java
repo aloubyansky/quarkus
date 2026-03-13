@@ -25,6 +25,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 
 import org.jboss.jandex.AnnotationInstance;
 import org.jboss.jandex.AnnotationValue;
@@ -142,16 +144,18 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
         this.quarkusTestClasses = quarkusTestClasses;
         this.isAuxiliaryApplication = isAuxiliaryApplication;
 
-        // Build a Jandex index from classpath directories (not JARs) for annotation inspection.
-        // Test classes live in directories (e.g. target/test-classes), not in JARs.
+        // Build a Jandex index from all classpath entries for annotation inspection.
         // This replaces the peekingClassLoader: instead of loading every class to inspect annotations,
         // we read bytecode directly via Jandex - no class loading, no static initializers, no dependency resolution.
+        // Both directories (e.g. target/test-classes) and JARs (e.g. test-jar dependencies used with
+        // surefire's dependenciesToScan) are indexed.
         Indexer indexer = new Indexer();
         for (String spec : classesPath.split(File.pathSeparator)) {
             Path path = Path.of(spec);
-            // Only index directories, not JARs - test classes are always in directories
             if (Files.isDirectory(path)) {
                 indexDirectory(indexer, path);
+            } else if (spec.endsWith(".jar") && Files.isRegularFile(path)) {
+                indexJar(indexer, path);
             }
         }
         jandexIndex = indexer.complete();
@@ -737,6 +741,24 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
             });
         } catch (IOException e) {
             log.debug("Could not index directory " + directory + ": " + e);
+        }
+    }
+
+    private static void indexJar(Indexer indexer, Path jarPath) {
+        try (JarFile jarFile = new JarFile(jarPath.toFile())) {
+            Enumeration<JarEntry> entries = jarFile.entries();
+            while (entries.hasMoreElements()) {
+                JarEntry entry = entries.nextElement();
+                if (entry.getName().endsWith(".class")) {
+                    try (InputStream in = jarFile.getInputStream(entry)) {
+                        indexer.index(in);
+                    } catch (Exception e) {
+                        // ignore - class files that can't be indexed are skipped
+                    }
+                }
+            }
+        } catch (IOException e) {
+            log.debug("Could not index JAR " + jarPath + ": " + e);
         }
     }
 }
