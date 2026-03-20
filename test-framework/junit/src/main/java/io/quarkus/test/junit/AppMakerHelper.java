@@ -122,7 +122,7 @@ public class AppMakerHelper {
             }
             validateTestDir(requiredTestClass, testClassesDir, module);
             testClassLocation = testClassesDir;
-
+            testAppModel = gradleAppModel;
         } else {
             if (System.getProperty(BootstrapConstants.OUTPUT_SOURCES_DIR) != null) {
                 final String[] sourceDirectories = System.getProperty(BootstrapConstants.OUTPUT_SOURCES_DIR).split(",");

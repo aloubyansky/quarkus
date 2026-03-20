@@ -44,6 +44,9 @@ import org.junit.jupiter.api.condition.OS;
 import io.quarkus.bootstrap.app.CuratedApplication;
 import io.quarkus.bootstrap.app.StartupAction;
 import io.quarkus.bootstrap.classloading.QuarkusClassLoader;
+import io.quarkus.bootstrap.model.ApplicationModel;
+import io.quarkus.maven.dependency.DependencyFlags;
+import io.quarkus.maven.dependency.ResolvedDependency;
 import io.quarkus.runtime.JVMUnsafeWarningsControl;
 import io.quarkus.test.common.FacadeClassLoaderProvider;
 import io.quarkus.test.junit.AppMakerHelper;
@@ -84,7 +87,7 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
     // Jandex annotation DotName constants
     private static final DotName QUARKUS_TEST = DotName.createSimple("io.quarkus.test.junit.QuarkusTest");
     private static final DotName QUARKUS_INTEGRATION_TEST = DotName.createSimple(QuarkusIntegrationTest.class.getName());
-    private static final DotName TEST_PROFILE = DotName.createSimple(TestProfile.class.getName());
+    private static final DotName TEST_PROFILE_ANNOTATION = DotName.createSimple(TestProfile.class.getName());
     private static final DotName DISABLED = DotName.createSimple("org.junit.jupiter.api.Disabled");
     private static final DotName DISABLED_ON_OS = DotName.createSimple("org.junit.jupiter.api.condition.DisabledOnOs");
     private static final DotName NESTED = DotName.createSimple("org.junit.jupiter.api.Nested");
@@ -151,6 +154,7 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
         // Both directories (e.g. target/test-classes) and JARs (e.g. test-jar dependencies used with
         // surefire's dependenciesToScan) are indexed.
         Indexer indexer = new Indexer();
+        //        indexRuntimeClasses(indexer, curatedApplication.getApplicationModel());
         for (String spec : classesPath.split(File.pathSeparator)) {
             Path path = Path.of(spec);
             if (Files.isDirectory(path)) {
@@ -543,7 +547,7 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
      */
     private String getTestProfileClassName(ClassInfo classInfo) {
         // Direct check
-        AnnotationInstance profileAnn = classInfo.declaredAnnotation(TEST_PROFILE);
+        AnnotationInstance profileAnn = classInfo.declaredAnnotation(TEST_PROFILE_ANNOTATION);
         if (profileAnn != null) {
             AnnotationValue value = profileAnn.value();
             if (value != null) {
@@ -707,6 +711,26 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
         keyMakerClassLoader = null;
         runtimeClassLoaders.clear();
 
+    }
+
+    private static void indexRuntimeClasses(Indexer indexer, ApplicationModel applicationModel) {
+        indexDependency(indexer, applicationModel.getAppArtifact());
+        for (ResolvedDependency dep : applicationModel.getDependencies(DependencyFlags.RUNTIME_CP)) {
+            indexDependency(indexer, dep);
+        }
+    }
+
+    private static void indexDependency(Indexer indexer, ResolvedDependency dep) {
+        dep.getContentTree().walk(visit -> {
+            Path path = visit.getPath();
+            if (path.getFileName().toString().endsWith(".class")) {
+                try (InputStream in = Files.newInputStream(path, StandardOpenOption.READ)) {
+                    indexer.index(in);
+                } catch (Exception e) {
+                    // ignore - class files that can't be indexed are skipped
+                }
+            }
+        });
     }
 
     private static void indexDirectory(Indexer indexer, Path directory) {
