@@ -8,6 +8,19 @@ shopt -s failglob
 
 export IFS=$'\n'
 
+# For deployment modules, add their parent aggregator POM to ensure it is
+# included in the reactor (needed for dependency parent POM resolution).
+add_deployment_parents() {
+  local modules="$1"
+  local all_modules="$modules"
+  for module in $modules; do
+    if [[ "$module" == */deployment ]]; then
+      all_modules+=$'\n'"$(dirname "$module")"
+    fi
+  done
+  echo "$all_modules" | sort -u
+}
+
 # path of this shell script
 PRG_PATH=$( cd "$(dirname "$0")" ; pwd -P )
 
@@ -45,6 +58,14 @@ fi
 
 RUNTIME_MODULES=$(echo -n "$1" | grep -Pv '^(integration-tests|tcks|docs)($|/.*)' || echo '')
 INTEGRATION_TESTS=$(echo -n "$1" | grep -Po '^integration-tests/.+' | grep -Pv '^integration-tests/(devtools|gradle|maven|devmode|kubernetes)($|/.*)' || echo '')
+
+# Include parent aggregator POMs of deployment modules in the reactor
+if [ -n "$RUNTIME_MODULES" ]; then
+  RUNTIME_MODULES=$(add_deployment_parents "$RUNTIME_MODULES")
+fi
+if [ -n "$INTEGRATION_TESTS" ]; then
+  INTEGRATION_TESTS=$(add_deployment_parents "$INTEGRATION_TESTS")
+fi
 
 if [ -z "$RUNTIME_MODULES" ] && [ -z "$INTEGRATION_TESTS" ]; then
   echo -n ''
