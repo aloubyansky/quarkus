@@ -3,9 +3,9 @@ package io.quarkus.test.junit.classloading;
 import static io.quarkus.deployment.dev.testing.ApplicationPropertiesUtils.createTempApplicationProperties;
 import static io.quarkus.runtime.LaunchMode.TEST;
 import static io.quarkus.runtime.configuration.ConfigSourceOrdinal.TEST_PROFILE;
+import static io.quarkus.test.junit.AppMakerHelper.resolveApplicationModel;
 
 import java.io.Closeable;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
@@ -45,8 +45,10 @@ import io.quarkus.bootstrap.app.CuratedApplication;
 import io.quarkus.bootstrap.app.StartupAction;
 import io.quarkus.bootstrap.classloading.QuarkusClassLoader;
 import io.quarkus.bootstrap.model.ApplicationModel;
+import io.quarkus.bootstrap.workspace.ArtifactSources;
 import io.quarkus.maven.dependency.DependencyFlags;
 import io.quarkus.maven.dependency.ResolvedDependency;
+import io.quarkus.paths.PathTree;
 import io.quarkus.runtime.JVMUnsafeWarningsControl;
 import io.quarkus.test.common.FacadeClassLoaderProvider;
 import io.quarkus.test.junit.AppMakerHelper;
@@ -122,6 +124,8 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
 
     private final List<FacadeClassLoaderProvider> facadeClassLoaderProviders;
 
+    private final ApplicationModel testAppModel;
+
     public FacadeClassLoader(ClassLoader parent) {
         this(parent, false, null, null, null, System.getProperty("java.class.path"));
     }
@@ -143,6 +147,9 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
         // Don't make a no-profile curated application if our caller had one already
         if (curatedApplication != null) {
             curatedApplications.put(getProfileKey(null), curatedApplication);
+            testAppModel = curatedApplication.getApplicationModel();
+        } else {
+            this.testAppModel = resolveApplicationModel();
         }
 
         this.quarkusTestClasses = quarkusTestClasses;
@@ -154,7 +161,8 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
         // Both directories (e.g. target/test-classes) and JARs (e.g. test-jar dependencies used with
         // surefire's dependenciesToScan) are indexed.
         Indexer indexer = new Indexer();
-        //        indexRuntimeClasses(indexer, curatedApplication.getApplicationModel());
+        indexRuntimeClasses(indexer, testAppModel);
+        /* @formatter:off
         for (String spec : classesPath.split(File.pathSeparator)) {
             Path path = Path.of(spec);
             if (Files.isDirectory(path)) {
@@ -163,6 +171,8 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
                 indexJar(indexer, path);
             }
         }
+        @formatter:on
+         */
         jandexIndex = indexer.complete();
 
         // Check if QuarkusTest is reachable at all
@@ -652,7 +662,8 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
         if (curatedApplication == null) {
             String displayName = DISPLAY_NAME_PREFIX + key;
             // TODO should we use clonedBuilder here, like TestSupport does?
-            curatedApplication = AppMakerHelper.makeCuratedApplication(requiredTestClass, additionalPaths, displayName,
+            curatedApplication = AppMakerHelper.makeCuratedApplication(testAppModel, requiredTestClass, additionalPaths,
+                    displayName,
                     isAuxiliaryApplication);
             curatedApplications.put(key, curatedApplication);
         }
@@ -714,16 +725,23 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
     }
 
     private static void indexRuntimeClasses(Indexer indexer, ApplicationModel applicationModel) {
-        indexDependency(indexer, applicationModel.getAppArtifact());
+        indexDependency(indexer, applicationModel.getAppArtifact().getContentTree());
+        if (applicationModel.getApplicationModule() != null) {
+            ArtifactSources testSources = applicationModel.getApplicationModule().getTestSources();
+            if (testSources != null && testSources.isOutputAvailable()) {
+                indexDependency(indexer, testSources.getOutputTree());
+            }
+        }
         for (ResolvedDependency dep : applicationModel.getDependencies(DependencyFlags.RUNTIME_CP)) {
-            indexDependency(indexer, dep);
+            indexDependency(indexer, dep.getContentTree());
         }
     }
 
-    private static void indexDependency(Indexer indexer, ResolvedDependency dep) {
-        dep.getContentTree().walk(visit -> {
+    private static void indexDependency(Indexer indexer, PathTree pathTree) {
+        pathTree.walk(visit -> {
             Path path = visit.getPath();
-            if (path.getFileName().toString().endsWith(".class")) {
+            Path fileName = path.getFileName();
+            if (fileName != null && fileName.toString().endsWith(".class")) {
                 try (InputStream in = Files.newInputStream(path, StandardOpenOption.READ)) {
                     indexer.index(in);
                 } catch (Exception e) {

@@ -111,7 +111,7 @@ public class QuarkusMainTestExtension extends AbstractJvmQuarkusTestExtension
                     ConfigSourceOrdinal.TEST_PROFILE));
         }
 
-        CuratedApplication curatedApplication = AppMakerHelper.makeCuratedApplication(requiredTestClass, additionalPaths,
+        CuratedApplication curatedApplication = AppMakerHelper.makeCuratedApplication(null, requiredTestClass, additionalPaths,
                 context.getDisplayName(), false);
         return AppMakerHelper.prepare(requiredTestClass, curatedApplication, testProfile.map(klass -> klass));
     }

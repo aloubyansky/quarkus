@@ -7,7 +7,6 @@ import static io.quarkus.test.common.PathTestHelper.validateTestDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +48,25 @@ public class AppMakerHelper {
                 : null;
     }
 
+    public static ApplicationModel resolveApplicationModel() {
+        final Path projectRoot = Path.of("").normalize().toAbsolutePath();
+        try {
+            ApplicationModel testAppModel = AppMakerHelper.getGradleAppModelForIDE(projectRoot);
+            // If gradle project running directly with IDE
+            if (testAppModel == null || testAppModel.getApplicationModule() == null) {
+                testAppModel = BootstrapAppModelFactory.newInstance()
+                        .setTest(true)
+                        .setEnableClasspathCache(true)
+                        .setProjectRoot(projectRoot)
+                        .resolveAppModel()
+                        .getApplicationModel();
+            }
+            return testAppModel;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to resolve test ApplicationModel", e);
+        }
+    }
+
     static PrepareResult prepare(
             Class<?> requiredTestClass,
             CuratedApplication curatedApplication,
@@ -75,8 +93,13 @@ public class AppMakerHelper {
                 curatedApplication);
     }
 
-    public static CuratedApplication makeCuratedApplication(Class<?> requiredTestClass, List<Path> additionalPaths,
+    public static CuratedApplication makeCuratedApplication(ApplicationModel testAppModel, Class<?> requiredTestClass,
+            List<Path> additionalPaths,
             String displayName, boolean isContinuousTesting) throws Exception {
+        if (testAppModel == null) {
+            testAppModel = resolveApplicationModel();
+        }
+
         final PathList.Builder rootBuilder = PathList.builder();
         final Consumer<Path> addToBuilderIfConditionMet = path -> {
             if (path != null && Files.exists(path)) {
@@ -87,51 +110,49 @@ public class AppMakerHelper {
             }
         };
 
-        final Path testClassLocation;
-        final Path appClassLocation;
         final Path projectRoot = Path.of("").normalize().toAbsolutePath();
 
-        ApplicationModel testAppModel = null;
-        final ApplicationModel gradleAppModel = getGradleAppModelForIDE(projectRoot);
-        // If gradle project running directly with IDE
-        if (gradleAppModel != null && gradleAppModel.getApplicationModule() != null) {
-            final WorkspaceModule module = gradleAppModel.getApplicationModule();
-            final String testClassFileName = ClassLoaderHelper
-                    .fromClassNameToResourceName(requiredTestClass.getName());
-            Path testClassesDir = null;
-            for (String classifier : module.getSourceClassifiers()) {
-                final ArtifactSources sources = module.getSources(classifier);
-                if (sources.isOutputAvailable() && sources.getOutputTree().contains(testClassFileName)) {
-                    for (SourceDir src : sources.getSourceDirs()) {
-                        addToBuilderIfConditionMet.accept(src.getOutputDir());
-                        if (Files.exists(src.getOutputDir().resolve(testClassFileName))) {
-                            testClassesDir = src.getOutputDir();
-                        }
-                    }
-                    for (SourceDir src : sources.getResourceDirs()) {
-                        addToBuilderIfConditionMet.accept(src.getOutputDir());
-                    }
-                    for (SourceDir src : module.getMainSources().getSourceDirs()) {
-                        addToBuilderIfConditionMet.accept(src.getOutputDir());
-                    }
-                    for (SourceDir src : module.getMainSources().getResourceDirs()) {
-                        addToBuilderIfConditionMet.accept(src.getOutputDir());
-                    }
-                    break;
-                }
+        if (System.getProperty(BootstrapConstants.OUTPUT_SOURCES_DIR) != null) {
+            final String[] sourceDirectories = System.getProperty(BootstrapConstants.OUTPUT_SOURCES_DIR).split(",");
+            for (String sourceDirectory : sourceDirectories) {
+                final Path directory = Path.of(sourceDirectory);
+                addToBuilderIfConditionMet.accept(directory);
             }
+        }
+
+        final WorkspaceModule module = testAppModel.getApplicationModule();
+        for (SourceDir src : module.getMainSources().getSourceDirs()) {
+            addToBuilderIfConditionMet.accept(src.getOutputDir());
+        }
+        for (SourceDir src : module.getMainSources().getResourceDirs()) {
+            addToBuilderIfConditionMet.accept(src.getOutputDir());
+        }
+
+        final String testClassFileName = ClassLoaderHelper
+                .fromClassNameToResourceName(requiredTestClass.getName());
+        Path testClassesDir = null;
+        for (String classifier : module.getSourceClassifiers()) {
+            final ArtifactSources sources = module.getSources(classifier);
+            if (sources.isOutputAvailable() && sources.getOutputTree().contains(testClassFileName)) {
+                for (SourceDir src : sources.getSourceDirs()) {
+                    addToBuilderIfConditionMet.accept(src.getOutputDir());
+                    if (Files.exists(src.getOutputDir().resolve(testClassFileName))) {
+                        testClassesDir = src.getOutputDir();
+                    }
+                }
+                for (SourceDir src : sources.getResourceDirs()) {
+                    addToBuilderIfConditionMet.accept(src.getOutputDir());
+                }
+                break;
+            }
+        }
+
+        final Path testClassLocation;
+        final Path appClassLocation;
+        if (testClassesDir != null) {
             validateTestDir(requiredTestClass, testClassesDir, module);
             testClassLocation = testClassesDir;
-            testAppModel = gradleAppModel;
         } else {
-            if (System.getProperty(BootstrapConstants.OUTPUT_SOURCES_DIR) != null) {
-                final String[] sourceDirectories = System.getProperty(BootstrapConstants.OUTPUT_SOURCES_DIR).split(",");
-                for (String sourceDirectory : sourceDirectories) {
-                    final Path directory = Paths.get(sourceDirectory);
-                    addToBuilderIfConditionMet.accept(directory);
-                }
-            }
-
             testClassLocation = getTestClassesLocation(requiredTestClass);
             appClassLocation = getAppClassLocationForTestLocation(testClassLocation);
             if (!appClassLocation.equals(testClassLocation)) {
@@ -143,17 +164,6 @@ public class AppMakerHelper {
             }
 
             addToBuilderIfConditionMet.accept(appClassLocation);
-
-            testAppModel = BootstrapAppModelFactory.newInstance()
-                    .setTest(true)
-                    .setEnableClasspathCache(true)
-                    .setProjectRoot(projectRoot)
-                    .resolveAppModel()
-                    .getApplicationModel();
-
-            for (var rootDir : testAppModel.getAppArtifact().getContentTree().getRoots()) {
-                addToBuilderIfConditionMet.accept(rootDir);
-            }
         }
 
         for (Path additionalPath : additionalPaths) {
