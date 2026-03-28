@@ -190,7 +190,7 @@ public interface PackageConfig {
          * <li>{@code classes} - Exclude non-reachable classes from dependencies.</li>
          * </ul>
          */
-        @WithDefault("none")
+        @WithDefault("classes")
         TreeShakeLevel treeShake();
 
         /**
