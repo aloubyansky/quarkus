@@ -195,6 +195,7 @@ public class JarResultBuildStep {
             List<GeneratedResourceBuildItem> generatedResources,
             MainClassBuildItem mainClassBuildItem,
             ClassLoadingConfig classLoadingConfig,
+            JarTreeShakeBuildItem treeShakeResult,
             ExecutorService buildExecutor,
             ResolvedJVMRequirements jvmRequirements) throws Exception {
 
@@ -210,7 +211,8 @@ public class JarResultBuildStep {
                 nativeImageResources,
                 getRemovedArtifactKeys(classLoadingConfig),
                 buildExecutor,
-                jvmRequirements).build();
+                jvmRequirements,
+                treeShakeResult).build();
     }
 
     // the idea here is to just dump the class names of the generated and transformed classes into a file

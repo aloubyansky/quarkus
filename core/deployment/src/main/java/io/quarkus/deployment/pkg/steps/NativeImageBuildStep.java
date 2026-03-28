@@ -57,6 +57,7 @@ import io.quarkus.maven.dependency.ResolvedDependency;
 import io.quarkus.runtime.LocalesBuildTimeConfig;
 import io.quarkus.runtime.graal.DisableLoggingFeature;
 import io.quarkus.runtime.graal.JVMChecksFeature;
+import io.quarkus.runtime.graal.SkipConsoleServiceProvidersFeature;
 import io.quarkus.sbom.ApplicationComponent;
 import io.quarkus.sbom.ApplicationManifestConfig;
 import io.smallrye.common.cpu.CPU;
@@ -89,10 +90,13 @@ public class NativeImageBuildStep {
     public static final String ARTIFACT_RESULT_TYPE = "native";
 
     @BuildStep(onlyIf = NativeOrNativeSourcesBuild.class)
-    void nativeImageFeatures(BuildProducer<NativeImageFeatureBuildItem> features) {
+    void nativeImageFeatures(BuildProducer<NativeImageFeatureBuildItem> features, NativeConfig nativeConfig) {
         features.produce(new NativeImageFeatureBuildItem(NativeImageFeatureStep.GRAAL_FEATURE));
         features.produce(new NativeImageFeatureBuildItem(DisableLoggingFeature.class));
         features.produce(new NativeImageFeatureBuildItem(JVMChecksFeature.class));
+        if (!nativeConfig.autoServiceLoaderRegistration()) {
+            features.produce(new NativeImageFeatureBuildItem(SkipConsoleServiceProvidersFeature.class));
+        }
     }
 
     @BuildStep(onlyIf = NativeBuild.class)
@@ -778,7 +782,6 @@ public class NativeImageBuildStep {
                     featuresList.add(nativeImageFeature.getQualifiedName());
                 }
                 if (!nativeConfig.autoServiceLoaderRegistration()) {
-                    featuresList.add("io.quarkus.runtime.graal.SkipConsoleServiceProvidersFeature");
                     // required by the feature
                     nativeImageArgs.add("-J--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.core.jdk=ALL-UNNAMED");
                 }
