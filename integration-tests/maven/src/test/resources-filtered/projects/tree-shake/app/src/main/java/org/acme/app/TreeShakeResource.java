@@ -101,7 +101,16 @@ public class TreeShakeResource {
     @GET
     @Path("/jboss-logging")
     public String jbossLogging() {
-        return new LoggedClass().doWork();
+        String base = new LoggedClass().doWork();
+        // Verify all JBoss Logging companion suffixes are preserved
+        for (String suffix : new String[] { "_$logger", "_$bundle", "_impl" }) {
+            try {
+                Class.forName("org.acme.logging.LoggedClass" + suffix);
+            } catch (ClassNotFoundException e) {
+                return "MISSING:" + suffix;
+            }
+        }
+        return base;
     }
 
     @GET
