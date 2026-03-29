@@ -174,11 +174,11 @@ class JarTreeShaker {
     }
 
     /**
-     * JBoss Logging companion classes (_$logger, _$bundle) are loaded reflectively
+     * JBoss Logging companion classes (_$logger, _$bundle, _impl) are loaded reflectively
      * via name concatenation in Logger.getMessageLogger().
      */
     private void includeJbossLoggingCompanions(String name, Set<String> visited, Queue<String> queue) {
-        for (String suffix : new String[] { "_$logger", "_$bundle" }) {
+        for (String suffix : new String[] { "_$logger", "_$bundle", "_impl" }) {
             String companion = name + suffix;
             if (input.depBytecode.containsKey(companion) && visited.add(companion)) {
                 queue.add(companion);
