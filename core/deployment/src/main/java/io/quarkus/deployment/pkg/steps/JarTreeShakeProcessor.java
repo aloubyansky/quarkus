@@ -23,6 +23,7 @@ import org.jboss.logging.Logger;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.builditem.GeneratedClassBuildItem;
+import io.quarkus.deployment.builditem.GeneratedResourceBuildItem;
 import io.quarkus.deployment.builditem.MainClassBuildItem;
 import io.quarkus.deployment.builditem.NativeImageFeatureBuildItem;
 import io.quarkus.deployment.builditem.TransformedClassesBuildItem;
@@ -107,6 +108,30 @@ public class JarTreeShakeProcessor {
             BuildProducer<JarTreeShakeRootClassBuildItem> roots) {
         for (GeneratedClassBuildItem gen : generatedClasses) {
             roots.produce(new JarTreeShakeRootClassBuildItem(gen.binaryName().replace('/', '.')));
+        }
+    }
+
+    /**
+     * Scans generated resources for {@code .classlist} files and adds the class names
+     * they contain as tree-shake roots. These files are produced by extension deployment
+     * processors (e.g., H2's {@code H2JDBCReflections}) and list classes that are loaded
+     * by name at native image build time via GraalVM {@code Feature} implementations.
+     * Currently only produced for native builds (guarded by {@code NativeOrNativeSourcesBuild}).
+     */
+    @BuildStep
+    void collectClassListResourceRoots(
+            List<GeneratedResourceBuildItem> generatedResources,
+            BuildProducer<JarTreeShakeRootClassBuildItem> roots) {
+        for (GeneratedResourceBuildItem resource : generatedResources) {
+            if (resource.getName().endsWith(".classlist")) {
+                String content = new String(resource.getData(), java.nio.charset.StandardCharsets.UTF_8);
+                for (String line : content.split("\n")) {
+                    String className = line.trim();
+                    if (!className.isEmpty()) {
+                        roots.produce(new JarTreeShakeRootClassBuildItem(className));
+                    }
+                }
+            }
         }
     }
 
