@@ -260,7 +260,8 @@ public class JarTreeShakeProcessor {
 
     /**
      * Parses a {@code native-image.properties} file and extracts class names from
-     * {@code --initialize-at-run-time} and {@code --initialize-at-build-time} arguments.
+     * {@code --initialize-at-run-time}, {@code --initialize-at-build-time}, and
+     * {@code --features} arguments.
      */
     private static void parseNativeImageProperties(java.nio.file.Path file,
             BuildProducer<JarTreeShakeRootClassBuildItem> roots) {
@@ -286,6 +287,7 @@ public class JarTreeShakeProcessor {
             String argsStr = args.toString();
             extractClassesFromArg(argsStr, "--initialize-at-run-time=", roots);
             extractClassesFromArg(argsStr, "--initialize-at-build-time=", roots);
+            extractClassesFromArg(argsStr, "--features=", roots);
         } catch (IOException e) {
             log.debugf(e, "Failed to read native-image.properties: %s", file);
         }
