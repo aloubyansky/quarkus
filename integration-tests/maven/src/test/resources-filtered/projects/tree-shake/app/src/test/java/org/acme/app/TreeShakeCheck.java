@@ -123,7 +123,7 @@ public class TreeShakeCheck {
     }
 
     /**
-     * Verifies that JBoss Logging companion classes ({@code _$logger}, {@code _$bundle})
+     * Verifies that JBoss Logging companion classes ({@code _$logger}, {@code _$bundle}, {@code _impl})
      * are preserved when their parent logging class is reachable.
      */
     @Test
