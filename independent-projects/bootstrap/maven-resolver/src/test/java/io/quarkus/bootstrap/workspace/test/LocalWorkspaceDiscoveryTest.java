@@ -174,14 +174,12 @@ public class LocalWorkspaceDiscoveryTest {
     public void workspaceWithDuplicateModuleGroupIdAndArtifactId() throws Exception {
         final Path moduleDir = getModuleDir("duplicate-ga/test/case");
 
-        final LocalWorkspace ws = LocalProject.loadWorkspace(moduleDir).getWorkspace();
-
-        LocalProject project = ws.getProject("org.acme", "acme-lib");
-        assertNotNull(project);
-        assertThat(project.getDir()).isEqualTo(moduleDir);
-
-        assertNotNull(ws.getProject("org.acme", "acme-parent"));
-        assertEquals(2, ws.getProjects().size());
+        try {
+            LocalProject.loadWorkspace(moduleDir);
+            fail("Expected an exception due to duplicate GAV");
+        } catch (Exception e) {
+            assertThat(e).hasStackTraceContaining("Duplicate GAV");
+        }
     }
 
     @Test
@@ -311,17 +309,14 @@ public class LocalWorkspaceDiscoveryTest {
     public void loadOverlappingWorkspaceLayout() throws Exception {
         final Path moduleDir = getModuleDir("overlapping-workspace-layout/root/root/module1");
 
-        final LocalProject module1 = new BootstrapMavenContext(BootstrapMavenContext.config()
-                .setCurrentProject(moduleDir.toString()))
-                .getCurrentProject();
-        final LocalWorkspace ws = module1.getWorkspace();
-
-        final LocalProject wsModule1 = ws.getProject("org.acme", "module1");
-        assertNotNull(wsModule1);
-        assertEquals(module1.getDir().toAbsolutePath(), wsModule1.getDir().toAbsolutePath());
-        assertTrue(module1 == wsModule1);
-        assertNotNull(ws.getProject("org.acme", "root"));
-        assertEquals(2, ws.getProjects().size());
+        try {
+            new BootstrapMavenContext(BootstrapMavenContext.config()
+                    .setCurrentProject(moduleDir.toString()))
+                    .getCurrentProject();
+            fail("Expected an exception due to duplicate GAV");
+        } catch (Exception e) {
+            assertThat(e).hasStackTraceContaining("Duplicate GAV");
+        }
     }
 
     @Test

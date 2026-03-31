@@ -106,10 +106,15 @@ public class WorkspaceLoader implements WorkspaceModelResolver, WorkspaceReader 
         if (providedModules != null) {
             // queue all the provided POMs
             for (var module : providedModules) {
-                if (queueCurrentPom && this.currentProjectPom.equals(module.pom)) {
+                if (queueCurrentPom
+                        && (this.currentProjectPom.equals(module.pom)
+                                || this.currentProjectPom.equals(module.getAlternativePom()))) {
                     queueCurrentPom = false;
                 }
                 knownModules.put(module.getModuleDir(), module);
+                if (module.getAlternativeDir() != null) {
+                    knownModules.put(module.getAlternativeDir(), module);
+                }
                 loadQueue.add(module);
             }
         }
@@ -259,7 +264,14 @@ public class WorkspaceLoader implements WorkspaceModelResolver, WorkspaceReader 
                 new GAV(module.getResolvedGroupId(), model.getArtifactId(), version),
                 model);
         if (existingModel != null) {
-            return;
+            if (module.isProvided()) {
+                return;
+            }
+            throw new IllegalStateException(
+                    String.format("Duplicate GAV %s:%s:%s: found at %s and %s",
+                            module.getResolvedGroupId(),
+                            model.getArtifactId(), version,
+                            module.pom, existingModel.getPomFile()));
         }
         final String rawVersion = ModelUtils.getRawVersionOrNull(model);
         if (rawVersion != null && !rawVersion.equals(version)) {
