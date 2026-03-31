@@ -6,6 +6,7 @@ import static io.smallrye.common.expression.Expression.Flag.NO_TRIM;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -86,14 +87,20 @@ public class QuarkusBootstrapProvider implements Closeable {
                 continue;
             }
             final Model model = getRawModel(mp);
-            config.addProvidedModule(mp.getFile().toPath(), model, mp.getModel());
             // The Maven Model API determines the project directory as the directory containing the POM file.
             // However, in case when plugins manipulating POMs store their results elsewhere
-            // (such as the flatten plugin storing the flattened POM under the target directory),
-            // both the base directory and the directory containing the POM file should be added to the map.
+            // (such as the flatten plugin storing the flattened POM under the target directory,
+            // or jgitver storing a modified POM in a temp location),
+            // the base directory POM should be the primary one and the manipulated POM
+            // should be registered as an alternative.
             var pomDir = mp.getFile().getParentFile();
             if (!pomDir.equals(mp.getBasedir())) {
-                config.addProvidedModule(mp.getBasedir().toPath().resolve("pom.xml"), model, mp.getModel());
+                Path primaryPom = mp.getBasedir().toPath().resolve("pom.xml");
+                model.setPomFile(primaryPom.toFile());
+                Path alternativePom = mp.getFile().toPath();
+                config.addProvidedModule(primaryPom, model, mp.getModel(), alternativePom);
+            } else {
+                config.addProvidedModule(mp.getFile().toPath(), model, mp.getModel(), null);
             }
         }
     }
