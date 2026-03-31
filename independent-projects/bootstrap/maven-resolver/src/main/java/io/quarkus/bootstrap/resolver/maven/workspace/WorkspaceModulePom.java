@@ -25,20 +25,43 @@ public class WorkspaceModulePom {
     int state = STATE_NEW;
     // a queue of modules that should be loaded after this one
     final ConcurrentLinkedDeque<WorkspaceModulePom> thenLoad = new ConcurrentLinkedDeque<>();
+    private Path alternativePom;
+    private final boolean provided;
 
     WorkspaceModulePom(Path pom) {
-        this(pom, null, null);
+        this(pom, null, null, false);
     }
 
     public WorkspaceModulePom(Path pom, Model model, Model effectiveModel) {
+        this(pom, model, effectiveModel, true);
+    }
+
+    private WorkspaceModulePom(Path pom, Model model, Model effectiveModel, boolean provided) {
         this.pom = pom.normalize().toAbsolutePath();
         this.model = model;
         this.effectiveModel = effectiveModel;
+        this.provided = provided;
     }
 
     Path getModuleDir() {
         var moduleDir = pom.getParent();
         return moduleDir == null ? WorkspaceLoader.getFsRootDir() : moduleDir;
+    }
+
+    Path getAlternativePom() {
+        return alternativePom;
+    }
+
+    Path getAlternativeDir() {
+        return alternativePom != null ? alternativePom.getParent() : null;
+    }
+
+    void setAlternativePom(Path alternativePom) {
+        this.alternativePom = alternativePom != null ? alternativePom.normalize().toAbsolutePath() : null;
+    }
+
+    boolean isProvided() {
+        return provided;
     }
 
     Model getModel() {
