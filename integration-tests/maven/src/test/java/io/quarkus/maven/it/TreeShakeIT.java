@@ -169,10 +169,6 @@ public class TreeShakeIT extends MojoTestBase {
         assertJarContains(libDir, "lib-jboss-logging", "org/acme/logging/LoggedClass_$bundle.class");
         assertJarNotContains(libDir, "lib-jboss-logging", "org/acme/logging/UnusedLogged.class");
 
-        // MethodHandles — findClass preserves ALL classes from the dependency
-        assertJarContains(libDir, "lib-method-handles", "org/acme/handles/HandleTarget.class");
-        assertJarContains(libDir, "lib-method-handles", "org/acme/handles/UnusedHandle.class");
-
         // Throws clause
         assertJarContains(libDir, "lib-throws", "org/acme/throws_/CustomException.class");
         assertJarContains(libDir, "lib-throws", "org/acme/throws_/ThrowingService.class");

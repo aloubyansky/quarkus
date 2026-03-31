@@ -293,11 +293,11 @@ class JarTreeShaker {
         ArtifactKey depKey = input.classToDep.get(name);
         if (depKey != null && usesDynamicClassLoading(bytecode)) {
             log.debugf("Dynamic class loading detected in %s, keeping all classes from %s", name, depKey);
-            //for (var entry : input.classToDep.entrySet()) {
-            //    if (depKey.equals(entry.getValue()) && visited.add(entry.getKey())) {
-            //        queue.add(entry.getKey());
-            //    }
-            // }
+            for (var entry : input.classToDep.entrySet()) {
+                if (depKey.equals(entry.getValue()) && visited.add(entry.getKey())) {
+                    queue.add(entry.getKey());
+                }
+            }
         }
 
     }
