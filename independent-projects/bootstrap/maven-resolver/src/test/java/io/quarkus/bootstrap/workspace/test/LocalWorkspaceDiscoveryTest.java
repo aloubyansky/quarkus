@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.maven.model.Dependency;
+import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.junit.jupiter.api.AfterAll;
@@ -264,6 +265,57 @@ public class LocalWorkspaceDiscoveryTest {
         assertNotNull(ws.getProject("org.example", "service-extension"));
         assertNotNull(ws.getProject("org.example", "service-extension-parent"));
         assertEquals(3, ws.getProjects().size());
+    }
+
+    @Test
+    public void loadWorkspaceWithAlternativePomPath() throws Exception {
+        // Create a multi-module project: root with module1
+        final Path rootDir = IoUtils.createRandomTmpDir();
+        try {
+            MvnProjectBuilder.forArtifact("alt-root")
+                    .addModule("module1", "alt-module1", true)
+                    .getParent()
+                    .build(rootDir);
+
+            final Path rootPom = rootDir.resolve("pom.xml");
+            final Path module1Dir = rootDir.resolve("module1");
+            final Path module1Pom = module1Dir.resolve("pom.xml");
+
+            // Simulate jgitver: copy module1's POM to a temp directory (the "alternative" location)
+            final Path altDir = IoUtils.createRandomTmpDir();
+            try {
+                final Path altPom = altDir.resolve("pom.xml");
+                java.nio.file.Files.copy(module1Pom, altPom);
+
+                // Read raw models
+                final Model rootModel = ModelUtils.readModel(rootPom);
+                rootModel.setPomFile(rootPom.toFile());
+                final Model module1Model = ModelUtils.readModel(module1Pom);
+                module1Model.setPomFile(module1Pom.toFile());
+
+                // Register root normally, module1 with alternative POM
+                final LocalProject project = new BootstrapMavenContext(BootstrapMavenContext.config()
+                        .addProvidedModule(rootPom, rootModel, null, null)
+                        .addProvidedModule(module1Pom, module1Model, null, altPom)
+                        .setCurrentProject(module1Dir.toString()))
+                        .getCurrentProject();
+
+                assertNotNull(project);
+                assertEquals("alt-module1", project.getArtifactId());
+                // Verify the project dir is the basedir, not the alternative POM's directory
+                assertEquals(module1Dir.toAbsolutePath(), project.getDir().toAbsolutePath());
+
+                final LocalWorkspace ws = project.getWorkspace();
+                assertNotNull(ws.getProject(MvnProjectBuilder.DEFAULT_GROUP_ID, "alt-root"));
+                assertNotNull(ws.getProject(MvnProjectBuilder.DEFAULT_GROUP_ID, "alt-module1"));
+                // No duplicates
+                assertEquals(2, ws.getProjects().size());
+            } finally {
+                IoUtils.recursiveDelete(altDir);
+            }
+        } finally {
+            IoUtils.recursiveDelete(rootDir);
+        }
     }
 
     @Test
