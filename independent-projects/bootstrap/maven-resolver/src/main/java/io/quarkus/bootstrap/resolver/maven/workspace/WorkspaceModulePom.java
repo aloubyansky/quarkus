@@ -56,7 +56,7 @@ public class WorkspaceModulePom {
         return alternativePom != null ? alternativePom.getParent() : null;
     }
 
-    void setAlternativePom(Path alternativePom) {
+    public void setAlternativePom(Path alternativePom) {
         this.alternativePom = alternativePom != null ? alternativePom.normalize().toAbsolutePath() : null;
     }
 

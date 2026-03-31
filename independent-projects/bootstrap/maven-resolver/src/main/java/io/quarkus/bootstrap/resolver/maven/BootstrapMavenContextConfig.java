@@ -369,17 +369,36 @@ public class BootstrapMavenContextConfig<T extends BootstrapMavenContextConfig<T
      * When workspace discovery is enabled, this method allows providing POMs
      * for a given workspace POM file. It doesn't have to be a complete list of modules.
      *
-     * @param pomFile POM file, never nul
+     * @param pomFile POM file, never null
      * @param rawModel raw POM model or null
      * @param effectiveModel effective POM model or null
      * @return this instance
      */
     @SuppressWarnings("unchecked")
     public T addProvidedModule(Path pomFile, Model rawModel, Model effectiveModel) {
+        return addProvidedModule(pomFile, rawModel, effectiveModel, null);
+    }
+
+    /**
+     * When workspace discovery is enabled, this method allows providing POMs
+     * for a given workspace POM file with an optional alternative POM path.
+     * The alternative POM path is used when Maven extensions (e.g., jgitver)
+     * store manipulated POMs in a different location than the project base directory.
+     *
+     * @param pomFile primary POM file (basedir/pom.xml), never null
+     * @param rawModel raw POM model or null
+     * @param effectiveModel effective POM model or null
+     * @param alternativePom alternative POM file path or null
+     * @return this instance
+     */
+    @SuppressWarnings("unchecked")
+    public T addProvidedModule(Path pomFile, Model rawModel, Model effectiveModel, Path alternativePom) {
         if (providedModules == null || providedModules.isEmpty()) {
             providedModules = new ArrayList<>();
         }
-        providedModules.add(new WorkspaceModulePom(pomFile, rawModel, effectiveModel));
+        var module = new WorkspaceModulePom(pomFile, rawModel, effectiveModel);
+        module.setAlternativePom(alternativePom);
+        providedModules.add(module);
         return (T) this;
     }
 
