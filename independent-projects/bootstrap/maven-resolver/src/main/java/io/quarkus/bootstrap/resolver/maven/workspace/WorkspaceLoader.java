@@ -95,9 +95,10 @@ public class WorkspaceLoader implements WorkspaceModelResolver, WorkspaceReader 
 
     WorkspaceLoader(BootstrapMavenContext ctx, Path currentProjectPom, List<WorkspaceModulePom> providedModules)
             throws BootstrapMavenException {
+        Path resolvedCurrentProjectPom;
         try {
             final BasicFileAttributes fileAttributes = Files.readAttributes(currentProjectPom, BasicFileAttributes.class);
-            this.currentProjectPom = fileAttributes.isDirectory() ? locateCurrentProjectPom(currentProjectPom)
+            resolvedCurrentProjectPom = fileAttributes.isDirectory() ? locateCurrentProjectPom(currentProjectPom)
                     : currentProjectPom;
         } catch (IOException e) {
             throw new IllegalArgumentException(currentProjectPom + " does not exist", e);
@@ -106,10 +107,16 @@ public class WorkspaceLoader implements WorkspaceModelResolver, WorkspaceReader 
         if (providedModules != null) {
             // queue all the provided POMs
             for (var module : providedModules) {
-                if (queueCurrentPom
-                        && (this.currentProjectPom.equals(module.pom)
-                                || this.currentProjectPom.equals(module.getAlternativePom()))) {
-                    queueCurrentPom = false;
+                if (queueCurrentPom) {
+                    if (resolvedCurrentProjectPom.equals(module.pom)) {
+                        queueCurrentPom = false;
+                    } else if (resolvedCurrentProjectPom.equals(module.getAlternativePom())) {
+                        // currentProjectPom points to an alternative POM (e.g., a jgitver temp file),
+                        // redirect to the primary POM so that currentProjectPom.getParent() matches
+                        // the actual project basedir
+                        resolvedCurrentProjectPom = module.pom;
+                        queueCurrentPom = false;
+                    }
                 }
                 knownModules.put(module.getModuleDir(), module);
                 if (module.getAlternativeDir() != null) {
@@ -118,6 +125,7 @@ public class WorkspaceLoader implements WorkspaceModelResolver, WorkspaceReader 
                 loadQueue.add(module);
             }
         }
+        this.currentProjectPom = resolvedCurrentProjectPom;
 
         if (queueCurrentPom) {
             WorkspaceModulePom module = new WorkspaceModulePom(this.currentProjectPom);
