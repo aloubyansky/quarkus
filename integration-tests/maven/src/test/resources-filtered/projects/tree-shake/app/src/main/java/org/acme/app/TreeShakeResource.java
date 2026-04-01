@@ -25,6 +25,7 @@ import org.acme.logging.LoggedClass;
 import org.acme.multirelease.MultiReleaseClass;
 import org.acme.serviceloader.ServiceInterface;
 import org.acme.throws_.ThrowingService;
+import org.acme.serialization.ResourceDeserializer;
 import org.acme.transform.TransformableClass;
 
 @Path("/tree-shake")
@@ -152,5 +153,11 @@ public class TreeShakeResource {
     @Path("/transform")
     public String transform() {
         return new TransformableClass().name();
+    }
+
+    @GET
+    @Path("/serialization")
+    public String serialization() {
+        return ResourceDeserializer.load();
     }
 }

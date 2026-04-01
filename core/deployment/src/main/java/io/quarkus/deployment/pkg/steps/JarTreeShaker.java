@@ -1,5 +1,9 @@
 package io.quarkus.deployment.pkg.steps;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,6 +28,7 @@ import org.objectweb.asm.signature.SignatureVisitor;
 
 import io.quarkus.deployment.pkg.builditem.JarTreeShakeBuildItem;
 import io.quarkus.maven.dependency.ArtifactKey;
+import io.quarkus.paths.OpenPathTree;
 
 class JarTreeShaker {
 
@@ -117,6 +122,7 @@ class JarTreeShaker {
             }
         }
         boolean sisuActivated = false;
+        final Map<ArtifactKey, Integer> depDeserializationFlags = new HashMap<>();
 
         while (!queue.isEmpty()) {
             String name = queue.poll();
@@ -138,6 +144,7 @@ class JarTreeShaker {
 
             enqueueBytecodeReferences(name, bytecode, allKnownClasses, visited, queue);
             includeAllClassesIfDynamicLoading(name, bytecode, visited, queue);
+            includeDeserializedClasses(name, bytecode, depDeserializationFlags, visited, queue);
         }
         return visited;
     }
@@ -300,6 +307,159 @@ class JarTreeShaker {
             }
         }
 
+    }
+
+    private static final int FLAG_RESOURCE_ACCESS = 1;
+    private static final int FLAG_OBJECT_INPUT_STREAM = 2;
+    private static final int FLAG_RESOURCE_DESERIALIZATION = FLAG_RESOURCE_ACCESS | FLAG_OBJECT_INPUT_STREAM;
+    private static final int FLAG_SCANNED = 4;
+
+    /**
+     * Tracks per-dependency usage of classpath resource access and ObjectInputStream.
+     * When both patterns are detected within reachable classes of the same dependency,
+     * scans the dependency's non-class resources for Java serialization streams and
+     * extracts the class names they reference. The resource access and ObjectInputStream
+     * usage may be in different classes (e.g. inner classes), so tracking is per-dependency.
+     */
+    private void includeDeserializedClasses(String name, byte[] bytecode,
+            Map<ArtifactKey, Integer> depFlags,
+            Set<String> visited, Queue<String> queue) {
+        ArtifactKey depKey = input.classToDep.get(name);
+        if (depKey == null) {
+            return;
+        }
+        int flags = depFlags.getOrDefault(depKey, 0);
+        if ((flags & FLAG_SCANNED) != 0) {
+            return;
+        }
+        flags |= detectResourceAndObjectInputStreamUsage(bytecode);
+        depFlags.put(depKey, flags);
+        if ((flags & FLAG_RESOURCE_DESERIALIZATION) != FLAG_RESOURCE_DESERIALIZATION) {
+            return;
+        }
+        depFlags.put(depKey, flags | FLAG_SCANNED);
+        OpenPathTree openTree = input.depOpenTrees.get(depKey);
+        if (openTree == null) {
+            return;
+        }
+        Set<String> classNames = extractClassNamesFromSerializedResources(openTree);
+        if (!classNames.isEmpty()) {
+            log.debugf("ObjectInputStream + resource access detected in %s, "
+                    + "found %d serialized classes in %s",
+                    name, classNames.size(), depKey);
+            for (String className : classNames) {
+                if (visited.add(className)) {
+                    queue.add(className);
+                }
+            }
+        }
+    }
+
+    /**
+     * Scans bytecode for classpath resource access ({@code getResource}/{@code getResourceAsStream})
+     * and ObjectInputStream usage, returning detected flags.
+     */
+    private static int detectResourceAndObjectInputStreamUsage(byte[] bytecode) {
+        int[] flags = new int[1];
+        ClassReader reader = new ClassReader(bytecode);
+        reader.accept(new ClassVisitor(Opcodes.ASM9) {
+            @Override
+            public MethodVisitor visitMethod(int access, String name, String descriptor,
+                    String signature, String[] exceptions) {
+                if ((flags[0] & FLAG_RESOURCE_DESERIALIZATION) == FLAG_RESOURCE_DESERIALIZATION) {
+                    return null;
+                }
+                return new MethodVisitor(Opcodes.ASM9) {
+                    @Override
+                    public void visitMethodInsn(int opcode, String owner, String mname,
+                            String mdescriptor, boolean isInterface) {
+                        if ("getResourceAsStream".equals(mname) || "getResource".equals(mname)) {
+                            flags[0] |= FLAG_RESOURCE_ACCESS;
+                        }
+                        if ("java/io/ObjectInputStream".equals(owner)) {
+                            flags[0] |= FLAG_OBJECT_INPUT_STREAM;
+                        }
+                    }
+
+                    @Override
+                    public void visitTypeInsn(int opcode, String type) {
+                        if ("java/io/ObjectInputStream".equals(type)) {
+                            flags[0] |= FLAG_OBJECT_INPUT_STREAM;
+                        }
+                    }
+                };
+            }
+        }, ClassReader.SKIP_FRAMES | ClassReader.SKIP_DEBUG);
+        return flags[0];
+    }
+
+    /**
+     * Scans non-class resources in the given dependency for Java serialization streams
+     * (magic bytes {@code 0xACED0005}) and extracts class names from class descriptors.
+     */
+    private static Set<String> extractClassNamesFromSerializedResources(OpenPathTree openTree) {
+        Set<String> classNames = new HashSet<>();
+        openTree.walk(visit -> {
+            String entry = visit.getResourceName();
+            if (entry.endsWith(".class") || entry.endsWith("/") || entry.startsWith("META-INF/")) {
+                return;
+            }
+            try (InputStream is = Files.newInputStream(visit.getPath())) {
+                byte[] header = new byte[4];
+                if (is.read(header) == 4
+                        && header[0] == (byte) 0xAC && header[1] == (byte) 0xED
+                        && header[2] == (byte) 0x00 && header[3] == (byte) 0x05) {
+                    byte[] rest = is.readAllBytes();
+                    extractClassDescriptorNames(rest, classNames);
+                }
+            } catch (IOException e) {
+                // ignore unreadable resources
+            }
+        });
+        return classNames;
+    }
+
+    /**
+     * Parses Java serialization stream data for TC_CLASSDESC markers ({@code 0x72})
+     * and extracts the class names from the UTF-encoded class descriptor strings.
+     */
+    private static void extractClassDescriptorNames(byte[] data, Set<String> classNames) {
+        for (int i = 0; i < data.length - 2; i++) {
+            if (data[i] == (byte) 0x72) {
+                int len = ((data[i + 1] & 0xFF) << 8) | (data[i + 2] & 0xFF);
+                if (len > 0 && len < 500 && i + 3 + len <= data.length) {
+                    String name = new String(data, i + 3, len, StandardCharsets.UTF_8);
+                    if (isValidClassName(name)) {
+                        classNames.add(name);
+                    }
+                    i += 2 + len; // skip past the class name
+                }
+            }
+        }
+    }
+
+    /**
+     * Validates that a string looks like a fully-qualified Java class name
+     * (contains at least one dot, starts with a valid identifier character,
+     * and contains only valid identifier characters, dots, and dollar signs).
+     */
+    private static boolean isValidClassName(String name) {
+        if (name.isEmpty() || name.length() > 300) {
+            return false;
+        }
+        if (!Character.isJavaIdentifierStart(name.charAt(0))) {
+            return false;
+        }
+        boolean hasDot = false;
+        for (int i = 1; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (c == '.') {
+                hasDot = true;
+            } else if (!Character.isJavaIdentifierPart(c)) {
+                return false;
+            }
+        }
+        return hasDot;
     }
 
     // ---- Bytecode analysis ----

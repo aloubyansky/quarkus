@@ -2,7 +2,9 @@ package io.quarkus.maven.it;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +28,7 @@ public class TreeShakeIT extends MojoTestBase {
     @BeforeAll
     void installLibs() throws Exception {
         libsDir = initProject("projects/tree-shake/libs");
+        generateSerializedResource(libsDir);
         RunningInvoker libsInvoker = new RunningInvoker(libsDir, false);
         MavenProcessInvocationResult result = libsInvoker.execute(
                 List.of("clean install -DskipTests"), Map.of());
@@ -33,6 +36,42 @@ public class TreeShakeIT extends MojoTestBase {
         assertThat(libsInvoker.log()).containsIgnoringCase("BUILD SUCCESS");
 
         appDir = initProject("projects/tree-shake/app");
+    }
+
+    /**
+     * Generates {@code lib-serialization/src/main/resources/org/acme/serialization/data.ser}
+     * containing a Java serialization stream with a class descriptor for
+     * {@code org.acme.serialization.SerializedTarget}. This class has no direct bytecode
+     * reference from application code — the tree shaker must discover it by scanning
+     * the serialized resource.
+     *
+     * <p>
+     * The stream is written manually so the class descriptor contains the correct
+     * class name without needing the target class on the test classpath.
+     */
+    private static void generateSerializedResource(File libsDir) throws IOException {
+        File resourceDir = new File(libsDir,
+                "lib-serialization/src/main/resources/org/acme/serialization");
+        resourceDir.mkdirs();
+        try (DataOutputStream dos = new DataOutputStream(
+                new FileOutputStream(new File(resourceDir, "data.ser")))) {
+            dos.writeShort(0xACED); // magic
+            dos.writeShort(0x0005); // version
+            dos.writeByte(0x73); // TC_OBJECT
+            dos.writeByte(0x72); // TC_CLASSDESC
+            dos.writeUTF("org.acme.serialization.SerializedTarget"); // class name
+            dos.writeLong(1L); // serialVersionUID
+            dos.writeByte(0x02); // SC_SERIALIZABLE
+            dos.writeShort(1); // field count = 1
+            dos.writeByte('L'); // field type: object
+            dos.writeUTF("name"); // field name
+            dos.writeByte(0x74); // TC_STRING (field class name)
+            dos.writeUTF("Ljava/lang/String;");
+            dos.writeByte(0x78); // TC_ENDBLOCKDATA (classAnnotation)
+            dos.writeByte(0x70); // TC_NULL (superClassDesc)
+            dos.writeByte(0x74); // TC_STRING (field value)
+            dos.writeUTF("deserialized");
+        }
     }
 
     // --- Helper methods ---
@@ -197,6 +236,11 @@ public class TreeShakeIT extends MojoTestBase {
         assertJarContains(libDir, "lib-jni", "org/acme/libjni/JniDep.class");
         assertJarNotContains(libDir, "lib-jni", "org/acme/libjni/UnusedJni.class");
 
+        // Serialized resource classes (ObjectInputStream + getResource pattern)
+        assertJarContains(libDir, "lib-serialization", "org/acme/serialization/SerializedTarget.class");
+        assertJarContains(libDir, "lib-serialization", "org/acme/serialization/ResourceDeserializer.class");
+        assertJarNotContains(libDir, "lib-serialization", "org/acme/serialization/UnusedSerialization.class");
+
         // Transformed classes
         // In fast-jar, originals stay in lib JAR (transforms go to transformed-bytecode.jar).
         // In legacy-jar, transformed classes are moved to the runner JAR, so they're not in the lib JAR.
@@ -284,5 +328,7 @@ public class TreeShakeIT extends MojoTestBase {
         assertUberJarNotContains(uberJarFile, "org/acme/libreflection/UnusedReflection.class");
         assertUberJarContains(uberJarFile, "org/acme/libjni/JniTarget.class");
         assertUberJarNotContains(uberJarFile, "org/acme/libjni/UnusedJni.class");
+        assertUberJarContains(uberJarFile, "org/acme/serialization/SerializedTarget.class");
+        assertUberJarNotContains(uberJarFile, "org/acme/serialization/UnusedSerialization.class");
     }
 }

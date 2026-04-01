@@ -200,4 +200,15 @@ public class TreeShakeCheck {
         given().when().get("/tree-shake/jni")
                 .then().statusCode(200).body(is("JniTarget"));
     }
+
+    /**
+     * Verifies that classes referenced only inside serialized resource files
+     * (loaded via {@code ObjectInputStream} from classpath resources) are preserved.
+     * The deserialized class has no direct bytecode reference from application code.
+     */
+    @Test
+    void testSerialization() {
+        given().when().get("/tree-shake/serialization")
+                .then().statusCode(200).body(is("SerializedTarget"));
+    }
 }
