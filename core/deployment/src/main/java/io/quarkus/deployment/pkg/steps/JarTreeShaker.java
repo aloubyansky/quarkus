@@ -528,6 +528,14 @@ class JarTreeShaker {
                     private String lastStringConstant;
 
                     @Override
+                    public void visitTryCatchBlock(Label start, Label end, Label handler, String type) {
+                        lastStringConstant = null;
+                        if (type != null) {
+                            refs.add(toClassName(type));
+                        }
+                    }
+
+                    @Override
                     public org.objectweb.asm.AnnotationVisitor visitAnnotationDefault() {
                         // Captures default values of annotation methods (e.g. @Reflective(processors = SimpleReflectiveProcessor.class))
                         return createAnnotationRefVisitor(refs);
