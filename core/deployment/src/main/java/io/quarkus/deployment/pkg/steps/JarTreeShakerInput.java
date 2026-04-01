@@ -64,6 +64,7 @@ class JarTreeShakerInput implements AutoCloseable {
     final Map<String, Set<String>> serviceLoaderCalls;
     final Set<String> allKnownClasses;
     final int appJavaVersion;
+    final Map<ArtifactKey, OpenPathTree> depOpenTrees;
 
     private final List<OpenPathTree> openTrees;
 
@@ -81,6 +82,7 @@ class JarTreeShakerInput implements AutoCloseable {
             Map<String, Set<String>> serviceLoaderCalls,
             Set<String> allKnownClasses,
             int appJavaVersion,
+            Map<ArtifactKey, OpenPathTree> depOpenTrees,
             List<OpenPathTree> openTrees) {
         this.treeShakeLevel = treeShakeLevel;
         this.roots = roots;
@@ -95,6 +97,7 @@ class JarTreeShakerInput implements AutoCloseable {
         this.serviceLoaderCalls = serviceLoaderCalls;
         this.allKnownClasses = allKnownClasses;
         this.appJavaVersion = appJavaVersion;
+        this.depOpenTrees = depOpenTrees;
         this.openTrees = openTrees;
     }
 
@@ -141,13 +144,15 @@ class JarTreeShakerInput implements AutoCloseable {
         final Set<String> sisuNamedClasses = new HashSet<>();
         final Map<String, Supplier<byte[]>> appBytecode = new HashMap<>();
         final Map<String, Set<String>> serviceLoaderCalls = new HashMap<>();
+        final Map<ArtifactKey, OpenPathTree> depOpenTrees = new HashMap<>();
 
         final int appJavaVersion = detectAppJavaVersion(appModel);
 
         final List<OpenPathTree> openTrees = new ArrayList<>();
         try {
             collectRuntimeClasses(appModel, appJavaVersion, roots, depBytecode, depBytecodeSize,
-                    classToDep, depBytecodeVersion, serviceProviders, sisuNamedClasses, openTrees);
+                    classToDep, depBytecodeVersion, serviceProviders, sisuNamedClasses, depOpenTrees,
+                    openTrees);
 
             collectTransformedClasses(transformedClasses, depBytecode, depBytecodeSize);
 
@@ -180,6 +185,7 @@ class JarTreeShakerInput implements AutoCloseable {
                     serviceLoaderCalls,
                     allKnownClasses,
                     appJavaVersion,
+                    depOpenTrees,
                     openTrees);
         } catch (Exception e) {
             for (var openPathTree : openTrees) {
@@ -207,12 +213,15 @@ class JarTreeShakerInput implements AutoCloseable {
             Map<String, Integer> depBytecodeVersion,
             Map<String, Set<String>> serviceProviders,
             Set<String> sisuNamedClasses,
+            Map<ArtifactKey, OpenPathTree> depOpenTrees,
             List<OpenPathTree> openTrees) {
 
         for (ResolvedDependency dep : appModel.getDependencies(DependencyFlags.RUNTIME_CP)) {
             final boolean addClassesAsRoots = "quarkus-bootstrap-runner".equals(dep.getArtifactId());
 
-            openPathTree(dep, openTrees).walkRaw(visit -> {
+            OpenPathTree openTree = openPathTree(dep, openTrees);
+            depOpenTrees.put(dep.getKey(), openTree);
+            openTree.walkRaw(visit -> {
                 String entry = visit.getResourceName();
                 if (isClassEntry(entry)) {
                     processRuntimeClassEntry(entry, visit.getPath(), dep, appJavaVersion, addClassesAsRoots,
