@@ -1,12 +1,18 @@
 package io.quarkus.deployment.pkg.steps;
 
-import java.security.Provider;
-import java.security.Security;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.Queue;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -139,7 +145,7 @@ class ClassLoadingChainAnalyzer {
         log.debugf("Found %d entry point classes for class-loading chains", entryPointClasses.size());
 
         // Phase 3: Execute entry points in a RecordingClassLoader
-        Set<String> discovered = executeWithRecordingClassLoader(
+        Set<String> discovered = executeInForkedJvm(
                 entryPointClasses, allBytecode, allKnownClasses);
 
         // Filter: only return classes that are known but not yet reachable
@@ -343,132 +349,139 @@ class ClassLoadingChainAnalyzer {
     }
 
     /**
-     * Phase 3: Execute entry point classes in a RecordingClassLoader to capture
-     * which classes get loaded during static initialization and construction.
+     * Phase 3: Execute entry point classes in a forked JVM to capture which classes
+     * get loaded during static initialization and construction.
+     * <p>
+     * Running in a separate process ensures all Metaspace consumed by {@code defineClass}
+     * is reclaimed when the process exits, regardless of GC behavior. This is critical
+     * because multiple tree-shaker instances may run in parallel during CI builds.
+     * <p>
+     * The forked JVM receives bytecode via a temp directory and communicates discovered
+     * class names back through stdout.
      */
-    private static Set<String> executeWithRecordingClassLoader(
+    private static Set<String> executeInForkedJvm(
             Set<String> entryPointClasses,
             Map<String, Supplier<byte[]>> allBytecode,
             Set<String> allKnownClasses) {
 
-        Set<String> allDiscovered = new HashSet<>();
-        // Reuse a single classloader across all entry points so each class is
-        // defined at most once, avoiding Metaspace exhaustion from many short-lived
-        // classloaders each defining overlapping sets of classes.
-        // Uses the platform classloader as parent so that app/dep classes are loaded
-        // by this classloader (child-first), ensuring transitive Class.forName() calls
-        // from loaded classes go through our loadClass() and get recorded.
-        RecordingClassLoader loader = new RecordingClassLoader(allBytecode);
-
-        // Snapshot global state that entry point class init may mutate
-        Provider[] providersBefore = Security.getProviders();
-        Properties sysProps = System.getProperties();
-        Properties sysPropsCopy = new Properties();
-        sysPropsCopy.putAll(sysProps);
-        // Suppress stdout/stderr: loaded classes may print warnings or stack traces
-        // during their static initialization. These are expected and harmless.
-        // Set the thread context classloader to the RecordingClassLoader so that
-        // ServiceLoader and other TCCL-based lookups resolve classes from the same
-        // classloader, avoiding cross-classloader subtype check failures.
-        java.io.PrintStream originalOut = System.out;
-        java.io.PrintStream originalErr = System.err;
-        Thread currentThread = Thread.currentThread();
-        ClassLoader originalTccl = currentThread.getContextClassLoader();
+        Path tempDir = null;
         try {
-            System.setOut(new java.io.PrintStream(java.io.OutputStream.nullOutputStream()));
-            System.setErr(new java.io.PrintStream(java.io.OutputStream.nullOutputStream()));
-            currentThread.setContextClassLoader(loader);
-            for (String entryPoint : entryPointClasses) {
-                executeEntryPoint(entryPoint, loader, allKnownClasses, allDiscovered);
+            tempDir = Files.createTempDirectory("tree-shake-recording");
+
+            // Write all bytecode to temp dir as class files
+            for (var entry : allBytecode.entrySet()) {
+                byte[] bytes;
+                try {
+                    bytes = entry.getValue().get();
+                } catch (Exception e) {
+                    continue;
+                }
+                String classFile = entry.getKey().replace('.', '/') + ".class";
+                Path target = tempDir.resolve(classFile);
+                Files.createDirectories(target.getParent());
+                Files.write(target, bytes);
             }
-        } finally {
-            currentThread.setContextClassLoader(originalTccl);
-            System.setOut(originalOut);
-            System.setErr(originalErr);
-            // Restore security providers: remove any that were added during class init
-            restoreSecurityProviders(providersBefore);
 
-            // Restore system properties
-            System.setProperties(sysPropsCopy);
+            // Write input file: entry points, then separator, then allKnownClasses
+            Path inputFile = tempDir.resolve("_input.txt");
+            List<String> inputLines = new ArrayList<>(entryPointClasses.size() + allKnownClasses.size() + 1);
+            inputLines.addAll(entryPointClasses);
+            inputLines.add("---");
+            inputLines.addAll(allKnownClasses);
+            Files.write(inputFile, inputLines, StandardCharsets.UTF_8);
 
-            // Interrupt any threads started during class init
-            cleanupNewThreads(loader);
-        }
+            // Copy RecordingMain class to the temp dir
+            writeRecordingMainClass(tempDir);
 
-        allDiscovered.addAll(loader.getLoadedClassNames());
-        return allDiscovered;
-    }
+            // Fork JVM
+            String javaCmd = ProcessHandle.current().info().command()
+                    .orElse(Path.of(System.getProperty("java.home"), "bin", "java").toString());
 
-    /**
-     * Loads and instantiates a single entry point class in the shared RecordingClassLoader.
-     * Records all class load attempts, plus class name strings from Map values.
-     */
-    private static void executeEntryPoint(String entryPoint, RecordingClassLoader loader,
-            Set<String> allKnownClasses, Set<String> discovered) {
-        log.debugf("Executing entry point class: %s", entryPoint);
+            ProcessBuilder pb = new ProcessBuilder(
+                    javaCmd,
+                    "-cp", tempDir.toString(),
+                    "-XX:MaxMetaspaceSize=256m",
+                    RecordingMain.class.getName(),
+                    inputFile.toString());
+            pb.redirectErrorStream(false);
 
-        try {
-            Class<?> clazz = Class.forName(entryPoint, true, loader);
-            try {
-                Object instance = clazz.getConstructor().newInstance();
-                collectClassNamesFromMapValues(instance, allKnownClasses, discovered);
-            } catch (Exception e) {
-                log.debugf("Could not instantiate entry point %s: %s", entryPoint, e.getMessage());
-            } catch (LinkageError e) {
-                log.debugf("LinkageError instantiating entry point %s: %s", entryPoint, e.getMessage());
-            }
-        } catch (Exception e) {
-            log.debugf("Could not load entry point %s: %s", entryPoint, e.getMessage());
-        } catch (LinkageError e) {
-            log.debugf("LinkageError loading entry point %s: %s", entryPoint, e.getMessage());
-        }
-    }
+            Process proc = pb.start();
 
-    /**
-     * If the object is a Map (e.g., BouncyCastle's Provider extends Properties),
-     * extracts String values that match known class names. These are class names stored
-     * via methods like {@code addAlgorithm(key, className)} for deferred loading.
-     */
-    private static void collectClassNamesFromMapValues(Object instance,
-            Set<String> allKnownClasses, Set<String> discovered) {
-        if (instance instanceof java.util.Map<?, ?> map) {
-            for (Object value : map.values()) {
-                if (value instanceof String strValue && allKnownClasses.contains(strValue)) {
-                    discovered.add(strValue);
+            // Drain stderr in background to avoid blocking
+            Thread stderrDrainer = new Thread(() -> {
+                try {
+                    proc.getErrorStream().transferTo(OutputStream.nullOutputStream());
+                } catch (IOException ignored) {
+                }
+            }, "tree-shake-stderr-drainer");
+            stderrDrainer.setDaemon(true);
+            stderrDrainer.start();
+
+            // Read discovered class names from stdout
+            Set<String> discovered = new HashSet<>();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (!line.isEmpty()) {
+                        discovered.add(line);
+                    }
                 }
             }
-        }
-    }
 
-    /**
-     * Restores the security provider list to the state captured before Phase 3.
-     * Entry point class init (e.g. BouncyCastleProvider) may call
-     * {@code Security.addProvider(this)}, anchoring the classloader via a JDK static field.
-     */
-    private static void restoreSecurityProviders(Provider[] before) {
-        Set<String> originalNames = new HashSet<>(before.length);
-        for (Provider p : before) {
-            originalNames.add(p.getName());
-        }
-        for (Provider p : Security.getProviders()) {
-            if (!originalNames.contains(p.getName())) {
-                log.debugf("Removing security provider added during class-loading analysis: %s", p.getName());
-                Security.removeProvider(p.getName());
+            int exitCode = proc.waitFor();
+            if (exitCode != 0) {
+                log.warnf("Class-loading chain analysis forked JVM exited with code %d", exitCode);
+            }
+
+            return discovered;
+
+        } catch (IOException | InterruptedException e) {
+            log.warnf(e, "Failed to run class-loading chain analysis in forked JVM, skipping Phase 3");
+            return Set.of();
+        } finally {
+            if (tempDir != null) {
+                deleteRecursive(tempDir);
             }
         }
     }
 
     /**
-     * Interrupts threads spawned during Phase 3 whose context classloader is the
-     * RecordingClassLoader. Only targets threads tied to our classloader to avoid
-     * interfering with other build steps running in parallel.
+     * Writes the self-contained {@code RecordingMain.class} to the temp directory.
+     * This class is the entry point for the forked JVM — it reads the input file,
+     * loads entry point classes in a recording classloader, and prints discovered
+     * class names to stdout.
      */
-    private static void cleanupNewThreads(ClassLoader recordingLoader) {
-        for (Thread t : Thread.getAllStackTraces().keySet()) {
-            if (t != Thread.currentThread() && t.getContextClassLoader() == recordingLoader) {
-                log.debugf("Interrupting thread started during class-loading analysis: %s", t.getName());
-                t.interrupt();
+    private static void writeRecordingMainClass(Path tempDir) throws IOException {
+        // Copy RecordingMain and its inner class from the classpath to the temp dir
+        String baseName = RecordingMain.class.getName().replace('.', '/');
+        for (String suffix : new String[] { ".class", "$RecordingURLClassLoader.class" }) {
+            String resourcePath = baseName + suffix;
+            try (var is = ClassLoadingChainAnalyzer.class.getClassLoader().getResourceAsStream(resourcePath)) {
+                if (is == null) {
+                    if (suffix.equals(".class")) {
+                        throw new IOException("Cannot find RecordingMain.class on classpath");
+                    }
+                    continue;
+                }
+                Path target = tempDir.resolve(resourcePath);
+                Files.createDirectories(target.getParent());
+                Files.write(target, is.readAllBytes());
             }
+        }
+    }
+
+    private static void deleteRecursive(Path path) {
+        try {
+            Files.walk(path)
+                    .sorted(java.util.Comparator.reverseOrder())
+                    .forEach(p -> {
+                        try {
+                            Files.delete(p);
+                        } catch (IOException ignored) {
+                        }
+                    });
+        } catch (IOException ignored) {
         }
     }
 
@@ -482,45 +495,5 @@ class ClassLoadingChainAnalyzer {
                 || methodKey.startsWith("jakarta/")
                 || methodKey.startsWith("org/objectweb/")
                 || methodKey.startsWith("sun/");
-    }
-
-    /**
-     * A ClassLoader that loads classes from an in-memory bytecode map and records
-     * all class names that are attempted to be loaded (including failed attempts).
-     * Uses the platform class loader as parent to isolate from the application classpath.
-     */
-    private static class RecordingClassLoader extends ClassLoader {
-
-        private final Map<String, Supplier<byte[]>> bytecodeMap;
-        private final Set<String> loadedClassNames = new HashSet<>();
-
-        RecordingClassLoader(Map<String, Supplier<byte[]>> bytecodeMap) {
-            super(ClassLoader.getPlatformClassLoader());
-            this.bytecodeMap = bytecodeMap;
-        }
-
-        @Override
-        public Class<?> loadClass(String name) throws ClassNotFoundException {
-            loadedClassNames.add(name);
-            return super.loadClass(name);
-        }
-
-        @Override
-        protected Class<?> findClass(String name) throws ClassNotFoundException {
-            Supplier<byte[]> supplier = bytecodeMap.get(name);
-            if (supplier != null) {
-                try {
-                    byte[] bytes = supplier.get();
-                    return defineClass(name, bytes, 0, bytes.length);
-                } catch (Exception e) {
-                    throw new ClassNotFoundException(name, e);
-                }
-            }
-            throw new ClassNotFoundException(name);
-        }
-
-        Set<String> getLoadedClassNames() {
-            return loadedClassNames;
-        }
     }
 }

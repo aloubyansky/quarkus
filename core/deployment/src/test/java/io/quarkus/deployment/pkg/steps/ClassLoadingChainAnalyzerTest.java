@@ -697,32 +697,24 @@ class ClassLoadingChainAnalyzerTest {
         return cw.toByteArray();
     }
 
-    // ---- Reflection helpers to access private RecordingClassLoader ----
+    // ---- Reflection helpers to access RecordingURLClassLoader ----
 
     @SuppressWarnings("unchecked")
     private static ClassLoader createRecordingClassLoader(Map<String, byte[]> bytecodeMap) throws Exception {
-        // Convert byte[] values to Supplier<byte[]> to match the constructor signature
-        Map<String, Supplier<byte[]>> supplierMap = new HashMap<>();
+        // Write class files to a temp dir and create a RecordingURLClassLoader pointing at it
+        java.nio.file.Path tempDir = java.nio.file.Files.createTempDirectory("test-recording");
         for (Map.Entry<String, byte[]> entry : bytecodeMap.entrySet()) {
-            byte[] bytes = entry.getValue();
-            supplierMap.put(entry.getKey(), () -> bytes);
+            String classFile = entry.getKey().replace('.', '/') + ".class";
+            java.nio.file.Path target = tempDir.resolve(classFile);
+            java.nio.file.Files.createDirectories(target.getParent());
+            java.nio.file.Files.write(target, entry.getValue());
         }
 
-        Class<?> analyzerClass = ClassLoadingChainAnalyzer.class;
-        Class<?>[] declaredClasses = analyzerClass.getDeclaredClasses();
-        Class<?> recordingClass = null;
-        for (Class<?> c : declaredClasses) {
-            if (c.getSimpleName().equals("RecordingClassLoader")) {
-                recordingClass = c;
-                break;
-            }
-        }
-        if (recordingClass == null) {
-            throw new AssertionError("RecordingClassLoader inner class not found");
-        }
-        Constructor<?> ctor = recordingClass.getDeclaredConstructor(Map.class);
+        Class<?> recordingClass = Class.forName(RecordingMain.class.getName() + "$RecordingURLClassLoader");
+        Constructor<?> ctor = recordingClass.getDeclaredConstructor(java.net.URL[].class);
         ctor.setAccessible(true);
-        return (ClassLoader) ctor.newInstance(supplierMap);
+        return (ClassLoader) ctor.newInstance(
+                (Object) new java.net.URL[] { tempDir.toUri().toURL() });
     }
 
     @SuppressWarnings("unchecked")
