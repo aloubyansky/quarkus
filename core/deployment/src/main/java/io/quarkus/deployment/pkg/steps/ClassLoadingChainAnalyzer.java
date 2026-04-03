@@ -331,6 +331,10 @@ class ClassLoadingChainAnalyzer {
             Set<String> allKnownClasses) {
 
         Set<String> allDiscovered = new HashSet<>();
+        // Reuse a single classloader across all entry points so each class is
+        // defined at most once, avoiding Metaspace exhaustion from many short-lived
+        // classloaders each defining overlapping sets of classes.
+        RecordingClassLoader loader = new RecordingClassLoader(allBytecode);
 
         // Suppress stdout/stderr: loaded classes may print warnings or stack traces
         // during their static initialization. These are expected and harmless.
@@ -340,24 +344,24 @@ class ClassLoadingChainAnalyzer {
             System.setOut(new java.io.PrintStream(java.io.OutputStream.nullOutputStream()));
             System.setErr(new java.io.PrintStream(java.io.OutputStream.nullOutputStream()));
             for (String entryPoint : entryPointClasses) {
-                executeEntryPoint(entryPoint, allBytecode, allKnownClasses, allDiscovered);
+                executeEntryPoint(entryPoint, loader, allKnownClasses, allDiscovered);
             }
         } finally {
             System.setOut(originalOut);
             System.setErr(originalErr);
         }
 
+        allDiscovered.addAll(loader.getLoadedClassNames());
         return allDiscovered;
     }
 
     /**
-     * Loads and instantiates a single entry point class in a fresh RecordingClassLoader.
+     * Loads and instantiates a single entry point class in the shared RecordingClassLoader.
      * Records all class load attempts, plus class name strings from Map values.
      */
-    private static void executeEntryPoint(String entryPoint, Map<String, Supplier<byte[]>> bytecodeMap,
+    private static void executeEntryPoint(String entryPoint, RecordingClassLoader loader,
             Set<String> allKnownClasses, Set<String> discovered) {
         log.debugf("Executing entry point class: %s", entryPoint);
-        RecordingClassLoader loader = new RecordingClassLoader(bytecodeMap);
 
         try {
             Class<?> clazz = Class.forName(entryPoint, true, loader);
@@ -374,8 +378,6 @@ class ClassLoadingChainAnalyzer {
         } catch (LinkageError e) {
             log.debugf("LinkageError loading entry point %s: %s", entryPoint, e.getMessage());
         }
-
-        discovered.addAll(loader.getLoadedClassNames());
     }
 
     /**
