@@ -128,13 +128,17 @@ class JarTreeShaker {
         while (changed) {
             Set<String> discovered = ClassLoadingChainAnalyzer.analyze(
                     reachable, allBytecode, input.allKnownClasses);
-            discovered.removeAll(reachable);
             if (discovered.isEmpty()) {
                 changed = false;
             } else {
-                log.infof("Class-loading chain analysis discovered %d additional classes", discovered.size());
-                traceReachableClasses(discovered, reachable, input.allKnownClasses);
-                evaluateConditionalRoots(reachable, input.allKnownClasses);
+                discovered.removeAll(reachable);
+                if (discovered.isEmpty()) {
+                    changed = false;
+                } else {
+                    log.infof("Class-loading chain analysis discovered %d additional classes", discovered.size());
+                    traceReachableClasses(discovered, reachable, input.allKnownClasses);
+                    evaluateConditionalRoots(reachable, input.allKnownClasses);
+                }
             }
         }
         return reachable;
