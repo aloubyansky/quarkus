@@ -38,8 +38,9 @@ import org.objectweb.asm.Opcodes;
  * <h3>Phase 1 -- Bytecode analysis (seed propagation)</h3>
  * <p>
  * Scans all reachable classes and builds a method-level call graph. Starting from seed
- * methods ({@code ClassLoader.loadClass(String)}, {@code Class.forName(String)}, and
- * {@code Class.forName(String, boolean, ClassLoader)}), propagates backwards through the
+ * methods ({@code ClassLoader.loadClass(String)}, {@code Class.forName(String)},
+ * {@code Class.forName(String, boolean, ClassLoader)}, and
+ * {@code MethodHandles.Lookup.findClass(String)}), propagates backwards through the
  * call graph using a fixed-point algorithm to identify every application method that
  * transitively calls a class-loading seed. JDK and infrastructure classes
  * ({@code java/}, {@code javax/}, {@code jakarta/}, {@code sun/}, {@code org/objectweb/})
@@ -96,9 +97,12 @@ class ClassLoadingChainAnalyzer {
 
     private static final Logger log = Logger.getLogger(ClassLoadingChainAnalyzer.class.getName());
 
-    private static final String CLASSLOADER_LOAD_CLASS = "java/lang/ClassLoader.loadClass(Ljava/lang/String;)Ljava/lang/Class;";
-    private static final String CLASS_FOR_NAME_1 = "java/lang/Class.forName(Ljava/lang/String;)Ljava/lang/Class;";
-    private static final String CLASS_FOR_NAME_3 = "java/lang/Class.forName(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;";
+    /** JDK methods that load classes by name — the seeds for call chain propagation. */
+    private static final Set<String> SEED_METHODS = Set.of(
+            "java/lang/ClassLoader.loadClass(Ljava/lang/String;)Ljava/lang/Class;",
+            "java/lang/Class.forName(Ljava/lang/String;)Ljava/lang/Class;",
+            "java/lang/Class.forName(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;",
+            "java/lang/invoke/MethodHandles$Lookup.findClass(Ljava/lang/String;)Ljava/lang/Class;");
 
     private static final int MAX_CALLER_DEPTH = 5;
 
@@ -121,16 +125,14 @@ class ClassLoadingChainAnalyzer {
         Map<String, Set<String>> callerIndex = new HashMap<>();
         Set<String> classLoadingMethods = findClassLoadingMethods(reachableClasses, allBytecode, callerIndex);
         if (classLoadingMethods.isEmpty()) {
-            log.debug("No class-loading methods found in reachable classes");
-            return new HashSet<>();
+            return Set.of();
         }
         log.debugf("Found %d class-loading methods", classLoadingMethods.size());
 
         // Phase 2: Find entry point classes
         Set<String> entryPointClasses = findEntryPointClasses(classLoadingMethods, callerIndex);
         if (entryPointClasses.isEmpty()) {
-            log.debug("No entry point classes found for class-loading chains");
-            return new HashSet<>();
+            return Set.of();
         }
         log.debugf("Found %d entry point classes for class-loading chains", entryPointClasses.size());
 
@@ -154,14 +156,22 @@ class ClassLoadingChainAnalyzer {
             Map<String, Supplier<byte[]>> allBytecode,
             Map<String, Set<String>> callerIndex) {
 
-        // Seed set
-        Set<String> classLoadingMethods = new HashSet<>();
-        classLoadingMethods.add(CLASSLOADER_LOAD_CLASS);
-        classLoadingMethods.add(CLASS_FOR_NAME_1);
-        classLoadingMethods.add(CLASS_FOR_NAME_3);
+        Map<String, Set<String>> methodCallees = buildCallGraph(reachableClasses, allBytecode, callerIndex);
+        return propagateFromSeeds(methodCallees);
+    }
 
-        // Build method call graph and caller index in one pass
-        // methodCallees: method -> set of methods it calls
+    /**
+     * Scans reachable bytecode and builds two maps in a single pass:
+     * <ul>
+     * <li>{@code methodCallees}: method → set of methods it calls</li>
+     * <li>{@code callerIndex}: method → set of methods that call it (reverse index)</li>
+     * </ul>
+     */
+    private static Map<String, Set<String>> buildCallGraph(
+            Set<String> reachableClasses,
+            Map<String, Supplier<byte[]>> allBytecode,
+            Map<String, Set<String>> callerIndex) {
+
         Map<String, Set<String>> methodCallees = new HashMap<>();
 
         for (String className : reachableClasses) {
@@ -195,8 +205,17 @@ class ClassLoadingChainAnalyzer {
             }, ClassReader.SKIP_FRAMES | ClassReader.SKIP_DEBUG);
         }
 
-        // Propagate to fixed point: if method A calls method B which is a class-loading method
-        // (and B is not a JDK/infra class), then A is also a class-loading method
+        return methodCallees;
+    }
+
+    /**
+     * Starting from {@link #SEED_METHODS}, propagates through the call graph to find all
+     * application methods that transitively call a class-loading seed.
+     * JDK/infrastructure methods are excluded from propagation.
+     */
+    private static Set<String> propagateFromSeeds(Map<String, Set<String>> methodCallees) {
+        Set<String> classLoadingMethods = new HashSet<>(SEED_METHODS);
+
         boolean changed = true;
         while (changed) {
             changed = false;
@@ -217,11 +236,7 @@ class ClassLoadingChainAnalyzer {
             }
         }
 
-        // Remove the seed JDK methods
-        classLoadingMethods.remove(CLASSLOADER_LOAD_CLASS);
-        classLoadingMethods.remove(CLASS_FOR_NAME_1);
-        classLoadingMethods.remove(CLASS_FOR_NAME_3);
-
+        classLoadingMethods.removeAll(SEED_METHODS);
         return classLoadingMethods;
     }
 
@@ -280,33 +295,26 @@ class ClassLoadingChainAnalyzer {
     }
 
     /**
-     * Extracts the method name from a method key like "com/example/Foo.methodName(Ljava/lang/String;)V".
+     * Finds the dot+paren boundary in a method key like "com/example/Foo.methodName(...)V".
+     * Returns the dot index, or -1 if the key is malformed.
      */
-    private static String extractMethodName(String methodKey) {
+    private static int findMethodSeparator(String methodKey) {
         int parenIdx = methodKey.indexOf('(');
-        if (parenIdx < 0) {
-            return null;
-        }
-        int dotIdx = methodKey.lastIndexOf('.', parenIdx);
-        if (dotIdx < 0) {
-            return null;
-        }
-        return methodKey.substring(dotIdx + 1, parenIdx);
+        return parenIdx < 0 ? -1 : methodKey.lastIndexOf('.', parenIdx);
+    }
+
+    /** Extracts the method name from a key like {@code "com/example/Foo.bar(I)V"} → {@code "bar"}. */
+    private static String extractMethodName(String methodKey) {
+        int dotIdx = findMethodSeparator(methodKey);
+        return dotIdx < 0 ? null : methodKey.substring(dotIdx + 1, methodKey.indexOf('('));
     }
 
     /**
-     * Extracts the class name (internal form) from a method key.
+     * Extracts the class name (internal form) from a key like {@code "com/example/Foo.bar(I)V"} → {@code "com/example/Foo"}.
      */
     private static String extractClassName(String methodKey) {
-        int parenIdx = methodKey.indexOf('(');
-        if (parenIdx < 0) {
-            return null;
-        }
-        int dotIdx = methodKey.lastIndexOf('.', parenIdx);
-        if (dotIdx < 0) {
-            return null;
-        }
-        return methodKey.substring(0, dotIdx);
+        int dotIdx = findMethodSeparator(methodKey);
+        return dotIdx < 0 ? null : methodKey.substring(0, dotIdx);
     }
 
     /**
@@ -318,9 +326,29 @@ class ClassLoadingChainAnalyzer {
             Map<String, Supplier<byte[]>> allBytecode,
             Set<String> allKnownClasses) {
 
+        Map<String, byte[]> bytecodeMap = resolveBytecodeMap(allBytecode);
         Set<String> allDiscovered = new HashSet<>();
 
-        // Resolve bytecode once for all entry points
+        // Suppress stdout/stderr: loaded classes may print warnings or stack traces
+        // during their static initialization. These are expected and harmless.
+        java.io.PrintStream originalOut = System.out;
+        java.io.PrintStream originalErr = System.err;
+        try {
+            System.setOut(new java.io.PrintStream(java.io.OutputStream.nullOutputStream()));
+            System.setErr(new java.io.PrintStream(java.io.OutputStream.nullOutputStream()));
+            for (String entryPoint : entryPointClasses) {
+                executeEntryPoint(entryPoint, bytecodeMap, allKnownClasses, allDiscovered);
+            }
+        } finally {
+            System.setOut(originalOut);
+            System.setErr(originalErr);
+        }
+
+        return allDiscovered;
+    }
+
+    /** Resolves all bytecode suppliers into a concrete map for use by the RecordingClassLoader. */
+    private static Map<String, byte[]> resolveBytecodeMap(Map<String, Supplier<byte[]>> allBytecode) {
         Map<String, byte[]> bytecodeMap = new HashMap<>();
         for (Map.Entry<String, Supplier<byte[]>> entry : allBytecode.entrySet()) {
             try {
@@ -329,57 +357,51 @@ class ClassLoadingChainAnalyzer {
                 // skip unreadable classes
             }
         }
+        return bytecodeMap;
+    }
 
-        // Suppress stdout/stderr during recording: loaded classes (BouncyCastle, SLF4J, etc.)
-        // may print warnings, stack traces, or status messages during their static initialization.
-        // These are expected and harmless — redirect to a null stream to keep the build log clean.
-        java.io.PrintStream originalOut = System.out;
-        java.io.PrintStream originalErr = System.err;
-        java.io.PrintStream nullStream = new java.io.PrintStream(java.io.OutputStream.nullOutputStream());
+    /**
+     * Loads and instantiates a single entry point class in a fresh RecordingClassLoader.
+     * Records all class load attempts, plus class name strings from Map values.
+     */
+    private static void executeEntryPoint(String entryPoint, Map<String, byte[]> bytecodeMap,
+            Set<String> allKnownClasses, Set<String> discovered) {
+        log.debugf("Executing entry point class: %s", entryPoint);
+        RecordingClassLoader loader = new RecordingClassLoader(bytecodeMap);
+
         try {
-            System.setOut(nullStream);
-            System.setErr(nullStream);
-            for (String entryPoint : entryPointClasses) {
-                log.debugf("Executing entry point class: %s", entryPoint);
-
-                RecordingClassLoader loader = new RecordingClassLoader(bytecodeMap);
-
-                try {
-                    Class<?> clazz = Class.forName(entryPoint, true, loader);
-                    try {
-                        Object instance = clazz.getConstructor().newInstance();
-                        // If the instance is a Map (like BouncyCastle's Provider which extends Properties),
-                        // iterate values and record strings that match known classes
-                        if (instance instanceof java.util.Map) {
-                            java.util.Map<?, ?> map = (java.util.Map<?, ?>) instance;
-                            for (Object value : map.values()) {
-                                if (value instanceof String) {
-                                    String strValue = (String) value;
-                                    if (allKnownClasses.contains(strValue)) {
-                                        allDiscovered.add(strValue);
-                                    }
-                                }
-                            }
-                        }
-                    } catch (Exception e) {
-                        log.debugf("Could not instantiate entry point %s: %s", entryPoint, e.getMessage());
-                    } catch (LinkageError e) {
-                        log.debugf("LinkageError instantiating entry point %s: %s", entryPoint, e.getMessage());
-                    }
-                } catch (Exception e) {
-                    log.debugf("Could not load entry point %s: %s", entryPoint, e.getMessage());
-                } catch (LinkageError e) {
-                    log.debugf("LinkageError loading entry point %s: %s", entryPoint, e.getMessage());
-                }
-
-                allDiscovered.addAll(loader.getLoadedClassNames());
+            Class<?> clazz = Class.forName(entryPoint, true, loader);
+            try {
+                Object instance = clazz.getConstructor().newInstance();
+                collectClassNamesFromMapValues(instance, allKnownClasses, discovered);
+            } catch (Exception e) {
+                log.debugf("Could not instantiate entry point %s: %s", entryPoint, e.getMessage());
+            } catch (LinkageError e) {
+                log.debugf("LinkageError instantiating entry point %s: %s", entryPoint, e.getMessage());
             }
-        } finally {
-            System.setOut(originalOut);
-            System.setErr(originalErr);
+        } catch (Exception e) {
+            log.debugf("Could not load entry point %s: %s", entryPoint, e.getMessage());
+        } catch (LinkageError e) {
+            log.debugf("LinkageError loading entry point %s: %s", entryPoint, e.getMessage());
         }
 
-        return allDiscovered;
+        discovered.addAll(loader.getLoadedClassNames());
+    }
+
+    /**
+     * If the object is a Map (e.g., BouncyCastle's Provider extends Properties),
+     * extracts String values that match known class names. These are class names stored
+     * via methods like {@code addAlgorithm(key, className)} for deferred loading.
+     */
+    private static void collectClassNamesFromMapValues(Object instance,
+            Set<String> allKnownClasses, Set<String> discovered) {
+        if (instance instanceof java.util.Map<?, ?> map) {
+            for (Object value : map.values()) {
+                if (value instanceof String strValue && allKnownClasses.contains(strValue)) {
+                    discovered.add(strValue);
+                }
+            }
+        }
     }
 
     /**

@@ -177,7 +177,6 @@ class JarTreeShaker {
             }
 
             enqueueBytecodeReferences(name, bytecode, allKnownClasses, visited, queue);
-            includeAllClassesIfDynamicLoading(name, bytecode, visited, queue);
             includeDeserializedClasses(name, bytecode, depDeserializationFlags, visited, queue);
         }
         return visited;
@@ -328,25 +327,6 @@ class JarTreeShaker {
                 }
             }
         }
-    }
-
-    /**
-     * If this class uses dynamic class loading (MethodHandles.Lookup.findClass),
-     * include all classes from the same dependency since the loaded class names
-     * are constructed at runtime and can't be statically determined.
-     */
-    private void includeAllClassesIfDynamicLoading(String name, byte[] bytecode, Set<String> visited,
-            Queue<String> queue) {
-        ArtifactKey depKey = input.classToDep.get(name);
-        if (depKey != null && usesDynamicClassLoading(bytecode)) {
-            log.debugf("Dynamic class loading detected in %s, keeping all classes from %s", name, depKey);
-            for (var entry : input.classToDep.entrySet()) {
-                if (depKey.equals(entry.getValue()) && visited.add(entry.getKey())) {
-                    queue.add(entry.getKey());
-                }
-            }
-        }
-
     }
 
     private static final int FLAG_RESOURCE_ACCESS = 1;
@@ -923,37 +903,6 @@ class JarTreeShaker {
             return String.format("%.1f KB", bytes / 1024.0);
         }
         return String.format("%.1f MB", bytes / (1024.0 * 1024.0));
-    }
-
-    /**
-     * Detects whether bytecode uses dynamic class loading patterns where class names
-     * are constructed at runtime (e.g. MethodHandles.Lookup.findClass). When detected,
-     * all classes from the same dependency must be preserved since the loaded class names
-     * can't be statically determined.
-     */
-    private static boolean usesDynamicClassLoading(byte[] bytecode) {
-        boolean[] found = new boolean[1];
-        ClassReader reader = new ClassReader(bytecode);
-        reader.accept(new ClassVisitor(Opcodes.ASM9) {
-            @Override
-            public MethodVisitor visitMethod(int access, String name, String descriptor,
-                    String signature, String[] exceptions) {
-                if (found[0]) {
-                    return null;
-                }
-                return new MethodVisitor(Opcodes.ASM9) {
-                    @Override
-                    public void visitMethodInsn(int opcode, String owner, String mname,
-                            String mdescriptor, boolean isInterface) {
-                        if ("findClass".equals(mname)
-                                && "java/lang/invoke/MethodHandles$Lookup".equals(owner)) {
-                            found[0] = true;
-                        }
-                    }
-                };
-            }
-        }, ClassReader.SKIP_FRAMES | ClassReader.SKIP_DEBUG);
-        return found[0];
     }
 
     /**

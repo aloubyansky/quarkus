@@ -215,6 +215,40 @@ class ClassLoadingChainAnalyzerTest {
                 "Should NOT discover MissingTarget when only original bytecode is used");
     }
 
+    /**
+     * Tests that MethodHandles.Lookup.findClass() is recognized as a class-loading seed.
+     * A Util class uses findClass() to load a target, and a Provider constructor calls Util.
+     * The chain analysis should identify the Provider as an entry point and discover the target.
+     */
+    @Test
+    void analyzeFindsClassesLoadedViaMethodHandlesFindClass() {
+        String utilClass = "com.test.FindClassUtil";
+        String providerClass = "com.test.FindClassProvider";
+        String targetClass = "com.test.FindClassTarget";
+
+        byte[] utilBytecode = generateFindClassUtil(utilClass);
+        byte[] providerBytecode = generateProviderClass(providerClass, utilClass, targetClass);
+        byte[] targetBytecode = generateSimpleClass(targetClass);
+
+        Map<String, Supplier<byte[]>> allBytecode = new HashMap<>();
+        allBytecode.put(utilClass, () -> utilBytecode);
+        allBytecode.put(providerClass, () -> providerBytecode);
+        allBytecode.put(targetClass, () -> targetBytecode);
+
+        Set<String> reachable = new HashSet<>();
+        reachable.add(utilClass);
+        reachable.add(providerClass);
+
+        Set<String> allKnown = new HashSet<>();
+        allKnown.add(utilClass);
+        allKnown.add(providerClass);
+        allKnown.add(targetClass);
+
+        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown);
+        assertTrue(discovered.contains(targetClass),
+                "Should discover FindClassTarget loaded via MethodHandles.Lookup.findClass chain");
+    }
+
     // ---- Helper methods ----
 
     /**
@@ -291,6 +325,44 @@ class ClassLoadingChainAnalyzerTest {
                 "(Ljava/lang/String;)Ljava/lang/Class;", false);
         mv.visitInsn(Opcodes.ARETURN);
         mv.visitMaxs(1, 1);
+        mv.visitEnd();
+
+        cw.visitEnd();
+        return cw.toByteArray();
+    }
+
+    /**
+     * Generates a Util class with a static method that uses MethodHandles.Lookup.findClass:
+     * static Class<?> load(String name) { return MethodHandles.lookup().findClass(name); }
+     */
+    private static byte[] generateFindClassUtil(String className) {
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+        String internalName = className.replace('.', '/');
+        cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC, internalName, null, "java/lang/Object", null);
+
+        // Default constructor
+        MethodVisitor init = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+        init.visitCode();
+        init.visitVarInsn(Opcodes.ALOAD, 0);
+        init.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+        init.visitInsn(Opcodes.RETURN);
+        init.visitMaxs(1, 1);
+        init.visitEnd();
+
+        // static Class<?> load(String name) { return MethodHandles.lookup().findClass(name); }
+        MethodVisitor mv = cw.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "load",
+                "(Ljava/lang/String;)Ljava/lang/Class;", null,
+                new String[] { "java/lang/ClassNotFoundException", "java/lang/IllegalAccessException" });
+        mv.visitCode();
+        // MethodHandles.lookup()
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/invoke/MethodHandles", "lookup",
+                "()Ljava/lang/invoke/MethodHandles$Lookup;", false);
+        // .findClass(name)
+        mv.visitVarInsn(Opcodes.ALOAD, 0);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/invoke/MethodHandles$Lookup", "findClass",
+                "(Ljava/lang/String;)Ljava/lang/Class;", false);
+        mv.visitInsn(Opcodes.ARETURN);
+        mv.visitMaxs(2, 1);
         mv.visitEnd();
 
         cw.visitEnd();
