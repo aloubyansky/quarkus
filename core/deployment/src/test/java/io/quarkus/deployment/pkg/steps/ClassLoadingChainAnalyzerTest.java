@@ -109,7 +109,7 @@ class ClassLoadingChainAnalyzerTest {
         allKnown.add(providerClass);
         allKnown.add(targetClass);
 
-        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown);
+        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown, allBytecode.keySet());
         assertTrue(discovered.contains(targetClass),
                 "Should discover Target class loaded during Provider's init");
         assertFalse(discovered.contains(utilClass), "Util is already reachable");
@@ -144,7 +144,7 @@ class ClassLoadingChainAnalyzerTest {
         allKnown.add(mapTargetClass);
         allKnown.add(loadedClass);
 
-        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown);
+        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown, allBytecode.keySet());
         assertTrue(discovered.contains(mapTargetClass),
                 "Should discover MapTarget from map values in MapProvider");
     }
@@ -180,7 +180,7 @@ class ClassLoadingChainAnalyzerTest {
         allKnown.add(appClass);
         allKnown.add(targetClass);
 
-        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown);
+        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown, allBytecode.keySet());
         assertTrue(discovered.contains(targetClass),
                 "Should discover TransformTarget via transformed bytecode, not original");
     }
@@ -210,7 +210,7 @@ class ClassLoadingChainAnalyzerTest {
         allKnown.add(appClass);
         allKnown.add(targetClass);
 
-        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown);
+        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown, allBytecode.keySet());
         assertFalse(discovered.contains(targetClass),
                 "Should NOT discover MissingTarget when only original bytecode is used");
     }
@@ -293,7 +293,7 @@ class ClassLoadingChainAnalyzerTest {
         allKnown.add(providerClass);
         allKnown.add(targetClass);
 
-        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown);
+        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown, allBytecode.keySet());
         assertTrue(discovered.contains(targetClass),
                 "Should discover FindClassTarget loaded via MethodHandles.Lookup.findClass chain");
     }
@@ -320,7 +320,7 @@ class ClassLoadingChainAnalyzerTest {
         Set<String> reachable = new HashSet<>(Set.of(utilClass, providerClass));
         Set<String> allKnown = new HashSet<>(Set.of(utilClass, providerClass, targetClass));
 
-        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown);
+        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown, allBytecode.keySet());
         assertTrue(discovered.contains(targetClass),
                 "Should discover " + targetClass + " loaded via " + utilClass);
     }
@@ -344,7 +344,7 @@ class ClassLoadingChainAnalyzerTest {
 
         Set<String> reachable = new HashSet<>(Set.of(utilClass, providerClass));
 
-        Set<String> entryPoints = ClassLoadingChainAnalyzer.identifyEntryPoints(reachable, allBytecode);
+        Set<String> entryPoints = ClassLoadingChainAnalyzer.identifyEntryPoints(reachable, allBytecode, allBytecode.keySet());
         assertTrue(entryPoints.contains(providerClass),
                 "Should identify " + providerClass + " as entry point via seed in " + utilClass);
     }

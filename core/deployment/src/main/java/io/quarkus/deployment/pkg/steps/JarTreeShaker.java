@@ -130,7 +130,7 @@ class JarTreeShaker {
         boolean changed = true;
         while (changed) {
             Set<String> discovered = ClassLoadingChainAnalyzer.analyze(
-                    reachable, allBytecode, input.allKnownClasses);
+                    reachable, allBytecode, input.allKnownClasses, input.classToDep.keySet());
             if (discovered.isEmpty()) {
                 changed = false;
             } else {

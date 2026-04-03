@@ -119,17 +119,20 @@ class ClassLoadingChainAnalyzer {
      * @param reachableClasses the current set of reachable class names (dot-separated)
      * @param allBytecode all available bytecode (dep + app + generated)
      * @param allKnownClasses the set of all known class names in the application
+     * @param depClassNames class names from dependencies (used to limit entry points
+     *        to dependency classes, excluding generated and app classes)
      * @return newly discovered class names (may be empty, never null)
      */
     static Set<String> analyze(
             Set<String> reachableClasses,
             Map<String, Supplier<byte[]>> allBytecode,
-            Set<String> allKnownClasses) {
+            Set<String> allKnownClasses,
+            Set<String> depClassNames) {
 
         // Phases 1+2: find entry point classes whose <init>/<clinit> triggers class loading.
         // Separated into its own method so the call graph and caller index go out of scope
         // before Phase 3 allocates the RecordingClassLoader.
-        Set<String> entryPointClasses = identifyEntryPoints(reachableClasses, allBytecode);
+        Set<String> entryPointClasses = identifyEntryPoints(reachableClasses, allBytecode, depClassNames);
         if (entryPointClasses.isEmpty()) {
             return Set.of();
         }
@@ -153,7 +156,8 @@ class ClassLoadingChainAnalyzer {
      */
     static Set<String> identifyEntryPoints(
             Set<String> reachableClasses,
-            Map<String, Supplier<byte[]>> allBytecode) {
+            Map<String, Supplier<byte[]>> allBytecode,
+            Set<String> depClassNames) {
 
         Map<String, Set<String>> callerIndex = new HashMap<>();
         Map<String, Set<String>> methodCallees = buildCallGraph(reachableClasses, allBytecode, callerIndex);
@@ -162,7 +166,7 @@ class ClassLoadingChainAnalyzer {
             return Set.of();
         }
         log.debugf("Found %d class-loading methods", classLoadingMethods.size());
-        return findEntryPointClasses(classLoadingMethods, callerIndex);
+        return findEntryPointClasses(classLoadingMethods, callerIndex, depClassNames);
     }
 
     /**
@@ -257,7 +261,8 @@ class ClassLoadingChainAnalyzer {
      */
     private static Set<String> findEntryPointClasses(
             Set<String> classLoadingMethods,
-            Map<String, Set<String>> callerIndex) {
+            Map<String, Set<String>> callerIndex,
+            Set<String> depClassNames) {
 
         Set<String> entryPointClasses = new HashSet<>();
         Set<String> visited = new HashSet<>(classLoadingMethods);
@@ -271,10 +276,7 @@ class ClassLoadingChainAnalyzer {
                 // Check if this method is <init> or <clinit>
                 String methodPart = extractMethodName(method);
                 if ("<init>".equals(methodPart) || "<clinit>".equals(methodPart)) {
-                    String className = extractClassName(method);
-                    if (className != null) {
-                        entryPointClasses.add(className.replace('/', '.'));
-                    }
+                    addIfDependencyClass(method, depClassNames, entryPointClasses);
                 }
 
                 // Walk up to callers
@@ -294,14 +296,27 @@ class ClassLoadingChainAnalyzer {
         for (String method : current) {
             String methodPart = extractMethodName(method);
             if ("<init>".equals(methodPart) || "<clinit>".equals(methodPart)) {
-                String className = extractClassName(method);
-                if (className != null) {
-                    entryPointClasses.add(className.replace('/', '.'));
-                }
+                addIfDependencyClass(method, depClassNames, entryPointClasses);
             }
         }
 
         return entryPointClasses;
+    }
+
+    /**
+     * Adds the class from a method key to the entry point set if it is a dependency class.
+     * Generated classes and app classes are excluded — they don't dynamically load
+     * dependency classes in ways that affect tree-shaking.
+     */
+    private static void addIfDependencyClass(String methodKey, Set<String> depClassNames,
+            Set<String> entryPointClasses) {
+        String className = extractClassName(methodKey);
+        if (className != null) {
+            String dotName = className.replace('/', '.');
+            if (depClassNames.contains(dotName)) {
+                entryPointClasses.add(dotName);
+            }
+        }
     }
 
     /**
@@ -370,7 +385,6 @@ class ClassLoadingChainAnalyzer {
             currentThread.setContextClassLoader(originalTccl);
             System.setOut(originalOut);
             System.setErr(originalErr);
-
             // Restore security providers: remove any that were added during class init
             restoreSecurityProviders(providersBefore);
 
