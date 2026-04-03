@@ -337,7 +337,12 @@ class ClassLoadingChainAnalyzer {
         // Reuse a single classloader across all entry points so each class is
         // defined at most once, avoiding Metaspace exhaustion from many short-lived
         // classloaders each defining overlapping sets of classes.
-        RecordingClassLoader loader = new RecordingClassLoader(allBytecode);
+        // Use the current thread's context classloader (the deployment CL) as parent
+        // so that most classes resolve from it without defineClass() in the
+        // RecordingClassLoader, avoiding Metaspace accumulation from short-lived
+        // classloaders that may get anchored by side effects during class init.
+        RecordingClassLoader loader = new RecordingClassLoader(allBytecode,
+                Thread.currentThread().getContextClassLoader());
 
         // Suppress stdout/stderr: loaded classes may print warnings or stack traces
         // during their static initialization. These are expected and harmless.
@@ -428,8 +433,8 @@ class ClassLoadingChainAnalyzer {
         private final Map<String, Supplier<byte[]>> bytecodeMap;
         private final Set<String> loadedClassNames = new HashSet<>();
 
-        RecordingClassLoader(Map<String, Supplier<byte[]>> bytecodeMap) {
-            super(ClassLoader.getPlatformClassLoader());
+        RecordingClassLoader(Map<String, Supplier<byte[]>> bytecodeMap, ClassLoader parent) {
+            super(parent);
             this.bytecodeMap = bytecodeMap;
         }
 
