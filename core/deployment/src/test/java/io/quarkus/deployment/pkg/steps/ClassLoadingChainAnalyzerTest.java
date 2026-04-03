@@ -440,6 +440,13 @@ class ClassLoadingChainAnalyzerTest {
 
     @SuppressWarnings("unchecked")
     private static ClassLoader createRecordingClassLoader(Map<String, byte[]> bytecodeMap) throws Exception {
+        // Convert byte[] values to Supplier<byte[]> to match the constructor signature
+        Map<String, Supplier<byte[]>> supplierMap = new HashMap<>();
+        for (Map.Entry<String, byte[]> entry : bytecodeMap.entrySet()) {
+            byte[] bytes = entry.getValue();
+            supplierMap.put(entry.getKey(), () -> bytes);
+        }
+
         Class<?> analyzerClass = ClassLoadingChainAnalyzer.class;
         Class<?>[] declaredClasses = analyzerClass.getDeclaredClasses();
         Class<?> recordingClass = null;
@@ -454,7 +461,7 @@ class ClassLoadingChainAnalyzerTest {
         }
         Constructor<?> ctor = recordingClass.getDeclaredConstructor(Map.class);
         ctor.setAccessible(true);
-        return (ClassLoader) ctor.newInstance(bytecodeMap);
+        return (ClassLoader) ctor.newInstance(supplierMap);
     }
 
     @SuppressWarnings("unchecked")

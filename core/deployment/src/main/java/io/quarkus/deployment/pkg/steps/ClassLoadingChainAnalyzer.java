@@ -120,17 +120,10 @@ class ClassLoadingChainAnalyzer {
             Map<String, Supplier<byte[]>> allBytecode,
             Set<String> allKnownClasses) {
 
-        // Phase 1: Identify methods that call class-loading methods (directly or transitively)
-        // Also builds a caller index as a side effect
-        Map<String, Set<String>> callerIndex = new HashMap<>();
-        Set<String> classLoadingMethods = findClassLoadingMethods(reachableClasses, allBytecode, callerIndex);
-        if (classLoadingMethods.isEmpty()) {
-            return Set.of();
-        }
-        log.debugf("Found %d class-loading methods", classLoadingMethods.size());
-
-        // Phase 2: Find entry point classes
-        Set<String> entryPointClasses = findEntryPointClasses(classLoadingMethods, callerIndex);
+        // Phases 1+2: find entry point classes whose <init>/<clinit> triggers class loading.
+        // Separated into its own method so the call graph and caller index go out of scope
+        // before Phase 3 allocates the RecordingClassLoader.
+        Set<String> entryPointClasses = identifyEntryPoints(reachableClasses, allBytecode);
         if (entryPointClasses.isEmpty()) {
             return Set.of();
         }
@@ -147,17 +140,23 @@ class ClassLoadingChainAnalyzer {
     }
 
     /**
-     * Phase 1: Find all methods in reachable classes that eventually call
-     * ClassLoader.loadClass() or Class.forName(). Uses fixed-point propagation.
-     * Also populates the callerIndex (methodKey -> set of methodKeys that call it).
+     * Phases 1+2: Builds a method-level call graph, propagates from class-loading seeds,
+     * then walks up to find {@code <init>}/{@code <clinit>} entry points.
+     * The call graph and caller index are scoped to this method so they become eligible
+     * for GC before Phase 3 runs.
      */
-    private static Set<String> findClassLoadingMethods(
+    private static Set<String> identifyEntryPoints(
             Set<String> reachableClasses,
-            Map<String, Supplier<byte[]>> allBytecode,
-            Map<String, Set<String>> callerIndex) {
+            Map<String, Supplier<byte[]>> allBytecode) {
 
+        Map<String, Set<String>> callerIndex = new HashMap<>();
         Map<String, Set<String>> methodCallees = buildCallGraph(reachableClasses, allBytecode, callerIndex);
-        return propagateFromSeeds(methodCallees);
+        Set<String> classLoadingMethods = propagateFromSeeds(methodCallees);
+        if (classLoadingMethods.isEmpty()) {
+            return Set.of();
+        }
+        log.debugf("Found %d class-loading methods", classLoadingMethods.size());
+        return findEntryPointClasses(classLoadingMethods, callerIndex);
     }
 
     /**
@@ -197,6 +196,11 @@ class ClassLoadingChainAnalyzer {
                         public void visitMethodInsn(int opcode, String owner, String mname,
                                 String mdescriptor, boolean isInterface) {
                             String calleeKey = owner + "." + mname + mdescriptor;
+                            // Skip JDK/infra callees that aren't class-loading seeds —
+                            // they can never propagate and dominate the graph size
+                            if (!SEED_METHODS.contains(calleeKey) && isJdkOrInfraClass(calleeKey)) {
+                                return;
+                            }
                             methodCallees.computeIfAbsent(callerKey, k -> new HashSet<>()).add(calleeKey);
                             callerIndex.computeIfAbsent(calleeKey, k -> new HashSet<>()).add(callerKey);
                         }
@@ -326,7 +330,6 @@ class ClassLoadingChainAnalyzer {
             Map<String, Supplier<byte[]>> allBytecode,
             Set<String> allKnownClasses) {
 
-        Map<String, byte[]> bytecodeMap = resolveBytecodeMap(allBytecode);
         Set<String> allDiscovered = new HashSet<>();
 
         // Suppress stdout/stderr: loaded classes may print warnings or stack traces
@@ -337,7 +340,7 @@ class ClassLoadingChainAnalyzer {
             System.setOut(new java.io.PrintStream(java.io.OutputStream.nullOutputStream()));
             System.setErr(new java.io.PrintStream(java.io.OutputStream.nullOutputStream()));
             for (String entryPoint : entryPointClasses) {
-                executeEntryPoint(entryPoint, bytecodeMap, allKnownClasses, allDiscovered);
+                executeEntryPoint(entryPoint, allBytecode, allKnownClasses, allDiscovered);
             }
         } finally {
             System.setOut(originalOut);
@@ -347,24 +350,11 @@ class ClassLoadingChainAnalyzer {
         return allDiscovered;
     }
 
-    /** Resolves all bytecode suppliers into a concrete map for use by the RecordingClassLoader. */
-    private static Map<String, byte[]> resolveBytecodeMap(Map<String, Supplier<byte[]>> allBytecode) {
-        Map<String, byte[]> bytecodeMap = new HashMap<>();
-        for (Map.Entry<String, Supplier<byte[]>> entry : allBytecode.entrySet()) {
-            try {
-                bytecodeMap.put(entry.getKey(), entry.getValue().get());
-            } catch (Exception e) {
-                // skip unreadable classes
-            }
-        }
-        return bytecodeMap;
-    }
-
     /**
      * Loads and instantiates a single entry point class in a fresh RecordingClassLoader.
      * Records all class load attempts, plus class name strings from Map values.
      */
-    private static void executeEntryPoint(String entryPoint, Map<String, byte[]> bytecodeMap,
+    private static void executeEntryPoint(String entryPoint, Map<String, Supplier<byte[]>> bytecodeMap,
             Set<String> allKnownClasses, Set<String> discovered) {
         log.debugf("Executing entry point class: %s", entryPoint);
         RecordingClassLoader loader = new RecordingClassLoader(bytecodeMap);
@@ -423,10 +413,10 @@ class ClassLoadingChainAnalyzer {
      */
     private static class RecordingClassLoader extends ClassLoader {
 
-        private final Map<String, byte[]> bytecodeMap;
+        private final Map<String, Supplier<byte[]>> bytecodeMap;
         private final Set<String> loadedClassNames = new HashSet<>();
 
-        RecordingClassLoader(Map<String, byte[]> bytecodeMap) {
+        RecordingClassLoader(Map<String, Supplier<byte[]>> bytecodeMap) {
             super(ClassLoader.getPlatformClassLoader());
             this.bytecodeMap = bytecodeMap;
         }
@@ -439,9 +429,14 @@ class ClassLoadingChainAnalyzer {
 
         @Override
         protected Class<?> findClass(String name) throws ClassNotFoundException {
-            byte[] bytes = bytecodeMap.get(name);
-            if (bytes != null) {
-                return defineClass(name, bytes, 0, bytes.length);
+            Supplier<byte[]> supplier = bytecodeMap.get(name);
+            if (supplier != null) {
+                try {
+                    byte[] bytes = supplier.get();
+                    return defineClass(name, bytes, 0, bytes.length);
+                } catch (Exception e) {
+                    throw new ClassNotFoundException(name, e);
+                }
             }
             throw new ClassNotFoundException(name);
         }

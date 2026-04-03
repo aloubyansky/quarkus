@@ -577,6 +577,25 @@ class JarTreeShakerInput implements AutoCloseable {
      * The path must remain valid (i.e. the owning {@link OpenPathTree} must stay open) until
      * the bytecode is read.
      */
+    /**
+     * Releases cached bytecode from all suppliers across dep, app, and generated maps.
+     * Called after tree-shake analysis completes to reduce memory pressure during
+     * the remainder of the build.
+     */
+    void clearBytecodeCache() {
+        clearSupplierCache(depBytecode);
+        clearSupplierCache(appBytecode);
+        clearSupplierCache(generatedBytecode);
+    }
+
+    private static void clearSupplierCache(Map<String, Supplier<byte[]>> map) {
+        for (Supplier<byte[]> supplier : map.values()) {
+            if (supplier instanceof BytecodeSupplier bs) {
+                bs.clearCache();
+            }
+        }
+    }
+
     static class BytecodeSupplier implements Supplier<byte[]> {
         private final Path path;
         private byte[] bytes;
@@ -595,6 +614,10 @@ class JarTreeShakerInput implements AutoCloseable {
                 }
             }
             return bytes;
+        }
+
+        void clearCache() {
+            bytes = null;
         }
     }
 }

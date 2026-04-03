@@ -61,6 +61,9 @@ class JarTreeShaker {
         // Analyze class-loading chains (fixed-point loop)
         reachable = analyzeClassLoadingChains(reachable);
 
+        // Release cached bytecode — no longer needed after analysis
+        input.clearBytecodeCache();
+
         // Compute removal stats and per-dependency removed class lists
         int totalDepClasses = input.depBytecode.size();
         int removedClassCount = 0;
