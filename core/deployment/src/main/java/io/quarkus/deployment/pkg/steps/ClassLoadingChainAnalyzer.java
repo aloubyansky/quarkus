@@ -338,15 +338,22 @@ class ClassLoadingChainAnalyzer {
 
         // Suppress stdout/stderr: loaded classes may print warnings or stack traces
         // during their static initialization. These are expected and harmless.
+        // Set the thread context classloader to the RecordingClassLoader so that
+        // ServiceLoader and other TCCL-based lookups resolve classes from the same
+        // classloader, avoiding cross-classloader subtype check failures.
         java.io.PrintStream originalOut = System.out;
         java.io.PrintStream originalErr = System.err;
+        Thread currentThread = Thread.currentThread();
+        ClassLoader originalTccl = currentThread.getContextClassLoader();
         try {
             System.setOut(new java.io.PrintStream(java.io.OutputStream.nullOutputStream()));
             System.setErr(new java.io.PrintStream(java.io.OutputStream.nullOutputStream()));
+            currentThread.setContextClassLoader(loader);
             for (String entryPoint : entryPointClasses) {
                 executeEntryPoint(entryPoint, loader, allKnownClasses, allDiscovered);
             }
         } finally {
+            currentThread.setContextClassLoader(originalTccl);
             System.setOut(originalOut);
             System.setErr(originalErr);
         }
