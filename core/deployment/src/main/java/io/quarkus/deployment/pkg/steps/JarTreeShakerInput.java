@@ -583,26 +583,16 @@ class JarTreeShakerInput implements AutoCloseable {
      * the remainder of the build.
      */
     void clearBytecodeCache() {
-        System.out.println("JarTreeShakerInput.clearBytecodeCache");
         clearSupplierCache(depBytecode);
         clearSupplierCache(appBytecode);
         clearSupplierCache(generatedBytecode);
     }
 
     private static void clearSupplierCache(Map<String, Supplier<byte[]>> map) {
-        int totalBs = 0;
-        int totalLoaded = 0;
         for (Supplier<byte[]> supplier : map.values()) {
             if (supplier instanceof BytecodeSupplier bs) {
-                ++totalBs;
-                if (bs.bytes != null) {
-                    ++totalLoaded;
-                }
                 bs.clearCache();
             }
-        }
-        if (totalBs > 0) {
-            System.out.println("  LOADED " + totalLoaded + " out of " + totalBs);
         }
     }
 

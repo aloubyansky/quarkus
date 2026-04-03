@@ -1,9 +1,12 @@
 package io.quarkus.deployment.pkg.steps;
 
+import java.security.Provider;
+import java.security.Security;
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Queue;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -337,13 +340,16 @@ class ClassLoadingChainAnalyzer {
         // Reuse a single classloader across all entry points so each class is
         // defined at most once, avoiding Metaspace exhaustion from many short-lived
         // classloaders each defining overlapping sets of classes.
-        // Use the current thread's context classloader (the deployment CL) as parent
-        // so that most classes resolve from it without defineClass() in the
-        // RecordingClassLoader, avoiding Metaspace accumulation from short-lived
-        // classloaders that may get anchored by side effects during class init.
-        RecordingClassLoader loader = new RecordingClassLoader(allBytecode,
-                Thread.currentThread().getContextClassLoader());
+        // Uses the platform classloader as parent so that app/dep classes are loaded
+        // by this classloader (child-first), ensuring transitive Class.forName() calls
+        // from loaded classes go through our loadClass() and get recorded.
+        RecordingClassLoader loader = new RecordingClassLoader(allBytecode);
 
+        // Snapshot global state that entry point class init may mutate
+        Provider[] providersBefore = Security.getProviders();
+        Properties sysProps = System.getProperties();
+        Properties sysPropsCopy = new Properties();
+        sysPropsCopy.putAll(sysProps);
         // Suppress stdout/stderr: loaded classes may print warnings or stack traces
         // during their static initialization. These are expected and harmless.
         // Set the thread context classloader to the RecordingClassLoader so that
@@ -364,6 +370,15 @@ class ClassLoadingChainAnalyzer {
             currentThread.setContextClassLoader(originalTccl);
             System.setOut(originalOut);
             System.setErr(originalErr);
+
+            // Restore security providers: remove any that were added during class init
+            restoreSecurityProviders(providersBefore);
+
+            // Restore system properties
+            System.setProperties(sysPropsCopy);
+
+            // Interrupt any threads started during class init
+            cleanupNewThreads(loader);
         }
 
         allDiscovered.addAll(loader.getLoadedClassNames());
@@ -412,6 +427,38 @@ class ClassLoadingChainAnalyzer {
     }
 
     /**
+     * Restores the security provider list to the state captured before Phase 3.
+     * Entry point class init (e.g. BouncyCastleProvider) may call
+     * {@code Security.addProvider(this)}, anchoring the classloader via a JDK static field.
+     */
+    private static void restoreSecurityProviders(Provider[] before) {
+        Set<String> originalNames = new HashSet<>(before.length);
+        for (Provider p : before) {
+            originalNames.add(p.getName());
+        }
+        for (Provider p : Security.getProviders()) {
+            if (!originalNames.contains(p.getName())) {
+                log.debugf("Removing security provider added during class-loading analysis: %s", p.getName());
+                Security.removeProvider(p.getName());
+            }
+        }
+    }
+
+    /**
+     * Interrupts threads spawned during Phase 3 whose context classloader is the
+     * RecordingClassLoader. Only targets threads tied to our classloader to avoid
+     * interfering with other build steps running in parallel.
+     */
+    private static void cleanupNewThreads(ClassLoader recordingLoader) {
+        for (Thread t : Thread.getAllStackTraces().keySet()) {
+            if (t != Thread.currentThread() && t.getContextClassLoader() == recordingLoader) {
+                log.debugf("Interrupting thread started during class-loading analysis: %s", t.getName());
+                t.interrupt();
+            }
+        }
+    }
+
+    /**
      * Checks whether a method key belongs to a JDK or infrastructure class that should not
      * be considered as a class-loading method for propagation purposes.
      */
@@ -433,8 +480,8 @@ class ClassLoadingChainAnalyzer {
         private final Map<String, Supplier<byte[]>> bytecodeMap;
         private final Set<String> loadedClassNames = new HashSet<>();
 
-        RecordingClassLoader(Map<String, Supplier<byte[]>> bytecodeMap, ClassLoader parent) {
-            super(parent);
+        RecordingClassLoader(Map<String, Supplier<byte[]>> bytecodeMap) {
+            super(ClassLoader.getPlatformClassLoader());
             this.bytecodeMap = bytecodeMap;
         }
 
