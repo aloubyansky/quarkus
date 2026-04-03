@@ -242,6 +242,12 @@ public class TreeShakeIT extends MojoTestBase {
         assertJarContains(libDir, "lib-serialization", "org/acme/serialization/ResourceDeserializer.class");
         assertJarNotContains(libDir, "lib-serialization", "org/acme/serialization/UnusedSerialization.class");
 
+        // Class-loading chain analysis (runtime-constructed class names + Class.forName)
+        assertJarContains(libDir, "lib-loadclass-chain", "org/acme/loadchain/AlphaTarget.class");
+        assertJarContains(libDir, "lib-loadclass-chain", "org/acme/loadchain/BetaTarget.class");
+        assertJarContains(libDir, "lib-loadclass-chain", "org/acme/loadchain/ChainProvider.class");
+        assertJarNotContains(libDir, "lib-loadclass-chain", "org/acme/loadchain/UnusedChain.class");
+
         // Transformed classes
         // In fast-jar, originals stay in lib JAR (transforms go to transformed-bytecode.jar).
         // In legacy-jar, transformed classes are moved to the runner JAR, so they're not in the lib JAR.
@@ -331,5 +337,7 @@ public class TreeShakeIT extends MojoTestBase {
         assertUberJarNotContains(uberJarFile, "org/acme/libjni/UnusedJni.class");
         assertUberJarContains(uberJarFile, "org/acme/serialization/SerializedTarget.class");
         assertUberJarNotContains(uberJarFile, "org/acme/serialization/UnusedSerialization.class");
+        assertUberJarContains(uberJarFile, "org/acme/loadchain/AlphaTarget.class");
+        assertUberJarNotContains(uberJarFile, "org/acme/loadchain/UnusedChain.class");
     }
 }

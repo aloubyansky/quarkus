@@ -211,4 +211,15 @@ public class TreeShakeCheck {
         given().when().get("/tree-shake/serialization")
                 .then().statusCode(200).body(is("SerializedTarget"));
     }
+
+    /**
+     * Verifies that classes dynamically loaded via {@code Class.forName()} with
+     * runtime-constructed class names (string concatenation, not constants) are preserved.
+     * This exercises the RecordingClassLoader chain analysis.
+     */
+    @Test
+    void testLoadClassChain() {
+        given().when().get("/tree-shake/loadclass-chain")
+                .then().statusCode(200).body(is("AlphaTarget,BetaTarget"));
+    }
 }

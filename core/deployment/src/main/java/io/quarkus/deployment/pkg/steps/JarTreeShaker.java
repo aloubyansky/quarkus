@@ -58,6 +58,9 @@ class JarTreeShaker {
         // Evaluate conditional roots to fixed point
         reachable = evaluateConditionalRoots(reachable, input.allKnownClasses);
 
+        // Analyze class-loading chains (fixed-point loop)
+        reachable = analyzeClassLoadingChains(reachable);
+
         // Compute removal stats and per-dependency removed class lists
         int totalDepClasses = input.depBytecode.size();
         int removedClassCount = 0;
@@ -104,6 +107,37 @@ class JarTreeShaker {
         }
 
         return new JarTreeShakeBuildItem(input.treeShakeLevel, reachable, removedClassesPerDep);
+    }
+
+    /**
+     * Runs class-loading chain analysis in a fixed-point loop, discovering classes
+     * that are loaded dynamically via ClassLoader.loadClass() or Class.forName()
+     * during static initialization or construction of reachable classes.
+     */
+    private Set<String> analyzeClassLoadingChains(Set<String> reachable) {
+        // Build combined bytecode map. Order matters: app bytecode first, then dep bytecode
+        // (which includes transformed versions), then generated. This ensures transformed
+        // app class bytecode takes priority over the original, matching the lookup order
+        // in lookupBytecode().
+        Map<String, Supplier<byte[]>> allBytecode = new HashMap<>();
+        allBytecode.putAll(input.appBytecode);
+        allBytecode.putAll(input.depBytecode);
+        allBytecode.putAll(input.generatedBytecode);
+
+        boolean changed = true;
+        while (changed) {
+            Set<String> discovered = ClassLoadingChainAnalyzer.analyze(
+                    reachable, allBytecode, input.allKnownClasses);
+            discovered.removeAll(reachable);
+            if (discovered.isEmpty()) {
+                changed = false;
+            } else {
+                log.infof("Class-loading chain analysis discovered %d additional classes", discovered.size());
+                traceReachableClasses(discovered, reachable, input.allKnownClasses);
+                evaluateConditionalRoots(reachable, input.allKnownClasses);
+            }
+        }
+        return reachable;
     }
 
     // ---- Reachability tracing ----
@@ -210,15 +244,21 @@ class JarTreeShaker {
     }
 
     /**
-     * Looks up bytecode for a class: generated classes first, then app classes, then dependency classes.
+     * Looks up bytecode for a class: generated classes first, then dependency classes
+     * (which include transformed versions), then app classes.
+     * Dependency bytecode is checked before app bytecode because
+     * {@link JarTreeShakerInput#collectTransformedClasses} places transformed app class
+     * bytecode in {@code depBytecode}, and the transformed version may contain additional
+     * references (e.g., converter classes added by bytecode transformers) that the original
+     * app bytecode does not have.
      * Returns null if the class is a JDK class or not available.
      */
     private byte[] lookupBytecode(String name) {
         byte[] bytecode = getBytecodeOrNull(input.generatedBytecode.get(name));
         if (bytecode == null) {
-            bytecode = getBytecodeOrNull(input.appBytecode.get(name));
+            bytecode = getBytecodeOrNull(input.depBytecode.get(name));
             if (bytecode == null) {
-                bytecode = getBytecodeOrNull(input.depBytecode.get(name));
+                bytecode = getBytecodeOrNull(input.appBytecode.get(name));
             }
         }
         return bytecode;

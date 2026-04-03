@@ -25,6 +25,7 @@ import org.acme.logging.LoggedClass;
 import org.acme.multirelease.MultiReleaseClass;
 import org.acme.serviceloader.ServiceInterface;
 import org.acme.throws_.ThrowingService;
+import org.acme.loadchain.ChainProvider;
 import org.acme.serialization.ResourceDeserializer;
 import org.acme.transform.TransformableClass;
 
@@ -159,5 +160,11 @@ public class TreeShakeResource {
     @Path("/serialization")
     public String serialization() {
         return ResourceDeserializer.load();
+    }
+
+    @GET
+    @Path("/loadclass-chain")
+    public String loadclassChain() {
+        return String.join(",", new ChainProvider().getLoaded());
     }
 }
