@@ -100,8 +100,11 @@ class ClassLoadingChainAnalyzer {
     /** JDK methods that load classes by name — the seeds for call chain propagation. */
     private static final Set<String> SEED_METHODS = Set.of(
             "java/lang/ClassLoader.loadClass(Ljava/lang/String;)Ljava/lang/Class;",
+            "java/lang/ClassLoader.loadClass(Ljava/lang/String;Z)Ljava/lang/Class;",
+            "java/lang/ClassLoader.findClass(Ljava/lang/String;)Ljava/lang/Class;",
             "java/lang/Class.forName(Ljava/lang/String;)Ljava/lang/Class;",
             "java/lang/Class.forName(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;",
+            "java/lang/Class.forName(Ljava/lang/Module;Ljava/lang/String;)Ljava/lang/Class;",
             "java/lang/invoke/MethodHandles$Lookup.findClass(Ljava/lang/String;)Ljava/lang/Class;");
 
     private static final int MAX_CALLER_DEPTH = 5;
@@ -145,7 +148,7 @@ class ClassLoadingChainAnalyzer {
      * The call graph and caller index are scoped to this method so they become eligible
      * for GC before Phase 3 runs.
      */
-    private static Set<String> identifyEntryPoints(
+    static Set<String> identifyEntryPoints(
             Set<String> reachableClasses,
             Map<String, Supplier<byte[]>> allBytecode) {
 

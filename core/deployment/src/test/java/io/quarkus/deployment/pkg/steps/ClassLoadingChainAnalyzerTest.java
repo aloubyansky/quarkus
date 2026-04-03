@@ -216,6 +216,55 @@ class ClassLoadingChainAnalyzerTest {
     }
 
     /**
+     * Tests that ClassLoader.loadClass(String) is recognized as a class-loading seed.
+     */
+    @Test
+    void analyzeFindsClassesLoadedViaClassLoaderLoadClass() {
+        assertSeedDiscovery(generateLoadClassUtil("com.test.LoadClassUtil"), "com.test.LoadClassUtil");
+    }
+
+    /**
+     * Tests that ClassLoader.loadClass(String, boolean) is recognized as a class-loading seed.
+     * Uses entry point identification (Phase 1+2) since the protected method cannot be
+     * executed through the RecordingClassLoader in Phase 3.
+     */
+    @Test
+    void analyzeFindsClassesLoadedViaClassLoaderLoadClassResolve() {
+        assertSeedPropagation(generateLoadClassResolveUtil("com.test.LoadClassResolveUtil"),
+                "com.test.LoadClassResolveUtil");
+    }
+
+    /**
+     * Tests that Class.forName(String, boolean, ClassLoader) is recognized as a class-loading seed.
+     */
+    @Test
+    void analyzeFindsClassesLoadedViaClassForName3Arg() {
+        assertSeedDiscovery(generateForName3ArgUtil("com.test.ForName3ArgUtil"), "com.test.ForName3ArgUtil");
+    }
+
+    /**
+     * Tests that ClassLoader.findClass(String) is recognized as a class-loading seed.
+     * Uses entry point identification (Phase 1+2) since the protected method cannot be
+     * executed through the RecordingClassLoader in Phase 3.
+     */
+    @Test
+    void analyzeFindsClassesLoadedViaClassLoaderFindClass() {
+        assertSeedPropagation(generateFindClassLoaderUtil("com.test.FindClassLoaderUtil"),
+                "com.test.FindClassLoaderUtil");
+    }
+
+    /**
+     * Tests that Class.forName(Module, String) is recognized as a class-loading seed.
+     * Uses entry point identification (Phase 1+2) since module-based loading does not
+     * route through the RecordingClassLoader in Phase 3.
+     */
+    @Test
+    void analyzeFindsClassesLoadedViaClassForNameModule() {
+        assertSeedPropagation(generateForNameModuleUtil("com.test.ForNameModuleUtil"),
+                "com.test.ForNameModuleUtil");
+    }
+
+    /**
      * Tests that MethodHandles.Lookup.findClass() is recognized as a class-loading seed.
      * A Util class uses findClass() to load a target, and a Provider constructor calls Util.
      * The chain analysis should identify the Provider as an entry point and discover the target.
@@ -247,6 +296,57 @@ class ClassLoadingChainAnalyzerTest {
         Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown);
         assertTrue(discovered.contains(targetClass),
                 "Should discover FindClassTarget loaded via MethodHandles.Lookup.findClass chain");
+    }
+
+    // ---- Seed test helper ----
+
+    /**
+     * Common pattern for seed tests: a Util class with a load() method that uses
+     * a specific class-loading seed, a Provider whose constructor calls Util.load(),
+     * and a Target that should be discovered.
+     */
+    private void assertSeedDiscovery(byte[] utilBytecode, String utilClass) {
+        String providerClass = utilClass + "Provider";
+        String targetClass = utilClass + "Target";
+
+        byte[] providerBytecode = generateProviderClass(providerClass, utilClass, targetClass);
+        byte[] targetBytecode = generateSimpleClass(targetClass);
+
+        Map<String, Supplier<byte[]>> allBytecode = new HashMap<>();
+        allBytecode.put(utilClass, () -> utilBytecode);
+        allBytecode.put(providerClass, () -> providerBytecode);
+        allBytecode.put(targetClass, () -> targetBytecode);
+
+        Set<String> reachable = new HashSet<>(Set.of(utilClass, providerClass));
+        Set<String> allKnown = new HashSet<>(Set.of(utilClass, providerClass, targetClass));
+
+        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown);
+        assertTrue(discovered.contains(targetClass),
+                "Should discover " + targetClass + " loaded via " + utilClass);
+    }
+
+    /**
+     * Tests Phase 1+2 only: verifies that a seed call in Util.load() causes the Provider
+     * class to be identified as an entry point. Used for seeds involving protected methods
+     * or module-based loading that cannot be executed through the RecordingClassLoader.
+     */
+    private void assertSeedPropagation(byte[] utilBytecode, String utilClass) {
+        String providerClass = utilClass + "Provider";
+        String targetClass = utilClass + "Target";
+
+        byte[] providerBytecode = generateProviderClass(providerClass, utilClass, targetClass);
+        byte[] targetBytecode = generateSimpleClass(targetClass);
+
+        Map<String, Supplier<byte[]>> allBytecode = new HashMap<>();
+        allBytecode.put(utilClass, () -> utilBytecode);
+        allBytecode.put(providerClass, () -> providerBytecode);
+        allBytecode.put(targetClass, () -> targetBytecode);
+
+        Set<String> reachable = new HashSet<>(Set.of(utilClass, providerClass));
+
+        Set<String> entryPoints = ClassLoadingChainAnalyzer.identifyEntryPoints(reachable, allBytecode);
+        assertTrue(entryPoints.contains(providerClass),
+                "Should identify " + providerClass + " as entry point via seed in " + utilClass);
     }
 
     // ---- Helper methods ----
@@ -430,6 +530,167 @@ class ClassLoadingChainAnalyzerTest {
         mv.visitInsn(Opcodes.POP);
         mv.visitInsn(Opcodes.RETURN);
         mv.visitMaxs(3, 1);
+        mv.visitEnd();
+
+        cw.visitEnd();
+        return cw.toByteArray();
+    }
+
+    // ---- Seed-specific Util generators ----
+
+    /**
+     * Generates a Util with: static Class<?> load(String name) {
+     * return Thread.currentThread().getContextClassLoader().loadClass(name);
+     * }
+     */
+    private static byte[] generateLoadClassUtil(String className) {
+        return generateSeedUtil(className, mv -> {
+            // Thread.currentThread().getContextClassLoader().loadClass(name)
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Thread", "currentThread",
+                    "()Ljava/lang/Thread;", false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Thread", "getContextClassLoader",
+                    "()Ljava/lang/ClassLoader;", false);
+            mv.visitVarInsn(Opcodes.ALOAD, 0);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/ClassLoader", "loadClass",
+                    "(Ljava/lang/String;)Ljava/lang/Class;", false);
+        });
+    }
+
+    /**
+     * Generates a Util extending ClassLoader with: Class<?> load(String name) {
+     * return this.loadClass(name, false);
+     * }
+     */
+    private static byte[] generateLoadClassResolveUtil(String className) {
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+        String internalName = className.replace('.', '/');
+        cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC, internalName, null, "java/lang/ClassLoader", null);
+
+        MethodVisitor init = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+        init.visitCode();
+        init.visitVarInsn(Opcodes.ALOAD, 0);
+        init.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/ClassLoader", "<init>", "()V", false);
+        init.visitInsn(Opcodes.RETURN);
+        init.visitMaxs(1, 1);
+        init.visitEnd();
+
+        // public Class<?> load(String name) { return this.loadClass(name, false); }
+        MethodVisitor mv = cw.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "load",
+                "(Ljava/lang/String;)Ljava/lang/Class;", null,
+                new String[] { "java/lang/ClassNotFoundException" });
+        mv.visitCode();
+        mv.visitTypeInsn(Opcodes.NEW, internalName);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, internalName, "<init>", "()V", false);
+        mv.visitVarInsn(Opcodes.ALOAD, 0);
+        mv.visitInsn(Opcodes.ICONST_0);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/ClassLoader", "loadClass",
+                "(Ljava/lang/String;Z)Ljava/lang/Class;", false);
+        mv.visitInsn(Opcodes.ARETURN);
+        mv.visitMaxs(3, 1);
+        mv.visitEnd();
+
+        cw.visitEnd();
+        return cw.toByteArray();
+    }
+
+    /**
+     * Generates a Util with: static Class<?> load(String name) {
+     * return Class.forName(name, true, Thread.currentThread().getContextClassLoader());
+     * }
+     */
+    private static byte[] generateForName3ArgUtil(String className) {
+        return generateSeedUtil(className, mv -> {
+            mv.visitVarInsn(Opcodes.ALOAD, 0);
+            mv.visitInsn(Opcodes.ICONST_1);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Thread", "currentThread",
+                    "()Ljava/lang/Thread;", false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Thread", "getContextClassLoader",
+                    "()Ljava/lang/ClassLoader;", false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Class", "forName",
+                    "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;", false);
+        });
+    }
+
+    /**
+     * Generates a Util extending ClassLoader with: Class<?> load(String name) {
+     * return this.findClass(name);
+     * }
+     */
+    private static byte[] generateFindClassLoaderUtil(String className) {
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+        String internalName = className.replace('.', '/');
+        cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC, internalName, null, "java/lang/ClassLoader", null);
+
+        MethodVisitor init = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+        init.visitCode();
+        init.visitVarInsn(Opcodes.ALOAD, 0);
+        init.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/ClassLoader", "<init>", "()V", false);
+        init.visitInsn(Opcodes.RETURN);
+        init.visitMaxs(1, 1);
+        init.visitEnd();
+
+        // public static Class<?> load(String name) { return new Self().findClass(name); }
+        MethodVisitor mv = cw.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "load",
+                "(Ljava/lang/String;)Ljava/lang/Class;", null,
+                new String[] { "java/lang/ClassNotFoundException" });
+        mv.visitCode();
+        mv.visitTypeInsn(Opcodes.NEW, internalName);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, internalName, "<init>", "()V", false);
+        mv.visitVarInsn(Opcodes.ALOAD, 0);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/ClassLoader", "findClass",
+                "(Ljava/lang/String;)Ljava/lang/Class;", false);
+        mv.visitInsn(Opcodes.ARETURN);
+        mv.visitMaxs(3, 1);
+        mv.visitEnd();
+
+        cw.visitEnd();
+        return cw.toByteArray();
+    }
+
+    /**
+     * Generates a Util with: static Class<?> load(String name) {
+     * return Class.forName(Util.class.getModule(), name);
+     * }
+     */
+    private static byte[] generateForNameModuleUtil(String className) {
+        String internalName = className.replace('.', '/');
+        return generateSeedUtil(className, mv -> {
+            mv.visitLdcInsn(org.objectweb.asm.Type.getObjectType(internalName));
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Class", "getModule",
+                    "()Ljava/lang/Module;", false);
+            mv.visitVarInsn(Opcodes.ALOAD, 0);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Class", "forName",
+                    "(Ljava/lang/Module;Ljava/lang/String;)Ljava/lang/Class;", false);
+        });
+    }
+
+    /**
+     * Common template for generating a Util class with a static load(String) method.
+     * The consumer emits the bytecode instructions for the class-loading call,
+     * with the String argument in local variable 0.
+     */
+    private static byte[] generateSeedUtil(String className, java.util.function.Consumer<MethodVisitor> seedCall) {
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+        String internalName = className.replace('.', '/');
+        cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC, internalName, null, "java/lang/Object", null);
+
+        MethodVisitor init = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+        init.visitCode();
+        init.visitVarInsn(Opcodes.ALOAD, 0);
+        init.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+        init.visitInsn(Opcodes.RETURN);
+        init.visitMaxs(1, 1);
+        init.visitEnd();
+
+        MethodVisitor mv = cw.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "load",
+                "(Ljava/lang/String;)Ljava/lang/Class;", null,
+                new String[] { "java/lang/Exception" });
+        mv.visitCode();
+        seedCall.accept(mv);
+        mv.visitInsn(Opcodes.ARETURN);
+        mv.visitMaxs(4, 1);
         mv.visitEnd();
 
         cw.visitEnd();
