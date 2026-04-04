@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.lang.reflect.Constructor;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -344,7 +345,8 @@ class ClassLoadingChainAnalyzerTest {
 
         Set<String> reachable = new HashSet<>(Set.of(utilClass, providerClass));
 
-        Set<String> entryPoints = ClassLoadingChainAnalyzer.identifyEntryPoints(reachable, allBytecode, allBytecode.keySet());
+        ClassLoadingChainAnalyzer analyzer = new ClassLoadingChainAnalyzer(allBytecode, allBytecode.keySet());
+        Set<String> entryPoints = analyzer.findEntryPoints(reachable);
         assertTrue(entryPoints.contains(providerClass),
                 "Should identify " + providerClass + " as entry point via seed in " + utilClass);
     }
@@ -703,13 +705,15 @@ class ClassLoadingChainAnalyzerTest {
      */
     private static Set<String> analyzeInForkedJvm(Set<String> reachable,
             Map<String, Supplier<byte[]>> allBytecode, Set<String> allKnown) {
-        Set<String> entryPoints = ClassLoadingChainAnalyzer.findEntryPoints(
-                reachable, allBytecode, allBytecode.keySet());
+        ClassLoadingChainAnalyzer analyzer = new ClassLoadingChainAnalyzer(allBytecode, allBytecode.keySet());
+        Set<String> entryPoints = analyzer.findEntryPoints(reachable);
         if (entryPoints.isEmpty()) {
             return Set.of();
         }
+        // Pass all bytecode as "generated" since tests don't have real dep JARs
         Set<String> discovered = ClassLoadingChainAnalyzer.executeEntryPoints(
-                entryPoints, allBytecode, allKnown, Map.of());
+                entryPoints, allBytecode, Map.of(),
+                allKnown, List.of(), List.of());
         discovered.retainAll(allKnown);
         discovered.removeAll(reachable);
         return discovered;
@@ -719,16 +723,20 @@ class ClassLoadingChainAnalyzerTest {
 
     @SuppressWarnings("unchecked")
     private static ClassLoader createRecordingClassLoader(Map<String, byte[]> bytecodeMap) throws Exception {
-        Map<String, Supplier<byte[]>> supplierMap = new HashMap<>();
+        // Write class files to a temp dir and create a RecordingURLClassLoader pointing at it
+        java.nio.file.Path tempDir = java.nio.file.Files.createTempDirectory("test-recording");
         for (Map.Entry<String, byte[]> entry : bytecodeMap.entrySet()) {
-            byte[] bytes = entry.getValue();
-            supplierMap.put(entry.getKey(), () -> bytes);
+            String classFile = entry.getKey().replace('.', '/') + ".class";
+            java.nio.file.Path target = tempDir.resolve(classFile);
+            java.nio.file.Files.createDirectories(target.getParent());
+            java.nio.file.Files.write(target, entry.getValue());
         }
 
-        Constructor<?> ctor = ClassLoadingChainAnalyzer.RecordingClassLoader.class
-                .getDeclaredConstructor(Map.class);
+        Class<?> recordingClass = Class.forName(RecordingMain.class.getName() + "$RecordingURLClassLoader");
+        Constructor<?> ctor = recordingClass.getDeclaredConstructor(java.net.URL[].class);
         ctor.setAccessible(true);
-        return (ClassLoader) ctor.newInstance(supplierMap);
+        return (ClassLoader) ctor.newInstance(
+                (Object) new java.net.URL[] { tempDir.toUri().toURL() });
     }
 
     @SuppressWarnings("unchecked")
