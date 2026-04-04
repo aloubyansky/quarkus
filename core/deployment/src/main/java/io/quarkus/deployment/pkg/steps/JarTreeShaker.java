@@ -91,6 +91,7 @@ class JarTreeShaker {
                 removedClassesPerDep.size(),
                 formatSize(removedBytes),
                 totalDepClasses > 0 ? (removedClassCount * 100.0 / totalDepClasses) : 0.0);
+        log.infof("  Done in %dms", System.currentTimeMillis() - start);
         if (log.isDebugEnabled()) {
             int reachableClasses = totalDepClasses - removedClassCount;
             log.debug("============================================================");
