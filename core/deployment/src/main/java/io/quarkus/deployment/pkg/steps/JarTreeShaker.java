@@ -139,6 +139,7 @@ class JarTreeShaker {
 
         ClassLoadingChainAnalyzer analyzer = new ClassLoadingChainAnalyzer(allBytecode, input.classToDep.keySet());
         Set<String> executedEntryPoints = new HashSet<>();
+        Set<String> allPhase3Discovered = new HashSet<>();
         Set<String> classesToScan = new HashSet<>(reachable);
 
         while (true) {
@@ -153,10 +154,18 @@ class JarTreeShaker {
             }
             executedEntryPoints.addAll(newEntryPoints);
 
+            // Skip fork if all new entry points were already discovered by prior forks —
+            // their transitive class loads were already captured
+            if (allPhase3Discovered.containsAll(newEntryPoints)) {
+                break;
+            }
+
             // Phase 3: execute only new entry points in a forked JVM
             Set<String> discovered = ClassLoadingChainAnalyzer.executeEntryPoints(
                     newEntryPoints, input.generatedBytecode, transformedBytecode,
                     input.allKnownClasses, input.depJarPaths, input.appPaths);
+
+            allPhase3Discovered.addAll(discovered);
 
             // Filter to known, non-reachable classes
             discovered.retainAll(input.allKnownClasses);
