@@ -130,7 +130,7 @@ Because the class name strings are computed dynamically, the BFS over bytecode r
 
 To handle this, the tree-shaker runs a class-loading chain analysis after the BFS:
 
-1. **Seed propagation**: Scans reachable bytecode to identify methods that transitively call `ClassLoader.loadClass(String)`, `Class.forName(String)`, or `MethodHandles.Lookup.findClass(String)`.
+1. **Seed propagation**: Scans reachable bytecode to build a method-level call graph and identifies methods that transitively call `ClassLoader.loadClass(String)`, `Class.forName(String)`, or `MethodHandles.Lookup.findClass(String)` using an efficient worklist algorithm. The call graph is preserved and extended incrementally across iterations.
 2. **Entry point discovery**: Walks up the caller chain to find classes whose constructor (`<init>`) or static initializer (`<clinit>`) triggers the class-loading chain.
 3. **Dynamic execution**: Each entry point class is executed in a forked JVM process with an isolated `RecordingClassLoader` that captures every class load attempt — including failed attempts. After instantiation, if the object is a `Map` (e.g., a JCA security provider), its values are also inspected for class name strings that are stored for deferred loading. Running in a separate process ensures complete isolation of global JVM state and is safe for parallel Maven builds (`-T2C`).
 
