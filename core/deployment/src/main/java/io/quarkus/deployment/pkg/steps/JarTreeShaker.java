@@ -130,19 +130,26 @@ class JarTreeShaker {
 
         boolean changed = true;
         while (changed) {
-            Set<String> discovered = ClassLoadingChainAnalyzer.analyze(
-                    reachable, allBytecode, input.allKnownClasses, input.classToDep.keySet());
+            // Phases 1+2: identify entry points from reachable classes
+            Set<String> entryPoints = ClassLoadingChainAnalyzer.findEntryPoints(
+                    reachable, allBytecode, input.classToDep.keySet());
+            if (entryPoints.isEmpty()) {
+                break;
+            }
+
+            // Phase 3: execute entry points in per-dependency RecordingClassLoaders
+            Set<String> discovered = ClassLoadingChainAnalyzer.executeEntryPoints(
+                    entryPoints, allBytecode, input.allKnownClasses, input.classToDep);
+
+            // Filter to known, non-reachable classes
+            discovered.retainAll(input.allKnownClasses);
+            discovered.removeAll(reachable);
             if (discovered.isEmpty()) {
                 changed = false;
             } else {
-                discovered.removeAll(reachable);
-                if (discovered.isEmpty()) {
-                    changed = false;
-                } else {
-                    log.infof("Class-loading chain analysis discovered %d additional classes", discovered.size());
-                    traceReachableClasses(discovered, reachable, input.allKnownClasses);
-                    evaluateConditionalRoots(reachable, input.allKnownClasses);
-                }
+                log.infof("Class-loading chain analysis discovered %d additional classes", discovered.size());
+                traceReachableClasses(discovered, reachable, input.allKnownClasses);
+                evaluateConditionalRoots(reachable, input.allKnownClasses);
             }
         }
         return reachable;

@@ -109,7 +109,7 @@ class ClassLoadingChainAnalyzerTest {
         allKnown.add(providerClass);
         allKnown.add(targetClass);
 
-        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown, allBytecode.keySet());
+        Set<String> discovered = analyzeInForkedJvm(reachable, allBytecode, allKnown);
         assertTrue(discovered.contains(targetClass),
                 "Should discover Target class loaded during Provider's init");
         assertFalse(discovered.contains(utilClass), "Util is already reachable");
@@ -144,7 +144,7 @@ class ClassLoadingChainAnalyzerTest {
         allKnown.add(mapTargetClass);
         allKnown.add(loadedClass);
 
-        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown, allBytecode.keySet());
+        Set<String> discovered = analyzeInForkedJvm(reachable, allBytecode, allKnown);
         assertTrue(discovered.contains(mapTargetClass),
                 "Should discover MapTarget from map values in MapProvider");
     }
@@ -180,7 +180,7 @@ class ClassLoadingChainAnalyzerTest {
         allKnown.add(appClass);
         allKnown.add(targetClass);
 
-        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown, allBytecode.keySet());
+        Set<String> discovered = analyzeInForkedJvm(reachable, allBytecode, allKnown);
         assertTrue(discovered.contains(targetClass),
                 "Should discover TransformTarget via transformed bytecode, not original");
     }
@@ -210,7 +210,7 @@ class ClassLoadingChainAnalyzerTest {
         allKnown.add(appClass);
         allKnown.add(targetClass);
 
-        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown, allBytecode.keySet());
+        Set<String> discovered = analyzeInForkedJvm(reachable, allBytecode, allKnown);
         assertFalse(discovered.contains(targetClass),
                 "Should NOT discover MissingTarget when only original bytecode is used");
     }
@@ -293,7 +293,7 @@ class ClassLoadingChainAnalyzerTest {
         allKnown.add(providerClass);
         allKnown.add(targetClass);
 
-        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown, allBytecode.keySet());
+        Set<String> discovered = analyzeInForkedJvm(reachable, allBytecode, allKnown);
         assertTrue(discovered.contains(targetClass),
                 "Should discover FindClassTarget loaded via MethodHandles.Lookup.findClass chain");
     }
@@ -320,7 +320,7 @@ class ClassLoadingChainAnalyzerTest {
         Set<String> reachable = new HashSet<>(Set.of(utilClass, providerClass));
         Set<String> allKnown = new HashSet<>(Set.of(utilClass, providerClass, targetClass));
 
-        Set<String> discovered = ClassLoadingChainAnalyzer.analyze(reachable, allBytecode, allKnown, allBytecode.keySet());
+        Set<String> discovered = analyzeInForkedJvm(reachable, allBytecode, allKnown);
         assertTrue(discovered.contains(targetClass),
                 "Should discover " + targetClass + " loaded via " + utilClass);
     }
@@ -697,24 +697,38 @@ class ClassLoadingChainAnalyzerTest {
         return cw.toByteArray();
     }
 
+    /**
+     * Runs the full analysis (Phases 1+2 in-process, Phase 3 in a forked JVM)
+     * and returns newly discovered class names.
+     */
+    private static Set<String> analyzeInForkedJvm(Set<String> reachable,
+            Map<String, Supplier<byte[]>> allBytecode, Set<String> allKnown) {
+        Set<String> entryPoints = ClassLoadingChainAnalyzer.findEntryPoints(
+                reachable, allBytecode, allBytecode.keySet());
+        if (entryPoints.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> discovered = ClassLoadingChainAnalyzer.executeEntryPoints(
+                entryPoints, allBytecode, allKnown, Map.of());
+        discovered.retainAll(allKnown);
+        discovered.removeAll(reachable);
+        return discovered;
+    }
+
     // ---- Reflection helpers to access RecordingURLClassLoader ----
 
     @SuppressWarnings("unchecked")
     private static ClassLoader createRecordingClassLoader(Map<String, byte[]> bytecodeMap) throws Exception {
-        // Write class files to a temp dir and create a RecordingURLClassLoader pointing at it
-        java.nio.file.Path tempDir = java.nio.file.Files.createTempDirectory("test-recording");
+        Map<String, Supplier<byte[]>> supplierMap = new HashMap<>();
         for (Map.Entry<String, byte[]> entry : bytecodeMap.entrySet()) {
-            String classFile = entry.getKey().replace('.', '/') + ".class";
-            java.nio.file.Path target = tempDir.resolve(classFile);
-            java.nio.file.Files.createDirectories(target.getParent());
-            java.nio.file.Files.write(target, entry.getValue());
+            byte[] bytes = entry.getValue();
+            supplierMap.put(entry.getKey(), () -> bytes);
         }
 
-        Class<?> recordingClass = Class.forName(RecordingMain.class.getName() + "$RecordingURLClassLoader");
-        Constructor<?> ctor = recordingClass.getDeclaredConstructor(java.net.URL[].class);
+        Constructor<?> ctor = ClassLoadingChainAnalyzer.RecordingClassLoader.class
+                .getDeclaredConstructor(Map.class);
         ctor.setAccessible(true);
-        return (ClassLoader) ctor.newInstance(
-                (Object) new java.net.URL[] { tempDir.toUri().toURL() });
+        return (ClassLoader) ctor.newInstance(supplierMap);
     }
 
     @SuppressWarnings("unchecked")
