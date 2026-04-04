@@ -119,15 +119,6 @@ class JarTreeShaker {
      * during static initialization or construction of reachable classes.
      */
     private Set<String> analyzeClassLoadingChains(Set<String> reachable) {
-        // Build combined bytecode map. Order matters: app bytecode first, then dep bytecode
-        // (which includes transformed versions), then generated. This ensures transformed
-        // app class bytecode takes priority over the original, matching the lookup order
-        // in lookupBytecode().
-        Map<String, Supplier<byte[]>> allBytecode = new HashMap<>();
-        allBytecode.putAll(input.appBytecode);
-        allBytecode.putAll(input.depBytecode);
-        allBytecode.putAll(input.generatedBytecode);
-
         // Build the transformed bytecode map once (optimization B)
         Map<String, Supplier<byte[]>> transformedBytecode = new HashMap<>();
         for (String name : input.transformedClassNames) {
@@ -137,7 +128,7 @@ class JarTreeShaker {
             }
         }
 
-        ClassLoadingChainAnalyzer analyzer = new ClassLoadingChainAnalyzer(allBytecode, input.classToDep.keySet());
+        ClassLoadingChainAnalyzer analyzer = new ClassLoadingChainAnalyzer(input.allBytecode, input.classToDep.keySet());
         Set<String> executedEntryPoints = new HashSet<>();
         Set<String> allPhase3Discovered = new HashSet<>();
         Set<String> classesToScan = new HashSet<>(reachable);
@@ -198,6 +189,7 @@ class JarTreeShaker {
         }
         boolean sisuActivated = false;
         final Map<ArtifactKey, Integer> depDeserializationFlags = new HashMap<>();
+        final BfsScanResult scan = new BfsScanResult();
 
         while (!queue.isEmpty()) {
             String name = queue.poll();
@@ -212,12 +204,15 @@ class JarTreeShaker {
 
             // Single-pass ASM scan: extracts all class references, string class refs,
             // ServiceLoader calls, sisu detection, and resource/OIS detection in one pass
+            scan.clear();
             boolean isGenerated = input.generatedBytecode.containsKey(name);
-            BfsScanResult scan = scanBytecode(name, bytecode, allKnownClasses, isGenerated, sisuActivated);
+            scanBytecode(name, bytecode, allKnownClasses, isGenerated, sisuActivated, scan);
 
-            // Enqueue discovered class references
+            // Enqueue discovered class references — only those we have bytecode for.
+            // Skips JDK/platform classes that we'll never find, avoiding thousands of
+            // no-op queue iterations and wasted lookups.
             for (String ref : scan.refs) {
-                if (ref != null && visited.add(ref)) {
+                if (ref != null && input.allBytecode.containsKey(ref) && visited.add(ref)) {
                     queue.add(ref);
                 }
             }
@@ -334,27 +329,11 @@ class JarTreeShaker {
     }
 
     /**
-     * Looks up bytecode for a class: generated classes first, then dependency classes
-     * (which include transformed versions), then app classes.
-     * Dependency bytecode is checked before app bytecode because
-     * {@link JarTreeShakerInput#collectTransformedClasses} places transformed app class
-     * bytecode in {@code depBytecode}, and the transformed version may contain additional
-     * references (e.g., converter classes added by bytecode transformers) that the original
-     * app bytecode does not have.
+     * Looks up bytecode for a class from the merged bytecode map.
      * Returns null if the class is a JDK class or not available.
      */
     private byte[] lookupBytecode(String name) {
-        byte[] bytecode = getBytecodeOrNull(input.generatedBytecode.get(name));
-        if (bytecode == null) {
-            bytecode = getBytecodeOrNull(input.depBytecode.get(name));
-            if (bytecode == null) {
-                bytecode = getBytecodeOrNull(input.appBytecode.get(name));
-            }
-        }
-        return bytecode;
-    }
-
-    private static byte[] getBytecodeOrNull(Supplier<byte[]> supplier) {
+        Supplier<byte[]> supplier = input.allBytecode.get(name);
         return supplier == null ? null : supplier.get();
     }
 
@@ -371,6 +350,14 @@ class JarTreeShaker {
         boolean sisuDetected;
         /** Flags for resource access and ObjectInputStream usage detection */
         int deserializationFlags;
+
+        /** Resets all fields for reuse with the next class, avoiding per-class allocation. */
+        void clear() {
+            refs.clear();
+            serviceLoaderServices.clear();
+            sisuDetected = false;
+            deserializationFlags = 0;
+        }
     }
 
     /**
@@ -378,9 +365,8 @@ class JarTreeShaker {
      * ServiceLoader detection, sisu detection, and resource/ObjectInputStream detection.
      * Replaces 4-5 separate ClassReader.accept() calls with one.
      */
-    private BfsScanResult scanBytecode(String className, byte[] bytecode, Set<String> allKnownClasses,
-            boolean isGenerated, boolean sisuAlreadyActivated) {
-        BfsScanResult result = new BfsScanResult();
+    private void scanBytecode(String className, byte[] bytecode, Set<String> allKnownClasses,
+            boolean isGenerated, boolean sisuAlreadyActivated, BfsScanResult result) {
         ClassReader reader = new ClassReader(bytecode);
         reader.accept(new ClassVisitor(Opcodes.ASM9) {
 
@@ -625,7 +611,6 @@ class JarTreeShaker {
                 }
             }
         }, ClassReader.SKIP_FRAMES | ClassReader.SKIP_DEBUG);
-        return result;
     }
 
     /**

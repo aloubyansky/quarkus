@@ -68,6 +68,11 @@ class JarTreeShakerInput implements AutoCloseable {
     final List<Path> depJarPaths;
     final List<Path> appPaths;
     final Set<String> transformedClassNames;
+    /**
+     * Merged bytecode map with priority: app → dep (includes transformed) → generated.
+     * Provides single-lookup access for BFS and call graph analysis.
+     */
+    final Map<String, Supplier<byte[]>> allBytecode;
 
     private final List<OpenPathTree> openTrees;
 
@@ -107,6 +112,13 @@ class JarTreeShakerInput implements AutoCloseable {
         this.depJarPaths = depJarPaths;
         this.appPaths = appPaths;
         this.transformedClassNames = transformedClassNames;
+        // Build merged bytecode map: app first, then dep (overwrites), then generated (overwrites)
+        Map<String, Supplier<byte[]>> merged = new HashMap<>(
+                appBytecode.size() + depBytecode.size() + generatedBytecode.size());
+        merged.putAll(appBytecode);
+        merged.putAll(depBytecode);
+        merged.putAll(generatedBytecode);
+        this.allBytecode = merged;
         this.openTrees = openTrees;
     }
 
