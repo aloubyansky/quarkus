@@ -122,6 +122,8 @@ class ClassLoadingChainAnalyzer {
     private final Set<String> depClassNames;
     private final Map<String, Set<String>> callerIndex = new HashMap<>();
     private final Map<String, Set<String>> methodCallees = new HashMap<>();
+    private final Set<String> classLoadingMethods = new HashSet<>(SEED_METHODS);
+    private boolean seedsPropagated = false;
 
     ClassLoadingChainAnalyzer(Map<String, Supplier<byte[]>> allBytecode, Set<String> depClassNames) {
         this.allBytecode = allBytecode;
@@ -141,12 +143,14 @@ class ClassLoadingChainAnalyzer {
      */
     Set<String> findEntryPoints(Set<String> classesToScan) {
         buildCallGraph(classesToScan);
-        Set<String> classLoadingMethods = propagateFromSeeds(methodCallees);
-        if (classLoadingMethods.isEmpty()) {
+        propagateFromSeeds();
+        Set<String> methods = new HashSet<>(classLoadingMethods);
+        methods.removeAll(SEED_METHODS);
+        if (methods.isEmpty()) {
             return Set.of();
         }
-        log.debugf("Found %d class-loading methods", classLoadingMethods.size());
-        return findEntryPointClasses(classLoadingMethods, callerIndex, depClassNames);
+        log.debugf("Found %d class-loading methods", methods.size());
+        return findEntryPointClasses(methods, callerIndex, depClassNames);
     }
 
     /**
@@ -195,35 +199,53 @@ class ClassLoadingChainAnalyzer {
     }
 
     /**
-     * Starting from {@link #SEED_METHODS}, propagates through the call graph to find all
-     * application methods that transitively call a class-loading seed.
-     * JDK/infrastructure methods are excluded from propagation.
+     * Incrementally propagates from seed methods through the call graph.
+     * Uses a worklist algorithm walking backwards via callerIndex.
+     * On first call, walks from all seeds. On subsequent calls, only checks
+     * new edges added since the last call.
      */
-    private static Set<String> propagateFromSeeds(Map<String, Set<String>> methodCallees) {
-        Set<String> classLoadingMethods = new HashSet<>(SEED_METHODS);
-
-        boolean changed = true;
-        while (changed) {
-            changed = false;
-            for (Map.Entry<String, Set<String>> entry : methodCallees.entrySet()) {
+    private void propagateFromSeeds() {
+        if (!seedsPropagated) {
+            seedsPropagated = true;
+            Queue<String> worklist = new ArrayDeque<>();
+            for (String seed : SEED_METHODS) {
+                Set<String> callers = callerIndex.get(seed);
+                if (callers != null) {
+                    for (String caller : callers) {
+                        if (!isJdkOrInfraClass(caller) && classLoadingMethods.add(caller)) {
+                            worklist.add(caller);
+                        }
+                    }
+                }
+            }
+            propagateWorklist(worklist);
+        } else {
+            Queue<String> worklist = new ArrayDeque<>();
+            for (var entry : callerIndex.entrySet()) {
                 if (classLoadingMethods.contains(entry.getKey())) {
-                    continue;
+                    for (String caller : entry.getValue()) {
+                        if (!isJdkOrInfraClass(caller) && classLoadingMethods.add(caller)) {
+                            worklist.add(caller);
+                        }
+                    }
                 }
-                if (isJdkOrInfraClass(entry.getKey())) {
-                    continue;
-                }
-                for (String callee : entry.getValue()) {
-                    if (classLoadingMethods.contains(callee)) {
-                        classLoadingMethods.add(entry.getKey());
-                        changed = true;
-                        break;
+            }
+            propagateWorklist(worklist);
+        }
+    }
+
+    private void propagateWorklist(Queue<String> worklist) {
+        while (!worklist.isEmpty()) {
+            String method = worklist.poll();
+            Set<String> callers = callerIndex.get(method);
+            if (callers != null) {
+                for (String caller : callers) {
+                    if (!isJdkOrInfraClass(caller) && classLoadingMethods.add(caller)) {
+                        worklist.add(caller);
                     }
                 }
             }
         }
-
-        classLoadingMethods.removeAll(SEED_METHODS);
-        return classLoadingMethods;
     }
 
     /**
