@@ -210,15 +210,65 @@ class JarTreeShaker {
                 continue; // JDK class or not available
             }
 
-            detectAndProcessServiceLoaderCalls(name, bytecode, visited, queue);
+            // Single-pass ASM scan: extracts all class references, string class refs,
+            // ServiceLoader calls, sisu detection, and resource/OIS detection in one pass
+            boolean isGenerated = input.generatedBytecode.containsKey(name);
+            BfsScanResult scan = scanBytecode(name, bytecode, allKnownClasses, isGenerated, sisuActivated);
 
-            if (!sisuActivated && !input.sisuNamedClasses.isEmpty() && detectsGetResourcesForSisu(bytecode)) {
+            // Enqueue discovered class references
+            for (String ref : scan.refs) {
+                if (ref != null && visited.add(ref)) {
+                    queue.add(ref);
+                }
+            }
+
+            // Process ServiceLoader calls
+            if (!scan.serviceLoaderServices.isEmpty()) {
+                input.serviceLoaderCalls.put(name, scan.serviceLoaderServices);
+                for (String serviceInterface : scan.serviceLoaderServices) {
+                    Set<String> providers = input.serviceProviders.get(serviceInterface);
+                    if (providers != null) {
+                        for (String provider : providers) {
+                            if (visited.add(provider)) {
+                                queue.add(provider);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Process sisu detection
+            if (!sisuActivated && scan.sisuDetected) {
                 sisuActivated = true;
                 enqueueNotVisited(input.sisuNamedClasses, visited, queue);
             }
 
-            enqueueBytecodeReferences(name, bytecode, allKnownClasses, visited, queue);
-            includeDeserializedClasses(name, bytecode, depDeserializationFlags, visited, queue);
+            // Process deserialization detection
+            ArtifactKey depKey = input.classToDep.get(name);
+            if (depKey != null) {
+                int flags = depDeserializationFlags.getOrDefault(depKey, 0);
+                if ((flags & FLAG_SCANNED) == 0) {
+                    flags |= scan.deserializationFlags;
+                    depDeserializationFlags.put(depKey, flags);
+                    if ((flags & FLAG_RESOURCE_DESERIALIZATION) == FLAG_RESOURCE_DESERIALIZATION) {
+                        depDeserializationFlags.put(depKey, flags | FLAG_SCANNED);
+                        OpenPathTree openTree = input.depOpenTrees.get(depKey);
+                        if (openTree != null) {
+                            Set<String> classNames = extractClassNamesFromSerializedResources(openTree);
+                            if (!classNames.isEmpty()) {
+                                log.debugf("ObjectInputStream + resource access detected in %s, "
+                                        + "found %d serialized classes in %s",
+                                        name, classNames.size(), depKey);
+                                for (String className : classNames) {
+                                    if (visited.add(className)) {
+                                        queue.add(className);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         return visited;
     }
@@ -309,29 +359,273 @@ class JarTreeShaker {
     }
 
     /**
-     * Detects ServiceLoader calls lazily for reachable classes and includes providers
-     * for any service interfaces loaded by the current class.
-     * App and generated class ServiceLoader calls are detected before BFS;
-     * dependency class calls are detected here as each class is visited.
+     * Result of the single-pass BFS bytecode scan. Captures all information
+     * previously extracted by separate ASM passes.
      */
-    private void detectAndProcessServiceLoaderCalls(String name, byte[] bytecode, Set<String> visited,
-            Queue<String> queue) {
-        final byte[] currentBytecode = bytecode;
-        detectServiceLoaderCalls(() -> currentBytecode, name, input.serviceLoaderCalls);
+    private static class BfsScanResult {
+        /** All class references discovered from bytecode (superclass, interfaces, fields, methods, annotations, etc.) */
+        final Set<String> refs = new HashSet<>();
+        /** Service interfaces loaded via {@code ServiceLoader.load(SomeClass.class)} patterns */
+        final Set<String> serviceLoaderServices = new HashSet<>();
+        /** Whether both sisu named resource string and getResources() call were detected */
+        boolean sisuDetected;
+        /** Flags for resource access and ObjectInputStream usage detection */
+        int deserializationFlags;
+    }
 
-        Set<String> loadedServices = input.serviceLoaderCalls.get(name);
-        if (loadedServices != null) {
-            for (String serviceInterface : loadedServices) {
-                Set<String> providers = input.serviceProviders.get(serviceInterface);
-                if (providers != null) {
-                    for (String provider : providers) {
-                        if (visited.add(provider)) {
-                            queue.add(provider);
-                        }
+    /**
+     * Single-pass ASM scan that combines reference extraction, string class matching,
+     * ServiceLoader detection, sisu detection, and resource/ObjectInputStream detection.
+     * Replaces 4-5 separate ClassReader.accept() calls with one.
+     */
+    private BfsScanResult scanBytecode(String className, byte[] bytecode, Set<String> allKnownClasses,
+            boolean isGenerated, boolean sisuAlreadyActivated) {
+        BfsScanResult result = new BfsScanResult();
+        ClassReader reader = new ClassReader(bytecode);
+        reader.accept(new ClassVisitor(Opcodes.ASM9) {
+
+            // Sisu detection state (class-level, across methods)
+            boolean hasSisuString;
+            boolean hasGetResources;
+
+            @Override
+            public void visit(int version, int access, String name, String signature,
+                    String superName, String[] interfaces) {
+                if (superName != null) {
+                    result.refs.add(toClassName(superName));
+                }
+                if (interfaces != null) {
+                    for (String iface : interfaces) {
+                        result.refs.add(toClassName(iface));
                     }
                 }
+                addSignatureTypes(signature, result.refs);
+                int dollar = name.lastIndexOf('$');
+                if (dollar > 0) {
+                    result.refs.add(toClassName(name.substring(0, dollar)));
+                }
             }
-        }
+
+            @Override
+            public org.objectweb.asm.AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
+                addDescriptorType(descriptor, result.refs);
+                return createAnnotationRefVisitor(result.refs);
+            }
+
+            @Override
+            public org.objectweb.asm.FieldVisitor visitField(int access, String name,
+                    String descriptor, String signature, Object value) {
+                addDescriptorType(descriptor, result.refs);
+                addSignatureTypes(signature, result.refs);
+                return new org.objectweb.asm.FieldVisitor(Opcodes.ASM9) {
+                    @Override
+                    public org.objectweb.asm.AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
+                        addDescriptorType(descriptor, result.refs);
+                        return createAnnotationRefVisitor(result.refs);
+                    }
+                };
+            }
+
+            @Override
+            public MethodVisitor visitMethod(int access, String name, String descriptor,
+                    String signature, String[] exceptions) {
+                addMethodDescriptorTypes(descriptor, result.refs);
+                addSignatureTypes(signature, result.refs);
+                if (exceptions != null) {
+                    for (String ex : exceptions) {
+                        result.refs.add(toClassName(ex));
+                    }
+                }
+                return new MethodVisitor(Opcodes.ASM9) {
+                    // State for Class.forName/loadClass string constant tracking
+                    private String lastStringConstant;
+                    // State for ServiceLoader.load(SomeClass.class) tracking
+                    private org.objectweb.asm.Type lastClassConstant;
+
+                    @Override
+                    public void visitTryCatchBlock(Label start, Label end, Label handler, String type) {
+                        lastStringConstant = null;
+                        lastClassConstant = null;
+                        if (type != null) {
+                            result.refs.add(toClassName(type));
+                        }
+                    }
+
+                    @Override
+                    public org.objectweb.asm.AnnotationVisitor visitAnnotationDefault() {
+                        return createAnnotationRefVisitor(result.refs);
+                    }
+
+                    @Override
+                    public void visitTypeInsn(int opcode, String type) {
+                        lastStringConstant = null;
+                        lastClassConstant = null;
+                        result.refs.add(toClassName(type));
+                        // Resource/OIS detection: NEW java/io/ObjectInputStream
+                        if ("java/io/ObjectInputStream".equals(type)) {
+                            result.deserializationFlags |= FLAG_OBJECT_INPUT_STREAM;
+                        }
+                    }
+
+                    @Override
+                    public void visitFieldInsn(int opcode, String owner, String fname, String fdescriptor) {
+                        lastStringConstant = null;
+                        lastClassConstant = null;
+                        result.refs.add(toClassName(owner));
+                        addDescriptorType(fdescriptor, result.refs);
+                    }
+
+                    @Override
+                    public void visitMethodInsn(int opcode, String owner, String mname,
+                            String mdescriptor, boolean isInterface) {
+                        // Class.forName / loadClass with string constant
+                        if (lastStringConstant != null) {
+                            if (("java/lang/Class".equals(owner) && "forName".equals(mname))
+                                    || "loadClass".equals(mname)) {
+                                result.refs.add(lastStringConstant);
+                            }
+                        }
+
+                        // ServiceLoader.load(SomeClass.class)
+                        if (SERVICE_LOADER_INTERNAL.equals(owner) && "load".equals(mname)
+                                && lastClassConstant != null) {
+                            result.serviceLoaderServices
+                                    .add(toClassName(lastClassConstant.getInternalName()));
+                        }
+
+                        // Resource/OIS detection
+                        if ("getResourceAsStream".equals(mname) || "getResource".equals(mname)) {
+                            result.deserializationFlags |= FLAG_RESOURCE_ACCESS;
+                        }
+                        if ("java/io/ObjectInputStream".equals(owner)) {
+                            result.deserializationFlags |= FLAG_OBJECT_INPUT_STREAM;
+                        }
+
+                        // Sisu detection
+                        if (!sisuAlreadyActivated
+                                && ("getResources".equals(mname) || "getResource".equals(mname))) {
+                            hasGetResources = true;
+                        }
+
+                        lastStringConstant = null;
+                        lastClassConstant = null;
+                        result.refs.add(toClassName(owner));
+                        addMethodDescriptorTypes(mdescriptor, result.refs);
+                    }
+
+                    @Override
+                    public void visitLdcInsn(Object value) {
+                        if (value instanceof String str) {
+                            lastStringConstant = str;
+                            // String class references (for non-generated classes)
+                            if (!isGenerated) {
+                                matchClassNames(str, allKnownClasses, result.refs);
+                            }
+                            // Sisu detection
+                            if (!sisuAlreadyActivated && SISU_NAMED_RESOURCE.equals(str)) {
+                                hasSisuString = true;
+                            }
+                        } else {
+                            lastStringConstant = null;
+                        }
+                        if (value instanceof org.objectweb.asm.Type type) {
+                            if (type.getSort() == org.objectweb.asm.Type.OBJECT) {
+                                lastClassConstant = type;
+                                result.refs.add(toClassName(type.getInternalName()));
+                            } else if (type.getSort() == org.objectweb.asm.Type.ARRAY) {
+                                lastClassConstant = null;
+                                org.objectweb.asm.Type elem = type.getElementType();
+                                if (elem.getSort() == org.objectweb.asm.Type.OBJECT) {
+                                    result.refs.add(toClassName(elem.getInternalName()));
+                                }
+                            } else {
+                                lastClassConstant = null;
+                            }
+                        } else {
+                            lastClassConstant = null;
+                        }
+                    }
+
+                    @Override
+                    public void visitInsn(int opcode) {
+                        if (opcode != Opcodes.ICONST_0 && opcode != Opcodes.ICONST_1) {
+                            lastStringConstant = null;
+                        }
+                        lastClassConstant = null;
+                    }
+
+                    @Override
+                    public void visitIntInsn(int opcode, int operand) {
+                        // Don't reset lastStringConstant — BIPUSH/SIPUSH between LDC and Class.forName
+                        lastClassConstant = null;
+                    }
+
+                    @Override
+                    public void visitVarInsn(int opcode, int varIndex) {
+                        if (opcode != Opcodes.ALOAD) {
+                            lastStringConstant = null;
+                        }
+                        // Don't reset lastClassConstant on ALOAD — ClassLoader arg
+                    }
+
+                    @Override
+                    public void visitJumpInsn(int opcode, Label label) {
+                        lastStringConstant = null;
+                        lastClassConstant = null;
+                    }
+
+                    @Override
+                    public void visitInvokeDynamicInsn(String iname, String idescriptor,
+                            Handle bootstrapMethodHandle, Object... bootstrapMethodArguments) {
+                        lastStringConstant = null;
+                        lastClassConstant = null;
+                        addHandleType(bootstrapMethodHandle, result.refs);
+                        if (bootstrapMethodArguments != null) {
+                            for (Object arg : bootstrapMethodArguments) {
+                                if (arg instanceof org.objectweb.asm.Type type) {
+                                    addAsmType(type, result.refs);
+                                } else if (arg instanceof Handle) {
+                                    addHandleType((Handle) arg, result.refs);
+                                }
+                            }
+                        }
+                    }
+
+                    @Override
+                    public void visitMultiANewArrayInsn(String descriptor, int numDimensions) {
+                        lastStringConstant = null;
+                        lastClassConstant = null;
+                        addDescriptorType(descriptor, result.refs);
+                    }
+
+                    @Override
+                    public org.objectweb.asm.AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
+                        lastStringConstant = null;
+                        lastClassConstant = null;
+                        addDescriptorType(descriptor, result.refs);
+                        return createAnnotationRefVisitor(result.refs);
+                    }
+
+                    @Override
+                    public org.objectweb.asm.AnnotationVisitor visitParameterAnnotation(int parameter,
+                            String descriptor, boolean visible) {
+                        lastStringConstant = null;
+                        lastClassConstant = null;
+                        addDescriptorType(descriptor, result.refs);
+                        return createAnnotationRefVisitor(result.refs);
+                    }
+                };
+            }
+
+            @Override
+            public void visitEnd() {
+                // Sisu: both conditions must be true within the same class
+                if (!sisuAlreadyActivated && hasSisuString && hasGetResources) {
+                    result.sisuDetected = true;
+                }
+            }
+        }, ClassReader.SKIP_FRAMES | ClassReader.SKIP_DEBUG);
+        return result;
     }
 
     /**

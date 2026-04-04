@@ -234,6 +234,10 @@ class ClassLoadingChainAnalyzer {
         }
     }
 
+    /**
+     * BFS propagation: walks backwards from the worklist via {@code callerIndex},
+     * adding each non-JDK caller to {@code classLoadingMethods}.
+     */
     private void propagateWorklist(Queue<String> worklist) {
         while (!worklist.isEmpty()) {
             String method = worklist.poll();
