@@ -92,6 +92,10 @@ public class RecordingMain {
         for (String className : allDiscovered) {
             realOut.println(className);
         }
+
+        // Force exit: entry point class init may have started non-daemon threads
+        // (timers, pools, event loops) that would prevent the JVM from exiting
+        System.exit(0);
     }
 
     /**

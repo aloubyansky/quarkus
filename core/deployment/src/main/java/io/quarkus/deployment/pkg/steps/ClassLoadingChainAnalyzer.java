@@ -414,9 +414,15 @@ class ClassLoadingChainAnalyzer {
                 }
             }
 
-            int exitCode = proc.waitFor();
-            if (exitCode != 0) {
-                log.warnf("Class-loading chain analysis forked JVM exited with code %d", exitCode);
+            boolean finished = proc.waitFor(120, java.util.concurrent.TimeUnit.SECONDS);
+            if (!finished) {
+                log.warnf("Class-loading chain analysis forked JVM timed out after 120s, destroying");
+                proc.destroyForcibly();
+            } else {
+                int exitCode = proc.exitValue();
+                if (exitCode != 0) {
+                    log.warnf("Class-loading chain analysis forked JVM exited with code %d", exitCode);
+                }
             }
 
             return discovered;
