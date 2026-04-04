@@ -74,9 +74,9 @@ The algorithm runs in several stages:
               │     whose <init> or <clinit> triggers the    │
               │     loading                                  │
               │                                              │
-              │  3. Execute those classes in an isolated     │
-              │     RecordingClassLoader to capture all      │
-              │     loaded class names dynamically           │
+              │  3. Execute those classes in a forked JVM    │
+              │     with a RecordingClassLoader to capture   │
+              │     all loaded class names dynamically       │
               │                                              │
               │  4. Extract class name strings from Map      │
               │     values (for deferred loading patterns)   │
@@ -109,7 +109,7 @@ Annotations and generics:: Class references appearing in annotation values and g
 
 ServiceLoader / SPI:: `ServiceLoader.load()` calls where the service interface is a compile-time constant, and implementations listed in `META-INF/services` files.
 
-Dynamic class loading:: `Class.forName()`, `ClassLoader.loadClass()`, and `MethodHandles.Lookup.findClass()` calls where the class name is a string constant in the bytecode. For cases where class names are constructed at runtime (e.g., via `StringBuilder` or `invokedynamic` string concatenation), the tree-shaker traces the call chain up to the class whose constructor or static initializer triggers the loading, then executes it in an isolated class loader to dynamically capture which classes are loaded. This handles libraries like BouncyCastle that build class names from package prefixes and algorithm name arrays.
+Dynamic class loading:: `Class.forName()`, `ClassLoader.loadClass()`, and `MethodHandles.Lookup.findClass()` calls where the class name is a string constant in the bytecode. For cases where class names are constructed at runtime (e.g., via `StringBuilder` or `invokedynamic` string concatenation), the tree-shaker traces the call chain up to the class whose constructor or static initializer triggers the loading, then executes it in a forked JVM with an isolated class loader to dynamically capture which classes are loaded. This handles libraries like BouncyCastle that build class names from package prefixes and algorithm name arrays.
 
 Reflection, JNI, and service provider registrations:: Classes registered by extensions for reflection (`ReflectiveClassBuildItem`, `ReflectiveFieldBuildItem`, `ReflectiveMethodBuildItem`), JNI runtime access (`JniRuntimeAccessBuildItem`, `JniRuntimeAccessFieldBuildItem`, `JniRuntimeAccessMethodBuildItem`), and service providers (`ServiceProviderBuildItem`) are treated as root classes. Weak reflective registrations are excluded — they are only preserved if bytecode analysis independently reaches them. Conditional registrations (`ReflectiveClassConditionBuildItem`) are evaluated to a fixed point: a conditionally registered class becomes a root only when its condition type is reachable.
 
@@ -132,9 +132,9 @@ To handle this, the tree-shaker runs a class-loading chain analysis after the BF
 
 1. **Seed propagation**: Scans reachable bytecode to identify methods that transitively call `ClassLoader.loadClass(String)`, `Class.forName(String)`, or `MethodHandles.Lookup.findClass(String)`.
 2. **Entry point discovery**: Walks up the caller chain to find classes whose constructor (`<init>`) or static initializer (`<clinit>`) triggers the class-loading chain.
-3. **Dynamic execution**: Loads and instantiates each entry point class in an isolated `RecordingClassLoader` that captures every class load attempt — including failed attempts. After instantiation, if the object is a `Map` (e.g., a JCA security provider), its values are also inspected for class name strings that are stored for deferred loading.
+3. **Dynamic execution**: Each entry point class is executed in a forked JVM process with an isolated `RecordingClassLoader` that captures every class load attempt — including failed attempts. After instantiation, if the object is a `Map` (e.g., a JCA security provider), its values are also inspected for class name strings that are stored for deferred loading. Running in a separate process ensures complete isolation of global JVM state and is safe for parallel Maven builds (`-T2C`).
 
-The chain analysis runs in a fixed-point loop: newly discovered classes are fed back into the BFS, and the analysis repeats until no new classes are found.
+The chain analysis runs in an incremental fixed-point loop: the call graph is built once and extended incrementally as new classes are discovered. Only new entry points are executed in each iteration, avoiding redundant work. The loop terminates when no new classes are found.
 
 For example, BouncyCastle's `BouncyCastleProvider` constructor calls `setup()` which calls `loadAlgorithms()` which calls `loadServiceClass()` which calls `ClassUtil.loadClass()`.
 The tree-shaker identifies `BouncyCastleProvider` as the entry point, instantiates it in the recording class loader, and captures all dynamically loaded algorithm classes.
