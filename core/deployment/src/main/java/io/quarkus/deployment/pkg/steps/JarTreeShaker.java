@@ -128,29 +128,46 @@ class JarTreeShaker {
         allBytecode.putAll(input.depBytecode);
         allBytecode.putAll(input.generatedBytecode);
 
-        boolean changed = true;
-        while (changed) {
-            // Phases 1+2: identify entry points from reachable classes
-            Set<String> entryPoints = ClassLoadingChainAnalyzer.findEntryPoints(
-                    reachable, allBytecode, input.classToDep.keySet());
-            if (entryPoints.isEmpty()) {
+        // Build the transformed bytecode map once (optimization B)
+        Map<String, Supplier<byte[]>> transformedBytecode = new HashMap<>();
+        for (String name : input.transformedClassNames) {
+            Supplier<byte[]> supplier = input.depBytecode.get(name);
+            if (supplier != null) {
+                transformedBytecode.put(name, supplier);
+            }
+        }
+
+        ClassLoadingChainAnalyzer analyzer = new ClassLoadingChainAnalyzer(allBytecode, input.classToDep.keySet());
+        Set<String> executedEntryPoints = new HashSet<>();
+        Set<String> classesToScan = new HashSet<>(reachable);
+
+        while (true) {
+            // Phases 1+2: scan only new classes, merge into existing call graph (optimization C)
+            Set<String> entryPoints = analyzer.findEntryPoints(classesToScan);
+
+            // Only execute entry points we haven't already executed (optimization A)
+            Set<String> newEntryPoints = new HashSet<>(entryPoints);
+            newEntryPoints.removeAll(executedEntryPoints);
+            if (newEntryPoints.isEmpty()) {
                 break;
             }
+            executedEntryPoints.addAll(newEntryPoints);
 
-            // Phase 3: execute entry points in per-dependency RecordingClassLoaders
+            // Phase 3: execute only new entry points in a forked JVM
             Set<String> discovered = ClassLoadingChainAnalyzer.executeEntryPoints(
-                    entryPoints, allBytecode, input.allKnownClasses, input.classToDep);
+                    newEntryPoints, input.generatedBytecode, transformedBytecode,
+                    input.allKnownClasses, input.depJarPaths, input.appPaths);
 
             // Filter to known, non-reachable classes
             discovered.retainAll(input.allKnownClasses);
             discovered.removeAll(reachable);
             if (discovered.isEmpty()) {
-                changed = false;
-            } else {
-                log.infof("Class-loading chain analysis discovered %d additional classes", discovered.size());
-                traceReachableClasses(discovered, reachable, input.allKnownClasses);
-                evaluateConditionalRoots(reachable, input.allKnownClasses);
+                break;
             }
+            log.infof("Class-loading chain analysis discovered %d additional classes", discovered.size());
+            traceReachableClasses(discovered, reachable, input.allKnownClasses);
+            evaluateConditionalRoots(reachable, input.allKnownClasses);
+            classesToScan = discovered; // next iteration scans only new classes
         }
         return reachable;
     }
