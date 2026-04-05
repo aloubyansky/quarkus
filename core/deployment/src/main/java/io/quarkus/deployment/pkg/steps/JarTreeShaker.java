@@ -39,6 +39,15 @@ class JarTreeShaker {
 
     private final JarTreeShakerInput input;
 
+    /**
+     * Reverse call graph built during BFS: maps each called method to the set of methods
+     * that call it. Contains all application-level call edges (excluding calls to JDK/infra
+     * methods, unless the callee is a class-loading seed like {@code ClassLoader.loadClass}).
+     * Used by {@link ClassLoadingChainAnalyzer} to propagate backwards from seeds through
+     * application code and discover entry point classes.
+     */
+    private final Map<String, Set<String>> callerIndex = new HashMap<>();
+
     JarTreeShaker(JarTreeShakerInput input) {
         this.input = input;
     }
@@ -146,16 +155,14 @@ class JarTreeShaker {
             }
         }
 
-        ClassLoadingChainAnalyzer analyzer = new ClassLoadingChainAnalyzer(input.allBytecode, input.classToDep.keySet());
+        ClassLoadingChainAnalyzer analyzer = new ClassLoadingChainAnalyzer(callerIndex, input.classToDep.keySet());
         Set<String> executedEntryPoints = new HashSet<>();
         Set<String> allPhase3Discovered = new HashSet<>();
-        Set<String> classesToScan = new HashSet<>(reachable);
 
         while (true) {
-            // Phases 1+2: scan only new classes, merge into existing call graph (optimization C)
-            Set<String> entryPoints = analyzer.findEntryPoints(classesToScan);
+            Set<String> entryPoints = analyzer.findEntryPoints();
 
-            // Only execute entry points we haven't already executed (optimization A)
+            // Only execute entry points we haven't already executed
             Set<String> newEntryPoints = new HashSet<>(entryPoints);
             newEntryPoints.removeAll(executedEntryPoints);
             if (newEntryPoints.isEmpty()) {
@@ -185,8 +192,9 @@ class JarTreeShaker {
             log.infof("Class-loading chain analysis discovered %d additional classes", discovered.size());
             traceReachableClasses(discovered, reachable, input.allKnownClasses);
             evaluateConditionalRoots(reachable, input.allKnownClasses);
-            classesToScan = discovered; // next iteration scans only new classes
         }
+        analyzer.release();
+        callerIndex.clear();
         return reachable;
     }
 
@@ -196,6 +204,8 @@ class JarTreeShaker {
      * BFS traversal from {@code startingRoots}, following bytecode references, service provider
      * relationships, and string-constant class names. Populates and returns the {@code visited} set.
      * Can be called multiple times with the same {@code visited} set to resume from new roots.
+     * Also builds the {@link #callerIndex} as a side effect during bytecode scanning.
+     * Each class's bytecode cache is cleared immediately after scanning to limit peak memory.
      */
     private Set<String> traceReachableClasses(Set<String> startingRoots, Set<String> visited,
             Set<String> allKnownClasses) {
@@ -230,7 +240,7 @@ class JarTreeShaker {
             // Skips JDK/platform classes that we'll never find, avoiding thousands of
             // no-op queue iterations and wasted lookups.
             for (String ref : scan.refs) {
-                if (ref != null && input.allBytecode.containsKey(ref) && visited.add(ref)) {
+                if (ref != null && input.hasBytecode(ref) && visited.add(ref)) {
                     queue.add(ref);
                 }
             }
@@ -382,12 +392,11 @@ class JarTreeShaker {
     }
 
     /**
-     * Looks up bytecode for a class from the merged bytecode map.
+     * Reads bytecode for a class and clears the disk cache to free memory.
      * Returns null if the class is a JDK class or not available.
      */
     private byte[] lookupBytecode(String name) {
-        Supplier<byte[]> supplier = input.allBytecode.get(name);
-        return supplier == null ? null : supplier.get();
+        return input.readBytecode(name);
     }
 
     /**
@@ -415,11 +424,12 @@ class JarTreeShaker {
 
     /**
      * Single-pass ASM scan that combines reference extraction, string class matching,
-     * ServiceLoader detection, sisu detection, and resource/ObjectInputStream detection.
-     * Replaces 4-5 separate ClassReader.accept() calls with one.
+     * ServiceLoader detection, sisu detection, resource/ObjectInputStream detection,
+     * and caller-index building for {@link ClassLoadingChainAnalyzer}.
      */
     private void scanBytecode(String className, byte[] bytecode, Set<String> allKnownClasses,
             boolean isGenerated, boolean sisuAlreadyActivated, BfsScanResult result) {
+        String internalOwner = className.replace('.', '/');
         ClassReader reader = new ClassReader(bytecode);
         reader.accept(new ClassVisitor(Opcodes.ASM9) {
 
@@ -475,6 +485,7 @@ class JarTreeShaker {
                         result.refs.add(toClassName(ex));
                     }
                 }
+                String callerKey = internalOwner + "." + name + descriptor;
                 return new MethodVisitor(Opcodes.ASM9) {
                     // State for Class.forName/loadClass string constant tracking
                     private String lastStringConstant;
@@ -544,6 +555,13 @@ class JarTreeShaker {
                         if (!sisuAlreadyActivated
                                 && ("getResources".equals(mname) || "getResource".equals(mname))) {
                             hasGetResources = true;
+                        }
+
+                        // Caller index for class-loading chain analysis
+                        String calleeKey = owner + "." + mname + mdescriptor;
+                        if (ClassLoadingChainAnalyzer.SEED_METHODS.contains(calleeKey)
+                                || !ClassLoadingChainAnalyzer.isJdkOrInfraClass(calleeKey)) {
+                            callerIndex.computeIfAbsent(calleeKey, k -> new HashSet<>()).add(callerKey);
                         }
 
                         lastStringConstant = null;
@@ -677,114 +695,10 @@ class JarTreeShaker {
         }
     }
 
-    /**
-     * Extracts bytecode references and string constant class references, adding them to the queue.
-     * Generated classes are skipped for string constant scanning since they were already scanned
-     * during root collection.
-     */
-    private void enqueueBytecodeReferences(String name, byte[] bytecode, Set<String> allKnownClasses,
-            Set<String> visited, Queue<String> queue) {
-        Set<String> refs = extractReferencesFromBytecode(bytecode);
-        for (String ref : refs) {
-            if (ref != null && visited.add(ref)) {
-                queue.add(ref);
-            }
-        }
-        // Also check string constants in dependency/app bytecode for class names
-        // passed as strings to methods like Class.forName wrappers
-        if (!input.generatedBytecode.containsKey(name)) {
-            Set<String> stringRefs = extractStringClassReferences(bytecode, allKnownClasses);
-            for (String ref : stringRefs) {
-                if (visited.add(ref)) {
-                    queue.add(ref);
-                }
-            }
-        }
-    }
-
     private static final int FLAG_RESOURCE_ACCESS = 1;
     private static final int FLAG_OBJECT_INPUT_STREAM = 2;
     private static final int FLAG_RESOURCE_DESERIALIZATION = FLAG_RESOURCE_ACCESS | FLAG_OBJECT_INPUT_STREAM;
     private static final int FLAG_SCANNED = 4;
-
-    /**
-     * Tracks per-dependency usage of classpath resource access and ObjectInputStream.
-     * When both patterns are detected within reachable classes of the same dependency,
-     * scans the dependency's non-class resources for Java serialization streams and
-     * extracts the class names they reference. The resource access and ObjectInputStream
-     * usage may be in different classes (e.g. inner classes), so tracking is per-dependency.
-     */
-    private void includeDeserializedClasses(String name, byte[] bytecode,
-            Map<ArtifactKey, Integer> depFlags,
-            Set<String> visited, Queue<String> queue) {
-        ArtifactKey depKey = input.classToDep.get(name);
-        if (depKey == null) {
-            return;
-        }
-        int flags = depFlags.getOrDefault(depKey, 0);
-        if ((flags & FLAG_SCANNED) != 0) {
-            return;
-        }
-        flags |= detectResourceAndObjectInputStreamUsage(bytecode);
-        depFlags.put(depKey, flags);
-        if ((flags & FLAG_RESOURCE_DESERIALIZATION) != FLAG_RESOURCE_DESERIALIZATION) {
-            return;
-        }
-        depFlags.put(depKey, flags | FLAG_SCANNED);
-        OpenPathTree openTree = input.depOpenTrees.get(depKey);
-        if (openTree == null) {
-            return;
-        }
-        Set<String> classNames = extractClassNamesFromSerializedResources(openTree);
-        if (!classNames.isEmpty()) {
-            log.debugf("ObjectInputStream + resource access detected in %s, "
-                    + "found %d serialized classes in %s",
-                    name, classNames.size(), depKey);
-            for (String className : classNames) {
-                if (visited.add(className)) {
-                    queue.add(className);
-                }
-            }
-        }
-    }
-
-    /**
-     * Scans bytecode for classpath resource access ({@code getResource}/{@code getResourceAsStream})
-     * and ObjectInputStream usage, returning detected flags.
-     */
-    private static int detectResourceAndObjectInputStreamUsage(byte[] bytecode) {
-        int[] flags = new int[1];
-        ClassReader reader = new ClassReader(bytecode);
-        reader.accept(new ClassVisitor(Opcodes.ASM9) {
-            @Override
-            public MethodVisitor visitMethod(int access, String name, String descriptor,
-                    String signature, String[] exceptions) {
-                if ((flags[0] & FLAG_RESOURCE_DESERIALIZATION) == FLAG_RESOURCE_DESERIALIZATION) {
-                    return null;
-                }
-                return new MethodVisitor(Opcodes.ASM9) {
-                    @Override
-                    public void visitMethodInsn(int opcode, String owner, String mname,
-                            String mdescriptor, boolean isInterface) {
-                        if ("getResourceAsStream".equals(mname) || "getResource".equals(mname)) {
-                            flags[0] |= FLAG_RESOURCE_ACCESS;
-                        }
-                        if ("java/io/ObjectInputStream".equals(owner)) {
-                            flags[0] |= FLAG_OBJECT_INPUT_STREAM;
-                        }
-                    }
-
-                    @Override
-                    public void visitTypeInsn(int opcode, String type) {
-                        if ("java/io/ObjectInputStream".equals(type)) {
-                            flags[0] |= FLAG_OBJECT_INPUT_STREAM;
-                        }
-                    }
-                };
-            }
-        }, ClassReader.SKIP_FRAMES | ClassReader.SKIP_DEBUG);
-        return flags[0];
-    }
 
     /**
      * Scans non-class resources in the given dependency for Java serialization streams
@@ -1287,41 +1201,4 @@ class JarTreeShaker {
         return String.format("%.1f MB", bytes / (1024.0 * 1024.0));
     }
 
-    /**
-     * Checks whether bytecode contains both an LDC string constant for the sisu named resource path
-     * and a ClassLoader.getResources()/getResource() call. These may be in different methods
-     * (e.g. the string is passed to a helper that calls getResources in a lambda), so we check
-     * for both independently within the same class.
-     */
-    private static boolean detectsGetResourcesForSisu(byte[] bytecode) {
-        boolean[] hasSisuString = new boolean[1];
-        boolean[] hasGetResources = new boolean[1];
-        ClassReader reader = new ClassReader(bytecode);
-        reader.accept(new ClassVisitor(Opcodes.ASM9) {
-            @Override
-            public MethodVisitor visitMethod(int access, String name, String descriptor,
-                    String signature, String[] exceptions) {
-                if (hasSisuString[0] && hasGetResources[0]) {
-                    return null;
-                }
-                return new MethodVisitor(Opcodes.ASM9) {
-                    @Override
-                    public void visitLdcInsn(Object value) {
-                        if (SISU_NAMED_RESOURCE.equals(value)) {
-                            hasSisuString[0] = true;
-                        }
-                    }
-
-                    @Override
-                    public void visitMethodInsn(int opcode, String owner, String mname,
-                            String mdescriptor, boolean isInterface) {
-                        if ("getResources".equals(mname) || "getResource".equals(mname)) {
-                            hasGetResources[0] = true;
-                        }
-                    }
-                };
-            }
-        }, ClassReader.SKIP_FRAMES | ClassReader.SKIP_DEBUG);
-        return hasSisuString[0] && hasGetResources[0];
-    }
 }

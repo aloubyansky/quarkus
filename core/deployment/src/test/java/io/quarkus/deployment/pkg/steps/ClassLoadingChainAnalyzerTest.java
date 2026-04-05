@@ -12,6 +12,8 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 import org.junit.jupiter.api.Test;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -345,10 +347,43 @@ class ClassLoadingChainAnalyzerTest {
 
         Set<String> reachable = new HashSet<>(Set.of(utilClass, providerClass));
 
-        ClassLoadingChainAnalyzer analyzer = new ClassLoadingChainAnalyzer(allBytecode, allBytecode.keySet());
-        Set<String> entryPoints = analyzer.findEntryPoints(reachable);
+        Map<String, Set<String>> callerIndex = buildCallerIndex(allBytecode);
+        ClassLoadingChainAnalyzer analyzer = new ClassLoadingChainAnalyzer(callerIndex, allBytecode.keySet());
+        Set<String> entryPoints = analyzer.findEntryPoints();
         assertTrue(entryPoints.contains(providerClass),
                 "Should identify " + providerClass + " as entry point via seed in " + utilClass);
+    }
+
+    /**
+     * Builds a reverse caller index from bytecode, mirroring what JarTreeShaker.scanBytecode does
+     * during BFS.
+     */
+    private static Map<String, Set<String>> buildCallerIndex(Map<String, Supplier<byte[]>> allBytecode) {
+        Map<String, Set<String>> callerIndex = new HashMap<>();
+        for (var entry : allBytecode.entrySet()) {
+            byte[] bytecode = entry.getValue().get();
+            String internalOwner = entry.getKey().replace('.', '/');
+            ClassReader reader = new ClassReader(bytecode);
+            reader.accept(new ClassVisitor(Opcodes.ASM9) {
+                @Override
+                public MethodVisitor visitMethod(int access, String name, String descriptor,
+                        String signature, String[] exceptions) {
+                    String callerKey = internalOwner + "." + name + descriptor;
+                    return new MethodVisitor(Opcodes.ASM9) {
+                        @Override
+                        public void visitMethodInsn(int opcode, String owner, String mname,
+                                String mdescriptor, boolean isInterface) {
+                            String calleeKey = owner + "." + mname + mdescriptor;
+                            if (ClassLoadingChainAnalyzer.SEED_METHODS.contains(calleeKey)
+                                    || !ClassLoadingChainAnalyzer.isJdkOrInfraClass(calleeKey)) {
+                                callerIndex.computeIfAbsent(calleeKey, k -> new HashSet<>()).add(callerKey);
+                            }
+                        }
+                    };
+                }
+            }, ClassReader.SKIP_FRAMES | ClassReader.SKIP_DEBUG);
+        }
+        return callerIndex;
     }
 
     // ---- Helper methods ----
@@ -705,14 +740,11 @@ class ClassLoadingChainAnalyzerTest {
      */
     private static Set<String> analyzeInForkedJvm(Set<String> reachable,
             Map<String, Supplier<byte[]>> allBytecode, Set<String> allKnown) {
-        ClassLoadingChainAnalyzer analyzer = new ClassLoadingChainAnalyzer(allBytecode, allBytecode.keySet());
-        Set<String> entryPoints = analyzer.findEntryPoints(reachable);
-        if (entryPoints.isEmpty()) {
-            return Set.of();
-        }
-        // Pass all bytecode as "generated" since tests don't have real dep JARs
+        // Pass all reachable classes as entry points — non-entry-point classes
+        // simply get instantiated with no class-loading side effects.
+        // All bytecode is passed as "generated" since tests don't have real dep JARs.
         Set<String> discovered = ClassLoadingChainAnalyzer.executeEntryPoints(
-                entryPoints, allBytecode, Map.of(),
+                reachable, allBytecode, Map.of(),
                 allKnown, List.of(), List.of());
         discovered.retainAll(allKnown);
         discovered.removeAll(reachable);

@@ -9,7 +9,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -18,10 +17,6 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 import org.jboss.logging.Logger;
-import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.ClassVisitor;
-import org.objectweb.asm.MethodVisitor;
-import org.objectweb.asm.Opcodes;
 
 /**
  * Discovers classes that are loaded dynamically via {@code ClassLoader.loadClass()} or
@@ -44,17 +39,17 @@ import org.objectweb.asm.Opcodes;
  * Rather than attempting to reconstruct class name strings from bytecode (which is
  * fragile and incomplete), this analyzer uses a three-phase approach:
  *
- * <h3>Phase 1 -- Bytecode analysis (seed propagation)</h3>
+ * <h3>Phase 1 -- Seed propagation</h3>
  * <p>
- * Scans all reachable classes and builds a method-level call graph. Starting from seed
+ * Uses a reverse caller index (callee → callers) that is built externally by
+ * {@link JarTreeShaker#scanBytecode} during BFS reachability analysis. Starting from seed
  * methods ({@code ClassLoader.loadClass(String)}, {@code Class.forName(String)},
  * {@code Class.forName(String, boolean, ClassLoader)}, and
  * {@code MethodHandles.Lookup.findClass(String)}), propagates backwards through the
- * call graph using a fixed-point algorithm to identify every application method that
+ * caller index using a fixed-point algorithm to identify every application method that
  * transitively calls a class-loading seed. JDK and infrastructure classes
  * ({@code java/}, {@code javax/}, {@code jakarta/}, {@code sun/}, {@code org/objectweb/})
- * are excluded from propagation to avoid false positives. A caller index
- * (callee to callers) is built as a side effect for use in Phase 2.
+ * are excluded from propagation to avoid false positives.
  *
  * <h3>Phase 2 -- Entry point discovery (caller chain walk)</h3>
  * <p>
@@ -107,7 +102,7 @@ class ClassLoadingChainAnalyzer {
     private static final Logger log = Logger.getLogger(ClassLoadingChainAnalyzer.class.getName());
 
     /** JDK methods that load classes by name — the seeds for call chain propagation. */
-    private static final Set<String> SEED_METHODS = Set.of(
+    static final Set<String> SEED_METHODS = Set.of(
             "java/lang/ClassLoader.loadClass(Ljava/lang/String;)Ljava/lang/Class;",
             "java/lang/ClassLoader.loadClass(Ljava/lang/String;Z)Ljava/lang/Class;",
             "java/lang/ClassLoader.findClass(Ljava/lang/String;)Ljava/lang/Class;",
@@ -118,31 +113,29 @@ class ClassLoadingChainAnalyzer {
 
     private static final int MAX_CALLER_DEPTH = 5;
 
-    private final Map<String, Supplier<byte[]>> allBytecode;
     private final Set<String> depClassNames;
-    /** Reverse call index: callee method → set of caller methods. */
-    private final Map<String, Set<String>> callerIndex = new HashMap<>();
+    /** Reverse call index: callee method → set of caller methods. Built externally during BFS. */
+    private final Map<String, Set<String>> callerIndex;
     private final Set<String> classLoadingMethods = new HashSet<>(SEED_METHODS);
     private boolean seedsPropagated = false;
 
-    ClassLoadingChainAnalyzer(Map<String, Supplier<byte[]>> allBytecode, Set<String> depClassNames) {
-        this.allBytecode = allBytecode;
+    /**
+     * @param callerIndex pre-built reverse call index (callee → callers), populated during BFS
+     * @param depClassNames dependency class names (dot-separated) for entry point filtering
+     */
+    ClassLoadingChainAnalyzer(Map<String, Set<String>> callerIndex, Set<String> depClassNames) {
+        this.callerIndex = callerIndex;
         this.depClassNames = depClassNames;
     }
 
     /**
-     * Analyzes the given classes for dynamic class-loading chains and returns
-     * any entry point class names whose {@code <init>}/{@code <clinit>} triggers
-     * dynamic class loading.
-     * <p>
-     * Builds a reverse caller index (callee → callers) from bytecode in a single pass,
-     * then propagates backwards from class-loading seed methods to find entry points.
+     * Propagates backwards from class-loading seed methods through the pre-built
+     * caller index to find entry point classes whose {@code <init>}/{@code <clinit>}
+     * triggers dynamic class loading.
      *
-     * @param classesToScan class names to scan and add to the caller index
      * @return entry point class names, or empty set if none found
      */
-    Set<String> findEntryPoints(Set<String> classesToScan) {
-        buildCallerIndex(classesToScan);
+    Set<String> findEntryPoints() {
         propagateFromSeeds();
         Set<String> methods = new HashSet<>(classLoadingMethods);
         methods.removeAll(SEED_METHODS);
@@ -151,48 +144,6 @@ class ClassLoadingChainAnalyzer {
         }
         log.debugf("Found %d class-loading methods", methods.size());
         return findEntryPointClasses(methods);
-    }
-
-    /**
-     * Scans the given classes and builds a reverse caller index:
-     * for each callee method, records which methods call it.
-     * Only records edges where the callee is a non-JDK method or a class-loading seed.
-     */
-    private void buildCallerIndex(Set<String> classesToScan) {
-        for (String className : classesToScan) {
-            Supplier<byte[]> supplier = allBytecode.get(className);
-            if (supplier == null) {
-                continue;
-            }
-            byte[] bytecode;
-            try {
-                bytecode = supplier.get();
-            } catch (Exception e) {
-                continue;
-            }
-            String internalOwner = className.replace('.', '/');
-            ClassReader reader = new ClassReader(bytecode);
-            reader.accept(new ClassVisitor(Opcodes.ASM9) {
-                @Override
-                public MethodVisitor visitMethod(int access, String name, String descriptor,
-                        String signature, String[] exceptions) {
-                    String callerKey = internalOwner + "." + name + descriptor;
-                    return new MethodVisitor(Opcodes.ASM9) {
-                        @Override
-                        public void visitMethodInsn(int opcode, String owner, String mname,
-                                String mdescriptor, boolean isInterface) {
-                            String calleeKey = owner + "." + mname + mdescriptor;
-                            // Skip JDK/infra callees that aren't class-loading seeds —
-                            // they can never propagate and dominate the index size
-                            if (!SEED_METHODS.contains(calleeKey) && isJdkOrInfraClass(calleeKey)) {
-                                return;
-                            }
-                            callerIndex.computeIfAbsent(calleeKey, k -> new HashSet<>()).add(callerKey);
-                        }
-                    };
-                }
-            }, ClassReader.SKIP_FRAMES | ClassReader.SKIP_DEBUG);
-        }
     }
 
     /**
@@ -286,6 +237,14 @@ class ClassLoadingChainAnalyzer {
                 entryPointClasses.add(dotName);
             }
         }
+    }
+
+    /**
+     * Releases the class-loading method data to free memory.
+     * The caller index is owned externally and cleared by the caller.
+     */
+    void release() {
+        classLoadingMethods.clear();
     }
 
     /**
@@ -465,7 +424,7 @@ class ClassLoadingChainAnalyzer {
      * Checks whether a method key belongs to a JDK or infrastructure class that should not
      * be considered as a class-loading method for propagation purposes.
      */
-    private static boolean isJdkOrInfraClass(String methodKey) {
+    static boolean isJdkOrInfraClass(String methodKey) {
         return methodKey.startsWith("java/")
                 || methodKey.startsWith("javax/")
                 || methodKey.startsWith("jakarta/")

@@ -74,12 +74,6 @@ class JarTreeShakerInput implements AutoCloseable {
      * are also marked reachable.
      */
     final Map<String, List<Supplier<byte[]>>> higherVersionBytecode;
-    /**
-     * Merged bytecode map with priority: generated → dep (includes transformed) → app.
-     * Provides single-lookup access for BFS and call graph analysis.
-     */
-    final Map<String, Supplier<byte[]>> allBytecode;
-
     private final List<OpenPathTree> openTrees;
 
     JarTreeShakerInput(
@@ -118,13 +112,6 @@ class JarTreeShakerInput implements AutoCloseable {
         this.appPaths = appPaths;
         this.transformedClassNames = transformedClassNames;
         this.higherVersionBytecode = higherVersionBytecode;
-        // Build merged bytecode map: app first, then dep (overwrites), then generated (overwrites)
-        Map<String, Supplier<byte[]>> merged = new HashMap<>(
-                appBytecode.size() + depBytecode.size() + generatedBytecode.size());
-        merged.putAll(appBytecode);
-        merged.putAll(depBytecode);
-        merged.putAll(generatedBytecode);
-        this.allBytecode = merged;
         this.openTrees = openTrees;
     }
 
@@ -140,6 +127,49 @@ class JarTreeShakerInput implements AutoCloseable {
                 // ignore
             }
         }
+    }
+
+    /**
+     * Looks up the bytecode supplier for the given class name, checking generated,
+     * dependency, and application bytecode maps in priority order.
+     */
+    Supplier<byte[]> getBytecode(String name) {
+        Supplier<byte[]> s = generatedBytecode.get(name);
+        if (s != null) {
+            return s;
+        }
+        s = depBytecode.get(name);
+        if (s != null) {
+            return s;
+        }
+        return appBytecode.get(name);
+    }
+
+    /**
+     * Returns true if bytecode is available for the given class name
+     * in any of the three bytecode maps.
+     */
+    boolean hasBytecode(String name) {
+        return generatedBytecode.containsKey(name)
+                || depBytecode.containsKey(name)
+                || appBytecode.containsKey(name);
+    }
+
+    /**
+     * Reads bytecode for the given class and clears the disk cache to free memory.
+     * The returned byte[] is the only reference; once the caller drops it, the
+     * bytecode is eligible for GC. The supplier can re-read from disk if needed later.
+     */
+    byte[] readBytecode(String name) {
+        Supplier<byte[]> supplier = getBytecode(name);
+        if (supplier == null) {
+            return null;
+        }
+        byte[] bytes = supplier.get();
+        if (supplier instanceof BytecodeSupplier bs) {
+            bs.clearCache();
+        }
+        return bytes;
     }
 
     /**
@@ -624,12 +654,6 @@ class JarTreeShakerInput implements AutoCloseable {
      * Releases all data structures. Must be called after stats computation is complete.
      */
     void releaseAnalysisData() {
-        allBytecode.clear();
-        for (Supplier<byte[]> supplier : depBytecode.values()) {
-            if (supplier instanceof BytecodeSupplier bs) {
-                bs.clearCache();
-            }
-        }
         depBytecode.clear();
         classToDep.clear();
         appBytecode.clear();
@@ -648,9 +672,11 @@ class JarTreeShakerInput implements AutoCloseable {
     }
 
     /**
-     * Lazy bytecode loader that reads from a {@link Path} on first access and caches the result.
-     * The path must remain valid (i.e. the owning {@link OpenPathTree} must stay open) until
-     * the bytecode is read. Records the file size at construction for reporting.
+     * Lazy bytecode loader that reads from a {@link Path} on demand. The cache is typically
+     * cleared immediately after use by {@link #readBytecode} to limit peak memory, so in
+     * practice each read goes to disk. The path must remain valid (i.e. the owning
+     * {@link OpenPathTree} must stay open) for the lifetime of this supplier.
+     * Records the file size at construction for reporting.
      */
     static class BytecodeSupplier implements Supplier<byte[]> {
         private final Path path;
