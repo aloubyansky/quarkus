@@ -610,35 +610,29 @@ class JarTreeShakerInput implements AutoCloseable {
     }
 
     /**
-     * Lazy bytecode loader that reads from a {@link Path} on first access and caches the result.
-     * The path must remain valid (i.e. the owning {@link OpenPathTree} must stay open) until
-     * the bytecode is read.
+     * Releases all data that is only needed during analysis.
+     * After this call, only {@code depBytecode} (keys), {@code depBytecodeSize},
+     * {@code classToDep}, and {@code treeShakeLevel} remain usable for
+     * computing removal stats.
      */
-    /**
-     * Releases cached bytecode from all suppliers across dep, app, and generated maps.
-     * Called after tree-shake analysis completes to reduce memory pressure during
-     * the remainder of the build.
-     */
-    void clearBytecodeCache() {
-        clearSupplierCache(depBytecode);
-        clearSupplierCache(appBytecode);
-        clearSupplierCache(generatedBytecode);
-    }
-
-    private static void clearSupplierCache(Map<String, Supplier<byte[]>> map) {
-        int totalBs = 0;
-        int totalLoaded = 0;
-        for (Supplier<byte[]> supplier : map.values()) {
+    void releaseAnalysisData() {
+        allBytecode.clear();
+        appBytecode.clear();
+        generatedBytecode.clear();
+        serviceProviders.clear();
+        serviceLoaderCalls.clear();
+        sisuNamedClasses.clear();
+        allKnownClasses.clear();
+        depJarPaths.clear();
+        appPaths.clear();
+        transformedClassNames.clear();
+        roots.clear();
+        conditionalRoots.clear();
+        // Clear cached bytecode from dep suppliers (keys/sizes still needed for stats)
+        for (Supplier<byte[]> supplier : depBytecode.values()) {
             if (supplier instanceof BytecodeSupplier bs) {
-                ++totalBs;
-                if (bs.bytes != null) {
-                    ++totalLoaded;
-                }
                 bs.clearCache();
             }
-        }
-        if (totalBs > 0) {
-            System.out.println("BytecodeSupplier cache: loaded " + totalLoaded + " out of " + totalBs);
         }
     }
 

@@ -72,8 +72,8 @@ class JarTreeShaker {
             }
         }
 
-        // Release cached bytecode — no longer needed after analysis
-        input.clearBytecodeCache();
+        // Release bytecode and analysis-only data structures
+        input.releaseAnalysisData();
 
         // Compute removal stats and per-dependency removed class lists
         int totalDepClasses = input.depBytecode.size();
