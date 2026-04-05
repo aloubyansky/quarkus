@@ -625,6 +625,11 @@ class JarTreeShakerInput implements AutoCloseable {
      */
     void releaseAnalysisData() {
         allBytecode.clear();
+        for (Supplier<byte[]> supplier : depBytecode.values()) {
+            if (supplier instanceof BytecodeSupplier bs) {
+                bs.clearCache();
+            }
+        }
         depBytecode.clear();
         classToDep.clear();
         appBytecode.clear();
@@ -642,6 +647,11 @@ class JarTreeShakerInput implements AutoCloseable {
         conditionalRoots.clear();
     }
 
+    /**
+     * Lazy bytecode loader that reads from a {@link Path} on first access and caches the result.
+     * The path must remain valid (i.e. the owning {@link OpenPathTree} must stay open) until
+     * the bytecode is read. Records the file size at construction for reporting.
+     */
     static class BytecodeSupplier implements Supplier<byte[]> {
         private final Path path;
         final long size;

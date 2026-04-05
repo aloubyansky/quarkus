@@ -120,8 +120,8 @@ class ClassLoadingChainAnalyzer {
 
     private final Map<String, Supplier<byte[]>> allBytecode;
     private final Set<String> depClassNames;
+    /** Reverse call index: callee method → set of caller methods. */
     private final Map<String, Set<String>> callerIndex = new HashMap<>();
-    private final Map<String, Set<String>> methodCallees = new HashMap<>();
     private final Set<String> classLoadingMethods = new HashSet<>(SEED_METHODS);
     private boolean seedsPropagated = false;
 
@@ -135,14 +135,14 @@ class ClassLoadingChainAnalyzer {
      * any entry point class names whose {@code <init>}/{@code <clinit>} triggers
      * dynamic class loading.
      * <p>
-     * The call graph ({@code callerIndex}, {@code methodCallees}) is preserved
-     * across invocations and extended incrementally with each call.
+     * Builds a reverse caller index (callee → callers) from bytecode in a single pass,
+     * then propagates backwards from class-loading seed methods to find entry points.
      *
-     * @param classesToScan class names to scan and add to the call graph
+     * @param classesToScan class names to scan and add to the caller index
      * @return entry point class names, or empty set if none found
      */
     Set<String> findEntryPoints(Set<String> classesToScan) {
-        buildCallGraph(classesToScan);
+        buildCallerIndex(classesToScan);
         propagateFromSeeds();
         Set<String> methods = new HashSet<>(classLoadingMethods);
         methods.removeAll(SEED_METHODS);
@@ -150,17 +150,15 @@ class ClassLoadingChainAnalyzer {
             return Set.of();
         }
         log.debugf("Found %d class-loading methods", methods.size());
-        return findEntryPointClasses(methods, callerIndex, depClassNames);
+        return findEntryPointClasses(methods);
     }
 
     /**
-     * Scans the given classes and extends the call graph maps:
-     * <ul>
-     * <li>{@code methodCallees}: method → set of methods it calls</li>
-     * <li>{@code callerIndex}: method → set of methods that call it (reverse index)</li>
-     * </ul>
+     * Scans the given classes and builds a reverse caller index:
+     * for each callee method, records which methods call it.
+     * Only records edges where the callee is a non-JDK method or a class-loading seed.
      */
-    private void buildCallGraph(Set<String> classesToScan) {
+    private void buildCallerIndex(Set<String> classesToScan) {
         for (String className : classesToScan) {
             Supplier<byte[]> supplier = allBytecode.get(className);
             if (supplier == null) {
@@ -185,11 +183,10 @@ class ClassLoadingChainAnalyzer {
                                 String mdescriptor, boolean isInterface) {
                             String calleeKey = owner + "." + mname + mdescriptor;
                             // Skip JDK/infra callees that aren't class-loading seeds —
-                            // they can never propagate and dominate the graph size
+                            // they can never propagate and dominate the index size
                             if (!SEED_METHODS.contains(calleeKey) && isJdkOrInfraClass(calleeKey)) {
                                 return;
                             }
-                            methodCallees.computeIfAbsent(callerKey, k -> new HashSet<>()).add(calleeKey);
                             callerIndex.computeIfAbsent(calleeKey, k -> new HashSet<>()).add(callerKey);
                         }
                     };
@@ -199,15 +196,13 @@ class ClassLoadingChainAnalyzer {
     }
 
     /**
-     * Incrementally propagates from seed methods through the call graph.
-     * Uses a worklist algorithm walking backwards via callerIndex.
-     * On first call, walks from all seeds. On subsequent calls, only checks
-     * new edges added since the last call.
+     * Propagates from seed methods through the caller index using a worklist algorithm.
+     * On first call, walks from all seeds. On subsequent calls, checks new edges.
      */
     private void propagateFromSeeds() {
+        Queue<String> worklist = new ArrayDeque<>();
         if (!seedsPropagated) {
             seedsPropagated = true;
-            Queue<String> worklist = new ArrayDeque<>();
             for (String seed : SEED_METHODS) {
                 Set<String> callers = callerIndex.get(seed);
                 if (callers != null) {
@@ -218,9 +213,7 @@ class ClassLoadingChainAnalyzer {
                     }
                 }
             }
-            propagateWorklist(worklist);
         } else {
-            Queue<String> worklist = new ArrayDeque<>();
             for (var entry : callerIndex.entrySet()) {
                 if (classLoadingMethods.contains(entry.getKey())) {
                     for (String caller : entry.getValue()) {
@@ -230,15 +223,7 @@ class ClassLoadingChainAnalyzer {
                     }
                 }
             }
-            propagateWorklist(worklist);
         }
-    }
-
-    /**
-     * BFS propagation: walks backwards from the worklist via {@code callerIndex},
-     * adding each non-JDK caller to {@code classLoadingMethods}.
-     */
-    private void propagateWorklist(Queue<String> worklist) {
         while (!worklist.isEmpty()) {
             String method = worklist.poll();
             Set<String> callers = callerIndex.get(method);
@@ -253,31 +238,20 @@ class ClassLoadingChainAnalyzer {
     }
 
     /**
-     * Phase 2: Walk up from class-loading methods using the caller index to find
+     * Walks up from class-loading methods using the caller index to find
      * classes whose {@code <init>} or {@code <clinit>} triggers the chain.
      * Depth-limited to {@link #MAX_CALLER_DEPTH} levels.
      */
-    private static Set<String> findEntryPointClasses(
-            Set<String> classLoadingMethods,
-            Map<String, Set<String>> callerIndex,
-            Set<String> depClassNames) {
-
+    private Set<String> findEntryPointClasses(Set<String> methods) {
         Set<String> entryPointClasses = new HashSet<>();
-        Set<String> visited = new HashSet<>(classLoadingMethods);
-        Queue<String> current = new ArrayDeque<>(classLoadingMethods);
+        Set<String> visited = new HashSet<>(methods);
+        Queue<String> current = new ArrayDeque<>(methods);
 
         for (int depth = 0; depth < MAX_CALLER_DEPTH && !current.isEmpty(); depth++) {
             Queue<String> next = new ArrayDeque<>();
             while (!current.isEmpty()) {
                 String method = current.poll();
-
-                // Check if this method is <init> or <clinit>
-                String methodPart = extractMethodName(method);
-                if ("<init>".equals(methodPart) || "<clinit>".equals(methodPart)) {
-                    addIfDependencyClass(method, depClassNames, entryPointClasses);
-                }
-
-                // Walk up to callers
+                checkEntryPoint(method, entryPointClasses);
                 Set<String> callers = callerIndex.get(method);
                 if (callers != null) {
                     for (String caller : callers) {
@@ -289,55 +263,29 @@ class ClassLoadingChainAnalyzer {
             }
             current = next;
         }
-
-        // Also check the last level for <init>/<clinit>
+        // Check the last level too
         for (String method : current) {
-            String methodPart = extractMethodName(method);
-            if ("<init>".equals(methodPart) || "<clinit>".equals(methodPart)) {
-                addIfDependencyClass(method, depClassNames, entryPointClasses);
-            }
+            checkEntryPoint(method, entryPointClasses);
         }
-
         return entryPointClasses;
     }
 
-    /**
-     * Adds the class from a method key to the entry point set if it is a dependency class.
-     * Generated classes and app classes are excluded — they don't dynamically load
-     * dependency classes in ways that affect tree-shaking.
-     */
-    private static void addIfDependencyClass(String methodKey, Set<String> depClassNames,
-            Set<String> entryPointClasses) {
-        String className = extractClassName(methodKey);
-        if (className != null) {
-            String dotName = className.replace('/', '.');
+    private void checkEntryPoint(String methodKey, Set<String> entryPointClasses) {
+        int parenIdx = methodKey.indexOf('(');
+        if (parenIdx < 0) {
+            return;
+        }
+        int dotIdx = methodKey.lastIndexOf('.', parenIdx);
+        if (dotIdx < 0) {
+            return;
+        }
+        String methodName = methodKey.substring(dotIdx + 1, parenIdx);
+        if ("<init>".equals(methodName) || "<clinit>".equals(methodName)) {
+            String dotName = methodKey.substring(0, dotIdx).replace('/', '.');
             if (depClassNames.contains(dotName)) {
                 entryPointClasses.add(dotName);
             }
         }
-    }
-
-    /**
-     * Finds the dot+paren boundary in a method key like "com/example/Foo.methodName(...)V".
-     * Returns the dot index, or -1 if the key is malformed.
-     */
-    private static int findMethodSeparator(String methodKey) {
-        int parenIdx = methodKey.indexOf('(');
-        return parenIdx < 0 ? -1 : methodKey.lastIndexOf('.', parenIdx);
-    }
-
-    /** Extracts the method name from a key like {@code "com/example/Foo.bar(I)V"} → {@code "bar"}. */
-    private static String extractMethodName(String methodKey) {
-        int dotIdx = findMethodSeparator(methodKey);
-        return dotIdx < 0 ? null : methodKey.substring(dotIdx + 1, methodKey.indexOf('('));
-    }
-
-    /**
-     * Extracts the class name (internal form) from a key like {@code "com/example/Foo.bar(I)V"} → {@code "com/example/Foo"}.
-     */
-    private static String extractClassName(String methodKey) {
-        int dotIdx = findMethodSeparator(methodKey);
-        return dotIdx < 0 ? null : methodKey.substring(0, dotIdx);
     }
 
     /**

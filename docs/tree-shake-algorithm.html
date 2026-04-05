@@ -491,7 +491,9 @@
         <div class="sub-phase-content">
           <h4>Seed Propagation</h4>
           <p>
-            Build a method-level call graph over reachable classes (incrementally extended on subsequent iterations).
+            Build a reverse caller index (callee &rarr; callers) over reachable classes in a single bytecode scan,
+            incrementally extended on subsequent iterations. Only edges to non-JDK callees or class-loading seeds
+            are stored (no forward callee map is needed).
             Starting from seed methods (<code>ClassLoader.loadClass</code>, <code>Class.forName</code>,
             <code>MethodHandles.Lookup.findClass</code>), propagate backwards via a worklist algorithm
             to find all application methods that transitively call a class-loading seed.
@@ -564,10 +566,39 @@
 
   <div class="flow-connector"><div class="line"></div><div class="arrow"></div></div>
 
-  <!-- Phase 5: Output -->
-  <div class="phase phase-output">
+  <!-- Phase 5: Post-analysis adjustments -->
+  <div class="phase phase-conditional">
     <div class="phase-header">
       <div class="phase-number">5</div>
+      <div class="phase-title">Post-Analysis Adjustments</div>
+    </div>
+    <p class="phase-desc">
+      After the main reachability analysis converges, apply adjustments for artifact exclusions
+      and multi-release JARs before producing the final output.
+    </p>
+    <div class="detail-grid">
+      <div class="detail-item">
+        <div class="label">Excluded Artifacts</div>
+        <div class="value">Extensions can exclude entire JARs via <code>JarTreeShakeExcludedArtifactBuildItem</code>
+          (e.g., BouncyCastle FIPS JARs that perform self-integrity checksums over their own classes).</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">Multi-Release Tracing</div>
+        <div class="value">For reachable classes that have <code>META-INF/versions/N/</code> bytecode targeting
+          Java versions newer than the build JVM, extract class references from that bytecode and mark them
+          reachable. Iterates to a fixed point. This ensures classes like BouncyCastle's
+          <code>ImportSSLSession_25</code> (referenced only by the version-25 <code>SSLSessionUtil</code>)
+          are preserved.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flow-connector"><div class="line"></div><div class="arrow"></div></div>
+
+  <!-- Phase 6: Output -->
+  <div class="phase phase-output">
+    <div class="phase-header">
+      <div class="phase-number">6</div>
       <div class="phase-title">Produce Final JAR</div>
     </div>
     <p class="phase-desc">
@@ -578,6 +609,11 @@
       <div class="detail-item">
         <div class="label">Scope</div>
         <div class="value">Only dependency classes are candidates. App classes are never removed.</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">Multi-Release</div>
+        <div class="value">Multi-release entries for reachable classes are preserved across all Java versions.
+          Unreachable classes have all their versioned entries removed.</div>
       </div>
       <div class="detail-item">
         <div class="label">Granularity</div>
@@ -610,12 +646,16 @@
         <p>Only classes with available bytecode are enqueued. JDK/platform classes are filtered at the scan site, eliminating thousands of no-op queue iterations.</p>
       </div>
       <div class="opt-item">
-        <h4><span class="tag tag-perf">perf</span> Incremental Call Graph</h4>
-        <p>The method-level call graph is built once and extended incrementally. Subsequent iterations scan only newly discovered classes.</p>
+        <h4><span class="tag tag-perf">perf</span> Caller-Index-Only Call Graph</h4>
+        <p>Builds only a reverse caller index (callee &rarr; callers), not a forward callee map. Halves the call graph memory. Extended incrementally &mdash; subsequent iterations scan only newly discovered classes.</p>
       </div>
       <div class="opt-item">
         <h4><span class="tag tag-perf">perf</span> Worklist Seed Propagation</h4>
         <p>Replaces O(E &times; passes) fixed-point iteration with O(reachable-from-seeds) BFS worklist algorithm, with incremental updates across iterations.</p>
+      </div>
+      <div class="opt-item">
+        <h4><span class="tag tag-perf">perf</span> Eager Memory Release</h4>
+        <p>All analysis data structures (bytecode maps, call graph, service providers, etc.) are cleared immediately after stats computation via <code>releaseAnalysisData()</code>, freeing memory before the JAR packaging phase.</p>
       </div>
       <div class="opt-item">
         <h4><span class="tag tag-perf">perf</span> Skip Redundant Forks</h4>
@@ -637,6 +677,7 @@
     <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> BFS Reachability</div>
     <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div> Conditional Roots</div>
     <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div> Class-Loading Chains</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div> Post-Analysis Adjustments</div>
     <div class="legend-item"><div class="legend-dot" style="background:var(--cyan)"></div> Final Output</div>
   </div>
 
