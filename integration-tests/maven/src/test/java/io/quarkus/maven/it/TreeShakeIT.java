@@ -198,9 +198,23 @@ public class TreeShakeIT extends MojoTestBase {
         assertJarContains(libDir, "lib-delimited-lists", "org/acme/delimited/ListTargetB.class");
         assertJarNotContains(libDir, "lib-delimited-lists", "org/acme/delimited/UnusedListTarget.class");
 
-        // Multi-release JAR
+        // Multi-release JAR: reachable class and its versioned entries are preserved
         assertJarContains(libDir, "lib-multirelease", "org/acme/multirelease/MultiReleaseClass.class");
+        assertJarContains(libDir, "lib-multirelease",
+                "META-INF/versions/11/org/acme/multirelease/MultiReleaseClass.class");
+        assertJarContains(libDir, "lib-multirelease",
+                "META-INF/versions/99/org/acme/multirelease/MultiReleaseClass.class");
+        // Unreachable class: base and all versioned entries are removed
         assertJarNotContains(libDir, "lib-multirelease", "org/acme/multirelease/UnusedMultiRelease.class");
+        assertJarNotContains(libDir, "lib-multirelease",
+                "META-INF/versions/11/org/acme/multirelease/UnusedMultiRelease.class");
+        assertJarNotContains(libDir, "lib-multirelease",
+                "META-INF/versions/99/org/acme/multirelease/UnusedMultiRelease.class");
+        // Higher-version-only classes referenced by reachable higher-version code are preserved,
+        // along with classes they transitively reference
+        assertJarContains(libDir, "lib-multirelease",
+                "META-INF/versions/99/org/acme/multirelease/FutureVersionOnly.class");
+        assertJarContains(libDir, "lib-multirelease", "org/acme/multirelease/FutureVersionDep.class");
 
         // JBoss Logging companions
         assertJarContains(libDir, "lib-jboss-logging", "org/acme/logging/LoggedClass.class");

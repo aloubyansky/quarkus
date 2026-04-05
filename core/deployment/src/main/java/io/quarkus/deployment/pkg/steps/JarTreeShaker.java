@@ -72,10 +72,14 @@ class JarTreeShaker {
             }
         }
 
-        // Release bytecode and analysis-only data structures
-        input.releaseAnalysisData();
+        // Trace references from higher-version multi-release bytecode of reachable classes.
+        // These variants may reference classes not present in the analyzed version
+        // (e.g. BouncyCastle's version-25 SSLSessionUtil references ImportSSLSession_25).
+        if (!input.higherVersionBytecode.isEmpty()) {
+            traceHigherVersionReferences(reachable, input.higherVersionBytecode, input.allKnownClasses);
+        }
 
-        // Compute removal stats and per-dependency removed class lists
+        // Compute removal stats before releasing analysis data
         int totalDepClasses = input.depBytecode.size();
         int removedClassCount = 0;
         long removedBytes = 0;
@@ -83,7 +87,7 @@ class JarTreeShaker {
         for (var entry : input.depBytecode.entrySet()) {
             if (!reachable.contains(entry.getKey())) {
                 removedClassCount++;
-                removedBytes += input.depBytecodeSize.getOrDefault(entry.getKey(), 0L);
+                removedBytes += bytecodeSize(entry.getValue());
                 ArtifactKey dep = input.classToDep.get(entry.getKey());
                 if (dep != null) {
                     removedClassesPerDep.computeIfAbsent(dep, k -> new ArrayList<>())
@@ -95,6 +99,9 @@ class JarTreeShaker {
         for (List<String> list : removedClassesPerDep.values()) {
             Collections.sort(list);
         }
+
+        // Release all analysis data structures
+        input.releaseAnalysisData();
 
         // Report
         log.infof("Tree-shaking removed %d unreachable classes from %d dependencies, saving %s (%.1f%%)",
@@ -308,6 +315,41 @@ class JarTreeShaker {
             }
         }
         return reachable;
+    }
+
+    /**
+     * For each reachable class that has multi-release bytecode targeting newer Java versions,
+     * extracts class references from that bytecode and marks them reachable. This ensures
+     * classes referenced only by higher-version variants are preserved (e.g. BouncyCastle's
+     * version-25 SSLSessionUtil references ImportSSLSession_25 which doesn't exist in
+     * the analyzed version-9 bytecode). Iterates to a fixed point.
+     */
+    private void traceHigherVersionReferences(Set<String> reachable,
+            Map<String, List<Supplier<byte[]>>> higherVersionBytecode,
+            Set<String> allKnownClasses) {
+        // Process reachable entries, removing them as we go to avoid re-scanning.
+        // When new classes become reachable, they may have higher-version entries
+        // that need processing too, so we loop until no new classes are discovered.
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            var it = higherVersionBytecode.entrySet().iterator();
+            while (it.hasNext()) {
+                var entry = it.next();
+                if (!reachable.contains(entry.getKey())) {
+                    continue;
+                }
+                it.remove();
+                for (Supplier<byte[]> supplier : entry.getValue()) {
+                    Set<String> refs = extractReferencesFromBytecode(supplier.get());
+                    for (String ref : refs) {
+                        if (ref != null && allKnownClasses.contains(ref) && reachable.add(ref)) {
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -1224,6 +1266,15 @@ class JarTreeShaker {
         } else if (type.getSort() == org.objectweb.asm.Type.ARRAY) {
             addAsmType(type.getElementType(), refs);
         }
+    }
+
+    private static long bytecodeSize(Supplier<byte[]> supplier) {
+        if (supplier instanceof JarTreeShakerInput.BytecodeSupplier bs) {
+            return bs.size;
+        }
+        // Transformed classes use lambda suppliers wrapping byte[]
+        byte[] data = supplier.get();
+        return data != null ? data.length : 0;
     }
 
     private static String formatSize(long bytes) {

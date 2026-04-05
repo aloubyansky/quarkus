@@ -32,6 +32,15 @@
                             <outputDirectory>\${project.build.outputDirectory}/META-INF/versions/11</outputDirectory>
                         </configuration>
                     </execution>
+                    <execution>
+                        <id>compile-java-99</id>
+                        <phase>compile</phase>
+                        <goals><goal>compile</goal></goals>
+                        <configuration>
+                            <compileSourceRoots>\${project.basedir}/src/main/java99</compileSourceRoots>
+                            <outputDirectory>\${project.build.outputDirectory}/META-INF/versions/99</outputDirectory>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
         </plugins>

@@ -59,7 +59,6 @@ class JarTreeShakerInput implements AutoCloseable {
     final Map<String, Supplier<byte[]>> appBytecode;
     final Map<String, Supplier<byte[]>> generatedBytecode;
     final Map<String, ArtifactKey> classToDep;
-    final Map<String, Long> depBytecodeSize;
     final Map<String, Set<String>> serviceProviders;
     final Map<String, Set<String>> serviceLoaderCalls;
     final Set<String> allKnownClasses;
@@ -69,7 +68,14 @@ class JarTreeShakerInput implements AutoCloseable {
     final List<Path> appPaths;
     final Set<String> transformedClassNames;
     /**
-     * Merged bytecode map with priority: app → dep (includes transformed) → generated.
+     * Bytecode from multi-release entries targeting Java versions newer than {@code appJavaVersion}.
+     * Keyed by dot-separated class name. These are not used for the main reachability analysis
+     * but their references must be traced after analysis to ensure classes they depend on
+     * are also marked reachable.
+     */
+    final Map<String, List<Supplier<byte[]>>> higherVersionBytecode;
+    /**
+     * Merged bytecode map with priority: generated → dep (includes transformed) → app.
      * Provides single-lookup access for BFS and call graph analysis.
      */
     final Map<String, Supplier<byte[]>> allBytecode;
@@ -85,7 +91,6 @@ class JarTreeShakerInput implements AutoCloseable {
             Map<String, Supplier<byte[]>> appBytecode,
             Map<String, Supplier<byte[]>> generatedBytecode,
             Map<String, ArtifactKey> classToDep,
-            Map<String, Long> depBytecodeSize,
             Map<String, Set<String>> serviceProviders,
             Map<String, Set<String>> serviceLoaderCalls,
             Set<String> allKnownClasses,
@@ -94,6 +99,7 @@ class JarTreeShakerInput implements AutoCloseable {
             List<Path> depJarPaths,
             List<Path> appPaths,
             Set<String> transformedClassNames,
+            Map<String, List<Supplier<byte[]>>> higherVersionBytecode,
             List<OpenPathTree> openTrees) {
         this.treeShakeLevel = treeShakeLevel;
         this.roots = roots;
@@ -103,7 +109,6 @@ class JarTreeShakerInput implements AutoCloseable {
         this.appBytecode = appBytecode;
         this.generatedBytecode = generatedBytecode;
         this.classToDep = classToDep;
-        this.depBytecodeSize = depBytecodeSize;
         this.serviceProviders = serviceProviders;
         this.serviceLoaderCalls = serviceLoaderCalls;
         this.allKnownClasses = allKnownClasses;
@@ -112,6 +117,7 @@ class JarTreeShakerInput implements AutoCloseable {
         this.depJarPaths = depJarPaths;
         this.appPaths = appPaths;
         this.transformedClassNames = transformedClassNames;
+        this.higherVersionBytecode = higherVersionBytecode;
         // Build merged bytecode map: app first, then dep (overwrites), then generated (overwrites)
         Map<String, Supplier<byte[]>> merged = new HashMap<>(
                 appBytecode.size() + depBytecode.size() + generatedBytecode.size());
@@ -158,7 +164,6 @@ class JarTreeShakerInput implements AutoCloseable {
         final Map<String, Supplier<byte[]>> generatedBytecode = getGeneratedClassesMap(generatedClasses);
 
         final Map<String, Supplier<byte[]>> depBytecode = new HashMap<>();
-        final Map<String, Long> depBytecodeSize = new HashMap<>();
         final Map<String, ArtifactKey> classToDep = new HashMap<>();
         final Map<String, Integer> depBytecodeVersion = new HashMap<>();
         final Map<String, Set<String>> serviceProviders = new HashMap<>();
@@ -170,14 +175,15 @@ class JarTreeShakerInput implements AutoCloseable {
         final int appJavaVersion = detectAppJavaVersion(appModel);
 
         final List<Path> depJarPaths = new ArrayList<>();
+        final Map<String, List<Supplier<byte[]>>> higherVersionBytecode = new HashMap<>();
         final List<OpenPathTree> openTrees = new ArrayList<>();
         try {
-            collectRuntimeClasses(appModel, appJavaVersion, roots, depBytecode, depBytecodeSize,
+            collectRuntimeClasses(appModel, appJavaVersion, roots, depBytecode,
                     classToDep, depBytecodeVersion, serviceProviders, sisuNamedClasses, depOpenTrees,
-                    depJarPaths, openTrees);
+                    depJarPaths, higherVersionBytecode, openTrees);
 
             final Set<String> transformedClassNames = new HashSet<>();
-            collectTransformedClasses(transformedClasses, depBytecode, depBytecodeSize, transformedClassNames);
+            collectTransformedClasses(transformedClasses, depBytecode, transformedClassNames);
 
             collectApplicationClasses(appModel, appBytecode, serviceProviders, serviceLoaderCalls, openTrees);
 
@@ -208,7 +214,6 @@ class JarTreeShakerInput implements AutoCloseable {
                     appBytecode,
                     generatedBytecode,
                     classToDep,
-                    depBytecodeSize,
                     serviceProviders,
                     serviceLoaderCalls,
                     allKnownClasses,
@@ -217,6 +222,7 @@ class JarTreeShakerInput implements AutoCloseable {
                     depJarPaths,
                     appPaths,
                     transformedClassNames,
+                    higherVersionBytecode,
                     openTrees);
         } catch (Exception e) {
             for (var openPathTree : openTrees) {
@@ -239,13 +245,13 @@ class JarTreeShakerInput implements AutoCloseable {
             int appJavaVersion,
             Set<String> roots,
             Map<String, Supplier<byte[]>> depBytecode,
-            Map<String, Long> depBytecodeSize,
             Map<String, ArtifactKey> classToDep,
             Map<String, Integer> depBytecodeVersion,
             Map<String, Set<String>> serviceProviders,
             Set<String> sisuNamedClasses,
             Map<ArtifactKey, OpenPathTree> depOpenTrees,
             List<Path> depJarPaths,
+            Map<String, List<Supplier<byte[]>>> higherVersionBytecode,
             List<OpenPathTree> openTrees) {
 
         for (ResolvedDependency dep : appModel.getDependencies(DependencyFlags.RUNTIME_CP)) {
@@ -260,7 +266,8 @@ class JarTreeShakerInput implements AutoCloseable {
                 String entry = visit.getResourceName();
                 if (isClassEntry(entry)) {
                     processRuntimeClassEntry(entry, visit.getPath(), dep, appJavaVersion, addClassesAsRoots,
-                            roots, depBytecode, depBytecodeSize, classToDep, depBytecodeVersion);
+                            roots, depBytecode, classToDep, depBytecodeVersion,
+                            higherVersionBytecode);
                     return;
                 }
                 if (entry.startsWith(META_INF_SERVICES) && !entry.endsWith("/")) {
@@ -287,9 +294,9 @@ class JarTreeShakerInput implements AutoCloseable {
             boolean addClassesAsRoots,
             Set<String> roots,
             Map<String, Supplier<byte[]>> depBytecode,
-            Map<String, Long> depBytecodeSize,
             Map<String, ArtifactKey> classToDep,
-            Map<String, Integer> depBytecodeVersion) {
+            Map<String, Integer> depBytecodeVersion,
+            Map<String, List<Supplier<byte[]>>> higherVersionBytecode) {
 
         String className;
         int classJavaVersion = 0;
@@ -297,6 +304,17 @@ class JarTreeShakerInput implements AutoCloseable {
         if (entry.startsWith(META_INF_VERSIONS)) {
             int resolved = resolveMultiReleaseVersion(entry, appJavaVersion);
             if (resolved < 0) {
+                // Multi-release entry for a Java version newer than appJavaVersion.
+                // Collect its bytecode so references can be traced after the main analysis
+                // for classes that are reachable. Also register in classToDep so the class
+                // is part of allKnownClasses (needed for reference matching).
+                int javaVersionSeparator = entry.indexOf('/', META_INF_VERSIONS.length() + 1);
+                if (javaVersionSeparator > 0) {
+                    String cn = classNameOf(entry, javaVersionSeparator + 1);
+                    higherVersionBytecode.computeIfAbsent(cn, k -> new ArrayList<>())
+                            .add(new BytecodeSupplier(path));
+                    classToDep.putIfAbsent(cn, dep.getKey());
+                }
                 return;
             }
             classJavaVersion = resolved;
@@ -313,11 +331,6 @@ class JarTreeShakerInput implements AutoCloseable {
         if (classJavaVersion > currentVersion) {
             depBytecodeVersion.put(className, classJavaVersion);
             depBytecode.put(className, new BytecodeSupplier(path));
-            try {
-                depBytecodeSize.put(className, Files.size(path));
-            } catch (IOException e) {
-                // ignore, size is only used for reporting
-            }
         }
 
         if (addClassesAsRoots) {
@@ -357,7 +370,6 @@ class JarTreeShakerInput implements AutoCloseable {
     private static void collectTransformedClasses(
             TransformedClassesBuildItem transformedClasses,
             Map<String, Supplier<byte[]>> depBytecode,
-            Map<String, Long> depBytecodeSize,
             Set<String> transformedClassNames) {
         for (Set<TransformedClassesBuildItem.TransformedClass> transformedSet : transformedClasses
                 .getTransformedClassesByJar().values()) {
@@ -367,7 +379,6 @@ class JarTreeShakerInput implements AutoCloseable {
                     if (fileName.endsWith(".class") && !fileName.equals("module-info.class")) {
                         String className = fileName.substring(0, fileName.length() - 6).replace('/', '.');
                         depBytecode.put(className, tc::getData);
-                        depBytecodeSize.put(className, (long) tc.getData().length);
                         transformedClassNames.add(className);
                     }
                 }
@@ -610,13 +621,12 @@ class JarTreeShakerInput implements AutoCloseable {
     }
 
     /**
-     * Releases all data that is only needed during analysis.
-     * After this call, only {@code depBytecode} (keys), {@code depBytecodeSize},
-     * {@code classToDep}, and {@code treeShakeLevel} remain usable for
-     * computing removal stats.
+     * Releases all data structures. Must be called after stats computation is complete.
      */
     void releaseAnalysisData() {
         allBytecode.clear();
+        depBytecode.clear();
+        classToDep.clear();
         appBytecode.clear();
         generatedBytecode.clear();
         serviceProviders.clear();
@@ -626,22 +636,26 @@ class JarTreeShakerInput implements AutoCloseable {
         depJarPaths.clear();
         appPaths.clear();
         transformedClassNames.clear();
+        higherVersionBytecode.clear();
+        depOpenTrees.clear();
         roots.clear();
         conditionalRoots.clear();
-        // Clear cached bytecode from dep suppliers (keys/sizes still needed for stats)
-        for (Supplier<byte[]> supplier : depBytecode.values()) {
-            if (supplier instanceof BytecodeSupplier bs) {
-                bs.clearCache();
-            }
-        }
     }
 
     static class BytecodeSupplier implements Supplier<byte[]> {
         private final Path path;
+        final long size;
         private byte[] bytes;
 
         BytecodeSupplier(Path path) {
             this.path = path;
+            long s = 0;
+            try {
+                s = Files.size(path);
+            } catch (IOException e) {
+                // ignore, size is only used for reporting
+            }
+            this.size = s;
         }
 
         @Override
@@ -660,4 +674,5 @@ class JarTreeShakerInput implements AutoCloseable {
             bytes = null;
         }
     }
+
 }
