@@ -7,6 +7,7 @@ import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -42,7 +43,9 @@ import io.quarkus.deployment.pkg.NativeConfig;
 import io.quarkus.deployment.pkg.PackageConfig;
 import io.quarkus.deployment.pkg.builditem.CurateOutcomeBuildItem;
 import io.quarkus.deployment.pkg.builditem.JarTreeShakeBuildItem;
+import io.quarkus.deployment.pkg.builditem.JarTreeShakeExcludedArtifactBuildItem;
 import io.quarkus.deployment.pkg.builditem.JarTreeShakeRootClassBuildItem;
+import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.maven.dependency.DependencyFlags;
 import io.quarkus.maven.dependency.ResolvedDependency;
 import io.quarkus.paths.OpenPathTree;
@@ -82,7 +85,13 @@ public class JarTreeShakeProcessor {
             TransformedClassesBuildItem transformedClasses,
             List<ReflectiveClassConditionBuildItem> reflectiveClassConditions,
             List<JarTreeShakeRootClassBuildItem> rootClasses,
+            List<JarTreeShakeExcludedArtifactBuildItem> excludedArtifacts,
             BuildProducer<JarTreeShakeBuildItem> treeShakeProducer) {
+
+        Set<ArtifactKey> excludedKeys = new HashSet<>();
+        for (JarTreeShakeExcludedArtifactBuildItem item : excludedArtifacts) {
+            excludedKeys.add(item.getArtifactKey());
+        }
 
         try (JarTreeShakerInput input = JarTreeShakerInput.collect(
                 packageConfig.jar().treeShake(),
@@ -91,7 +100,7 @@ public class JarTreeShakeProcessor {
                 transformedClasses,
                 reflectiveClassConditions,
                 rootClasses)) {
-            treeShakeProducer.produce(new JarTreeShaker(input).run());
+            treeShakeProducer.produce(new JarTreeShaker(input).run(excludedKeys));
         }
     }
 

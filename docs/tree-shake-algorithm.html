@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quarkus JAR Tree-Shaking Algorithm</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --cyan: #76e3ea;
+    --pink: #f778ba;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 40px 20px;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 2rem;
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .subtitle {
+    text-align: center;
+    color: var(--text-muted);
+    margin-bottom: 48px;
+    font-size: 0.95rem;
+  }
+
+  /* Flow connector lines */
+  .flow-connector {
+    display: flex;
+    justify-content: center;
+    padding: 0;
+    position: relative;
+  }
+  .flow-connector .line {
+    width: 3px;
+    height: 36px;
+    background: var(--border);
+  }
+  .flow-connector .arrow {
+    width: 0; height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 10px solid var(--border);
+    position: absolute;
+    bottom: -2px;
+  }
+
+  /* Phase cards */
+  .phase {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin-bottom: 0;
+    position: relative;
+  }
+  .phase-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .phase-number {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+  .phase-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+  }
+  .phase-desc {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 16px;
+  }
+
+  /* Color coding per phase */
+  .phase-collect { border-left: 4px solid var(--accent); }
+  .phase-collect .phase-number { background: var(--accent); color: var(--bg); }
+  .phase-collect .phase-title { color: var(--accent); }
+
+  .phase-bfs { border-left: 4px solid var(--green); }
+  .phase-bfs .phase-number { background: var(--green); color: var(--bg); }
+  .phase-bfs .phase-title { color: var(--green); }
+
+  .phase-conditional { border-left: 4px solid var(--orange); }
+  .phase-conditional .phase-number { background: var(--orange); color: var(--bg); }
+  .phase-conditional .phase-title { color: var(--orange); }
+
+  .phase-chain { border-left: 4px solid var(--purple); }
+  .phase-chain .phase-number { background: var(--purple); color: var(--bg); }
+  .phase-chain .phase-title { color: var(--purple); }
+
+  .phase-output { border-left: 4px solid var(--cyan); }
+  .phase-output .phase-number { background: var(--cyan); color: var(--bg); }
+  .phase-output .phase-title { color: var(--cyan); }
+
+  /* Detail grids */
+  .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .detail-item {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .detail-item .label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .detail-item .value {
+    font-size: 0.88rem;
+    color: var(--text);
+  }
+  .detail-item code {
+    background: rgba(255,255,255,0.08);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    color: var(--cyan);
+  }
+
+  /* Sub-phases inside chain analysis */
+  .sub-phases {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
+    margin-top: 12px;
+  }
+  .sub-phase {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    gap: 0 16px;
+    padding-bottom: 16px;
+  }
+  .sub-phase:last-child { padding-bottom: 0; }
+  .sub-phase-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .sub-phase-dot {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--purple);
+    color: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.75rem;
+    flex-shrink: 0;
+  }
+  .sub-phase-line {
+    width: 2px;
+    flex: 1;
+    background: rgba(188,140,255,0.25);
+    margin-top: 4px;
+  }
+  .sub-phase:last-child .sub-phase-line { display: none; }
+  .sub-phase-content h4 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .sub-phase-content p {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  /* Decision diamond */
+  .decision {
+    display: flex;
+    justify-content: center;
+    padding: 20px 0;
+  }
+  .diamond-container {
+    text-align: center;
+  }
+  .diamond {
+    width: 180px; height: 90px;
+    margin: 0 auto;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .diamond svg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+  }
+  .diamond span {
+    position: relative;
+    z-index: 1;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--orange);
+  }
+
+  .decision-branches {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    max-width: 700px;
+    margin: 0 auto;
+    padding-top: 8px;
+  }
+  .branch {
+    text-align: center;
+  }
+  .branch-label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+  .branch-yes .branch-label { color: var(--green); }
+  .branch-no .branch-label { color: var(--red); }
+  .branch-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-size: 0.88rem;
+    color: var(--text-muted);
+  }
+  .branch-yes .branch-box { border-color: rgba(63,185,80,0.3); }
+  .branch-no .branch-box { border-color: rgba(248,81,73,0.3); }
+
+  /* Optimizations callout */
+  .optimizations {
+    background: rgba(88,166,255,0.06);
+    border: 1px solid rgba(88,166,255,0.15);
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin-top: 40px;
+  }
+  .optimizations h3 {
+    color: var(--accent);
+    font-size: 1.05rem;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .opt-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 14px;
+  }
+  .opt-item {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .opt-item h4 {
+    font-size: 0.88rem;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .opt-item p {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    line-height: 1.45;
+  }
+  .tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 7px;
+    border-radius: 4px;
+    margin-right: 6px;
+  }
+  .tag-perf { background: rgba(63,185,80,0.15); color: var(--green); }
+  .tag-safety { background: rgba(248,81,73,0.15); color: var(--red); }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Single-pass callout */
+  .single-pass {
+    background: rgba(63,185,80,0.06);
+    border: 1px solid rgba(63,185,80,0.15);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-top: 14px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+  .single-pass strong { color: var(--green); }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>Quarkus JAR Tree-Shaking Algorithm</h1>
+  <p class="subtitle">Build-time reachability analysis for removing unused dependency classes</p>
+
+  <!-- Phase 1: Root Collection -->
+  <div class="phase phase-collect">
+    <div class="phase-header">
+      <div class="phase-number">1</div>
+      <div class="phase-title">Root Collection</div>
+    </div>
+    <p class="phase-desc">
+      Gather all classes that must be preserved regardless of bytecode references.
+      These form the starting points for the reachability analysis.
+    </p>
+    <div class="detail-grid">
+      <div class="detail-item">
+        <div class="label">Application</div>
+        <div class="value">Main class, all app classes</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">Generated</div>
+        <div class="value">Recorder bytecode, build-generated classes</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">Reflection &amp; JNI</div>
+        <div class="value"><code>ReflectiveClassBuildItem</code>, <code>JniRuntimeAccessBuildItem</code></div>
+      </div>
+      <div class="detail-item">
+        <div class="label">Service Providers</div>
+        <div class="value"><code>META-INF/services/</code> implementations</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">Native Image Config</div>
+        <div class="value"><code>reflect-config.json</code>, <code>jni-config.json</code>, substitutions</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">String Constants</div>
+        <div class="value">LDC strings in generated code matching dep class names</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flow-connector"><div class="line"></div><div class="arrow"></div></div>
+
+  <!-- Phase 2: BFS Reachability -->
+  <div class="phase phase-bfs">
+    <div class="phase-header">
+      <div class="phase-number">2</div>
+      <div class="phase-title">BFS Reachability Analysis</div>
+    </div>
+    <p class="phase-desc">
+      Breadth-first walk from roots through bytecode references. A single-pass ASM scan per class
+      extracts all reference types simultaneously.
+    </p>
+    <div class="detail-grid">
+      <div class="detail-item">
+        <div class="label">Type References</div>
+        <div class="value">Superclasses, interfaces, field types, method signatures, exception types, inner/outer classes</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">Annotations &amp; Generics</div>
+        <div class="value">Annotation values (incl. class literals, arrays), generic type signatures</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">Instructions</div>
+        <div class="value"><code>NEW</code>, <code>CHECKCAST</code>, field/method owners, <code>LDC</code> class constants, <code>invokedynamic</code> handles</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">Dynamic Loading</div>
+        <div class="value"><code>Class.forName(str)</code>, <code>ClassLoader.loadClass(str)</code> with string constants</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">ServiceLoader</div>
+        <div class="value"><code>ServiceLoader.load(Foo.class)</code> &rarr; include all <code>META-INF/services/Foo</code> providers</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">JBoss Logging</div>
+        <div class="value"><code>_$logger</code>, <code>_$bundle</code>, <code>_impl</code> companion classes</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">Sisu Named</div>
+        <div class="value">Eclipse Sisu <code>javax.inject.Named</code> component classes</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">Serialization</div>
+        <div class="value">Classes referenced in serialized resources (when <code>ObjectInputStream</code> + resource access detected)</div>
+      </div>
+    </div>
+    <div class="single-pass">
+      <strong>Single-pass optimization:</strong> All the above extractions happen in one <code>ClassReader.accept()</code>
+      call per class, replacing what was previously 4&ndash;5 separate ASM passes.
+      Only classes with available bytecode are enqueued &mdash; JDK/platform classes are filtered out immediately.
+    </div>
+  </div>
+
+  <div class="flow-connector"><div class="line"></div><div class="arrow"></div></div>
+
+  <!-- Phase 3: Conditional Roots -->
+  <div class="phase phase-conditional">
+    <div class="phase-header">
+      <div class="phase-number">3</div>
+      <div class="phase-title">Conditional Root Evaluation</div>
+    </div>
+    <p class="phase-desc">
+      Fixed-point loop over <code>ReflectiveClassConditionBuildItem</code> entries.
+      When a condition type becomes reachable, its associated classes are added as new roots
+      and traced via BFS. Repeats until no new classes are discovered.
+    </p>
+  </div>
+
+  <div class="flow-connector"><div class="line"></div><div class="arrow"></div></div>
+
+  <!-- Phase 4: Class-Loading Chain Analysis -->
+  <div class="phase phase-chain">
+    <div class="phase-header">
+      <div class="phase-number">4</div>
+      <div class="phase-title">Class-Loading Chain Analysis</div>
+    </div>
+    <p class="phase-desc">
+      Discovers classes loaded dynamically via <code>ClassLoader.loadClass()</code> or <code>Class.forName()</code>
+      where class names are computed at runtime (e.g., via StringBuilder or invokedynamic string concatenation).
+    </p>
+
+    <div class="sub-phases">
+      <div class="sub-phase">
+        <div class="sub-phase-indicator">
+          <div class="sub-phase-dot">P1</div>
+          <div class="sub-phase-line"></div>
+        </div>
+        <div class="sub-phase-content">
+          <h4>Seed Propagation</h4>
+          <p>
+            Build a method-level call graph over reachable classes (incrementally extended on subsequent iterations).
+            Starting from seed methods (<code>ClassLoader.loadClass</code>, <code>Class.forName</code>,
+            <code>MethodHandles.Lookup.findClass</code>), propagate backwards via a worklist algorithm
+            to find all application methods that transitively call a class-loading seed.
+          </p>
+        </div>
+      </div>
+      <div class="sub-phase">
+        <div class="sub-phase-indicator">
+          <div class="sub-phase-dot">P2</div>
+          <div class="sub-phase-line"></div>
+        </div>
+        <div class="sub-phase-content">
+          <h4>Entry Point Discovery</h4>
+          <p>
+            Walk up the caller chain (depth-limited to 5 levels) to find classes whose
+            <code>&lt;init&gt;</code> or <code>&lt;clinit&gt;</code> triggers the class-loading chain.
+            Only dependency classes are considered &mdash; app and generated classes are excluded.
+          </p>
+        </div>
+      </div>
+      <div class="sub-phase">
+        <div class="sub-phase-indicator">
+          <div class="sub-phase-dot">P3</div>
+          <div class="sub-phase-line"></div>
+        </div>
+        <div class="sub-phase-content">
+          <h4>Dynamic Execution in Forked JVM</h4>
+          <p>
+            New entry point classes are loaded and instantiated in a <strong>forked JVM process</strong>
+            with an isolated <code>RecordingClassLoader</code> that captures every <code>loadClass()</code> attempt.
+            If the object implements <code>Map</code> (e.g., BouncyCastle's <code>Provider</code>),
+            its values are inspected for class name strings stored for deferred loading.
+            Running in a separate process ensures thread-safety for parallel builds (<code>-T2C</code>)
+            and full Metaspace reclamation on exit.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Decision -->
+  <div class="decision">
+    <div class="diamond-container">
+      <div class="diamond">
+        <svg viewBox="0 0 180 90" fill="none">
+          <path d="M90 4 L176 45 L90 86 L4 45 Z" stroke="#d29922" stroke-width="2" fill="rgba(210,153,34,0.08)"/>
+        </svg>
+        <span>New classes<br>discovered?</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="decision-branches">
+    <div class="branch branch-yes">
+      <div class="branch-label">&larr; Yes</div>
+      <div class="branch-box">
+        Add to reachable set, re-run BFS on new classes only,
+        re-evaluate conditional roots, scan only new call graph edges
+        (incremental). Loop back to Phase 4.
+      </div>
+    </div>
+    <div class="branch branch-no">
+      <div class="branch-label">No &rarr;</div>
+      <div class="branch-box">
+        Converged. Proceed to produce the final JAR with unreachable
+        dependency classes excluded.
+      </div>
+    </div>
+  </div>
+
+  <div class="flow-connector"><div class="line"></div><div class="arrow"></div></div>
+
+  <!-- Phase 5: Output -->
+  <div class="phase phase-output">
+    <div class="phase-header">
+      <div class="phase-number">5</div>
+      <div class="phase-title">Produce Final JAR</div>
+    </div>
+    <p class="phase-desc">
+      Compute per-dependency removal statistics. Exclude unreachable class files from the produced JAR
+      (fast-jar, uber-jar, legacy-jar, or aot-jar). Non-class resources are always preserved.
+    </p>
+    <div class="detail-grid">
+      <div class="detail-item">
+        <div class="label">Scope</div>
+        <div class="value">Only dependency classes are candidates. App classes are never removed.</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">Granularity</div>
+        <div class="value">Individual <code>.class</code> files. Resources, config files, and META-INF entries are preserved.</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">Reporting</div>
+        <div class="value">One-line INFO summary with class count, dep count, and size saved. Debug logging for per-dependency breakdown.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Optimizations -->
+  <div class="optimizations">
+    <h3>
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8.5.75a.75.75 0 0 0-1.5 0v1.5a.75.75 0 0 0 1.5 0V.75Zm5.03 1.97a.75.75 0 0 1 0 1.06l-1.06 1.06a.75.75 0 0 1-1.06-1.06l1.06-1.06a.75.75 0 0 1 1.06 0ZM12 8a4 4 0 1 1-8 0 4 4 0 0 1 8 0Zm3.25.75a.75.75 0 0 0 0-1.5h-1.5a.75.75 0 0 0 0 1.5h1.5ZM8.5 13.75a.75.75 0 0 0-1.5 0v1.5a.75.75 0 0 0 1.5 0v-1.5Zm4.47-1.22a.75.75 0 0 1 0 1.06l-1.06 1.06a.75.75 0 1 1-1.06-1.06l1.06-1.06a.75.75 0 0 1 1.06 0Zm-9.94 0a.75.75 0 0 0 0 1.06l1.06 1.06a.75.75 0 1 0 1.06-1.06l-1.06-1.06a.75.75 0 0 0-1.06 0ZM.75 8.5a.75.75 0 0 0 0-1.5h1.5a.75.75 0 0 0 0 1.5H.75Z"/></svg>
+      Performance Optimizations
+    </h3>
+    <div class="opt-grid">
+      <div class="opt-item">
+        <h4><span class="tag tag-perf">perf</span> Single-Pass ASM Scan</h4>
+        <p>All BFS reference types (class refs, string constants, ServiceLoader, sisu, serialization) extracted in one <code>ClassReader.accept()</code> per class instead of 4&ndash;5 separate passes.</p>
+      </div>
+      <div class="opt-item">
+        <h4><span class="tag tag-perf">perf</span> Merged Bytecode Map</h4>
+        <p>A single pre-merged map (app &rarr; dep &rarr; generated priority) replaces 3 sequential map lookups per class during BFS traversal.</p>
+      </div>
+      <div class="opt-item">
+        <h4><span class="tag tag-perf">perf</span> BFS Reference Filtering</h4>
+        <p>Only classes with available bytecode are enqueued. JDK/platform classes are filtered at the scan site, eliminating thousands of no-op queue iterations.</p>
+      </div>
+      <div class="opt-item">
+        <h4><span class="tag tag-perf">perf</span> Incremental Call Graph</h4>
+        <p>The method-level call graph is built once and extended incrementally. Subsequent iterations scan only newly discovered classes.</p>
+      </div>
+      <div class="opt-item">
+        <h4><span class="tag tag-perf">perf</span> Worklist Seed Propagation</h4>
+        <p>Replaces O(E &times; passes) fixed-point iteration with O(reachable-from-seeds) BFS worklist algorithm, with incremental updates across iterations.</p>
+      </div>
+      <div class="opt-item">
+        <h4><span class="tag tag-perf">perf</span> Skip Redundant Forks</h4>
+        <p>Tracks executed entry points and classes discovered by prior forks. Skips JVM fork when new entry points were already captured.</p>
+      </div>
+      <div class="opt-item">
+        <h4><span class="tag tag-safety">safety</span> Forked JVM Isolation</h4>
+        <p>Phase 3 runs in a separate process, isolating System.out/err, security providers, system properties, and TCCL. Safe for parallel Maven builds (<code>-T2C</code>). Uses <code>@argfile</code> for classpath to avoid command-line length limits.</p>
+      </div>
+      <div class="opt-item">
+        <h4><span class="tag tag-perf">perf</span> Object Reuse</h4>
+        <p>BFS scan result object is cleared and reused across classes instead of allocating a new <code>HashSet</code> per class scan.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div> Root Collection</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> BFS Reachability</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div> Conditional Roots</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div> Class-Loading Chains</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--cyan)"></div> Final Output</div>
+  </div>
+
+</div>
+</body>
+</html>

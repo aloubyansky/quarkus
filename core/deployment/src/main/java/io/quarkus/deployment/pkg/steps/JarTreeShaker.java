@@ -48,7 +48,7 @@ class JarTreeShaker {
      * evaluates conditional roots to a fixed point, computes removal stats,
      * and returns a {@link JarTreeShakeBuildItem} with the reachable set and per-dependency removals.
      */
-    JarTreeShakeBuildItem run() {
+    JarTreeShakeBuildItem run(Set<ArtifactKey> excludedArtifacts) {
         final long start = System.currentTimeMillis();
 
         // Trace all reachable classes using bytecode analysis for full method-body coverage
@@ -60,6 +60,17 @@ class JarTreeShaker {
 
         // Analyze class-loading chains (fixed-point loop)
         reachable = analyzeClassLoadingChains(reachable);
+
+        // Mark all classes from excluded artifacts as reachable (after analysis,
+        // so they don't act as roots for transitive tracing). This preserves
+        // JARs that perform self-integrity checks (e.g. BouncyCastle FIPS).
+        if (!excludedArtifacts.isEmpty()) {
+            for (var entry : input.classToDep.entrySet()) {
+                if (excludedArtifacts.contains(entry.getValue())) {
+                    reachable.add(entry.getKey());
+                }
+            }
+        }
 
         // Release cached bytecode — no longer needed after analysis
         input.clearBytecodeCache();
