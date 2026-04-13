@@ -1,5 +1,7 @@
 package io.quarkus.cyclonedx.endpoint.deployment;
 
+import java.util.Optional;
+
 import io.quarkus.runtime.annotations.ConfigRoot;
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
@@ -26,4 +28,14 @@ public interface CycloneDxEndpointConfig {
      */
     @WithDefault("/.well-known/sbom")
     String path();
+
+    /**
+     * Base resource name of the embedded SBOM to expose through the endpoint.
+     * When not configured and a single embedded SBOM is available, it will be used automatically.
+     * When not configured and multiple embedded SBOMs are available, the default
+     * {@code META-INF/sbom/dependency.cdx.json} will be used.
+     *
+     * @return base resource name of the embedded SBOM to expose
+     */
+    Optional<String> embeddedSbom();
 }
