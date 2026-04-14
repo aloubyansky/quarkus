@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Optional;
 import java.util.zip.GZIPOutputStream;
 
 import io.quarkus.bootstrap.app.DependencyInfoProvider;
@@ -14,6 +15,7 @@ import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.builditem.AppModelProviderBuildItem;
 import io.quarkus.deployment.builditem.GeneratedResourceBuildItem;
+import io.quarkus.deployment.builditem.SBOMResourceBuildItem;
 import io.quarkus.deployment.pkg.builditem.CurateOutcomeBuildItem;
 import io.quarkus.deployment.pkg.builditem.OutputTargetBuildItem;
 import io.quarkus.deployment.sbom.ApplicationManifestsBuildItem;
@@ -68,14 +70,14 @@ public class CycloneDxProcessor {
     }
 
     @BuildStep
-    public void embedDependencySbom(BuildProducer<GeneratedResourceBuildItem> generatedResourceBuildItem,
+    public SBOMResourceBuildItem embedDependencySbom(BuildProducer<GeneratedResourceBuildItem> generatedResourceBuildItem,
             BuildProducer<EmbeddedSbomMetadataBuildItem> embeddedSbomMetadataProducer,
             CycloneDxConfig cdxConfig,
             CurateOutcomeBuildItem curateOutcomeBuildItem,
             AppModelProviderBuildItem appModelProviderBuildItem,
             List<EmbeddedSbomRequestBuildItem> embeddedSbomRequests) {
         if (!cdxConfig.enabled() || !cdxConfig.embedded().enabled() && embeddedSbomRequests.isEmpty()) {
-            return;
+            return new SBOMResourceBuildItem(Optional.empty());
         }
 
         final CycloneDxConfig.EmbeddedSbomConfig dependencySbomConfig = cdxConfig.embedded();
@@ -114,6 +116,7 @@ public class CycloneDxProcessor {
 
         generatedResourceBuildItem.produce(new GeneratedResourceBuildItem(effectiveResourceName, sbomBytes));
         embeddedSbomMetadataProducer.produce(new EmbeddedSbomMetadataBuildItem(effectiveResourceName, compressed));
+        return new SBOMResourceBuildItem(Optional.of("/" + effectiveResourceName));
     }
 
     private static byte[] gzip(byte[] data) {
