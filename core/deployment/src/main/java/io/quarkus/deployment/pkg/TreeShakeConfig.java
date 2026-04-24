@@ -20,7 +20,7 @@ public interface TreeShakeConfig {
      * <li>{@code classes} - Exclude non-reachable classes from dependencies.</li>
      * </ul>
      */
-    @WithDefault("none")
+    @WithDefault("classes")
     TreeShakeMode mode();
 
     /**
