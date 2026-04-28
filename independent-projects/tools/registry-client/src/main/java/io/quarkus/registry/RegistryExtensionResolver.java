@@ -123,6 +123,11 @@ class RegistryExtensionResolver {
     private final Collection<String> recognizedGroupIds;
 
     /**
+     * User selected offering name, can be null
+     */
+    private final String offering;
+
+    /**
      * {@code -support} extension metadata key that corresponds to the user selected offering, can be null
      */
     private final String offeringSupportKey;
@@ -143,7 +148,7 @@ class RegistryExtensionResolver {
         this.recognizedGroupIds = config.getQuarkusVersions() == null ? Collections.emptyList()
                 : config.getQuarkusVersions().getRecognizedGroupIds();
 
-        final String offering = getConfiguredOfferingOrNull(config);
+        this.offering = getConfiguredOfferingOrNull(config);
         if (offering != null) {
             log.debug("Registry %s is limited to offerings %s", config.getId(), offering);
             this.offeringSupportKey = offering + DASH_SUPPORT;
@@ -282,8 +287,42 @@ class RegistryExtensionResolver {
         catalog.getMetadata().put(Constants.REGISTRY_CLIENT_ALL_CATALOG_EXTENSIONS, allCatalogExtensions);
         if (offeringCollection != null) {
             catalog.setExtensions(offeringCollection);
+            applyOfferingMetadata(catalog);
         }
         return catalog;
+    }
+
+    /**
+     * If the catalog metadata contains an entry matching the configured {@link #offeringSupportKey},
+     * its content is deep-merged into the catalog metadata with offering values overriding defaults.
+     * Properties present in the default metadata but absent from the offering metadata are preserved.
+     */
+    @SuppressWarnings("unchecked")
+    private void applyOfferingMetadata(ExtensionCatalog.Mutable catalog) {
+        final Map<String, Object> metadata = catalog.getMetadata();
+        final Object offeringMetadata = metadata.remove(offeringSupportKey);
+        if (offeringMetadata instanceof Map) {
+            mergeWithOverride((Map<String, Object>) offeringMetadata, metadata);
+        }
+    }
+
+    /**
+     * Deep-merges {@code source} into {@code target}. When both source and target have a value
+     * for the same key and both values are maps, the merge recurses. Otherwise, the source value
+     * overrides the target value. Keys present in target but absent from source are preserved.
+     */
+    @SuppressWarnings("unchecked")
+    static void mergeWithOverride(Map<String, Object> source, Map<String, Object> target) {
+        for (var entry : source.entrySet()) {
+            final String key = entry.getKey();
+            final Object sourceValue = entry.getValue();
+            final Object targetValue = target.get(key);
+            if (sourceValue instanceof Map && targetValue instanceof Map) {
+                mergeWithOverride((Map<String, Object>) sourceValue, (Map<String, Object>) targetValue);
+            } else {
+                target.put(key, sourceValue);
+            }
+        }
     }
 
     void clearCache() throws RegistryResolutionException {

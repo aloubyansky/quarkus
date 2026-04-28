@@ -899,6 +899,32 @@ public class TestRegistryClientBuilder {
             return this;
         }
 
+        @SuppressWarnings("unchecked")
+        public TestPlatformCatalogMemberBuilder addOfferingProjectProperty(String offeringKey, String name, Object value) {
+            var map = (Map<String, Object>) extensions.getMetadata().computeIfAbsent(offeringKey + "-support",
+                    k -> new HashMap<>());
+            map = (Map<String, Object>) map.computeIfAbsent("project", k -> new HashMap<>());
+            map = (Map<String, Object>) map.computeIfAbsent("properties", k -> new HashMap<>());
+            map.put(name, value);
+            return this;
+        }
+
+        @SuppressWarnings("unchecked")
+        public TestPlatformCatalogMemberBuilder addOfferingProjectMavenRepo(String offeringKey, String id, String url) {
+            var map = (Map<String, Object>) extensions.getMetadata().computeIfAbsent(offeringKey + "-support",
+                    k -> new HashMap<>());
+            map = (Map<String, Object>) map.computeIfAbsent("maven", k -> new HashMap<>());
+            List<Map<String, Object>> repos = (List<Map<String, Object>>) map.computeIfAbsent("repositories",
+                    k -> new ArrayList<>());
+            Map<String, Object> repo = new HashMap<>();
+            repo.put("id", id);
+            repo.put("url", url);
+            repo.put("releases-enabled", "true");
+            repo.put("snapshots-enabled", "true");
+            repos.add(repo);
+            return this;
+        }
+
         public TestPlatformCatalogReleaseBuilder release() {
             return release;
         }
