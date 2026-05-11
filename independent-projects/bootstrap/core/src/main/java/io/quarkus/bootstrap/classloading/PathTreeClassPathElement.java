@@ -332,23 +332,16 @@ public class PathTreeClassPathElement extends AbstractClassPathElement {
                     }
                 }
                 // reading the entry directly from the JAR
-                final boolean interrupted = Thread.interrupted();
-                try {
-                    return pathTree.getOriginalTree().apply(name, visit -> {
-                        if (visit == null) {
-                            return null;
-                        }
-                        try {
-                            return Files.readAllBytes(visit.getPath());
-                        } catch (IOException e) {
-                            throw new RuntimeException("Unable to read " + name, e);
-                        }
-                    });
-                } finally {
-                    if (interrupted) {
-                        Thread.currentThread().interrupt();
+                return pathTree.getOriginalTree().apply(name, visit -> {
+                    if (visit == null) {
+                        return null;
                     }
-                }
+                    try {
+                        return Files.readAllBytes(visit.getPath());
+                    } catch (IOException e) {
+                        throw new RuntimeException("Unable to read " + name, e);
+                    }
+                });
             } finally {
                 lock.readLock().unlock();
             }
