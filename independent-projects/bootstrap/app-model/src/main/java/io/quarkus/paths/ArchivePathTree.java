@@ -14,7 +14,8 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.jar.Manifest;
 
-import io.quarkus.fs.util.ZipUtils;
+import io.github.aloubyansky.rozip.ReadOnlyZipFileSystem;
+import io.github.aloubyansky.rozip.ZipUtils;
 
 public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
 
@@ -178,7 +179,7 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
     }
 
     protected FileSystem openFs() throws IOException {
-        return ZipUtils.newFileSystem(archive);
+        return ZipUtils.newReadOnlyFileSystem(archive);
     }
 
     @Override
@@ -231,6 +232,7 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
 
         // we don't make these fields final as we want to nullify them on close
         private FileSystem fs;
+        private ReadOnlyZipFileSystem roFs;
         private Path rootPath;
 
         private volatile boolean open = true;
@@ -238,6 +240,7 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
         protected OpenArchivePathTree(FileSystem fs) {
             super(ArchivePathTree.this.pathFilter, ArchivePathTree.this);
             this.fs = fs;
+            this.roFs = fs instanceof ReadOnlyZipFileSystem r ? r : null;
             this.rootPath = fs.getPath("/");
         }
 
@@ -302,75 +305,82 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
         @Override
         protected <T> T apply(String resourceName, Function<PathVisit, T> func, boolean manifestEnabled) {
             lock.readLock().lock();
-            final boolean interrupted = Thread.interrupted();
             try {
                 ensureOpen();
+                if (roFs != null) {
+                    PathTreeVisit.ensureResourcePath(roFs, resourceName);
+                    if (!PathFilter.isVisible(pathFilter, resourceName)) {
+                        return func.apply(null);
+                    }
+                    String entryName = manifestEnabled ? toMultiReleaseResourceName(resourceName) : resourceName;
+                    if (!roFs.entryExists(entryName)) {
+                        return func.apply(null);
+                    }
+                    return PathTreeVisit.process(getContainerPath(), rootPath,
+                            rootPath.resolve(entryName), pathFilter, func);
+                }
                 return super.apply(resourceName, func, manifestEnabled);
             } finally {
                 lock.readLock().unlock();
-                if (interrupted) {
-                    Thread.currentThread().interrupt();
-                }
             }
         }
 
         @Override
         public void accept(String resourceName, Consumer<PathVisit> consumer) {
             lock.readLock().lock();
-            final boolean interrupted = Thread.interrupted();
             try {
                 ensureOpen();
+                if (roFs != null) {
+                    PathTreeVisit.ensureResourcePath(roFs, resourceName);
+                    if (!PathFilter.isVisible(pathFilter, resourceName)) {
+                        consumer.accept(null);
+                        return;
+                    }
+                    String entryName = manifestEnabled ? toMultiReleaseResourceName(resourceName) : resourceName;
+                    if (!roFs.entryExists(entryName)) {
+                        consumer.accept(null);
+                        return;
+                    }
+                    PathTreeVisit.consume(getContainerPath(), rootPath,
+                            rootPath.resolve(entryName), pathFilter, consumer);
+                    return;
+                }
                 super.accept(resourceName, consumer);
             } finally {
                 lock.readLock().unlock();
-                if (interrupted) {
-                    Thread.currentThread().interrupt();
-                }
             }
         }
 
         @Override
         public void walk(PathVisitor visitor) {
             lock.readLock().lock();
-            final boolean interrupted = Thread.interrupted();
             try {
                 ensureOpen();
                 super.walk(visitor);
             } finally {
                 lock.readLock().unlock();
-                if (interrupted) {
-                    Thread.currentThread().interrupt();
-                }
             }
         }
 
         @Override
         public void walkRaw(PathVisitor visitor) {
             lock.readLock().lock();
-            final boolean interrupted = Thread.interrupted();
             try {
                 ensureOpen();
                 super.walkRaw(visitor);
             } finally {
                 lock.readLock().unlock();
-                if (interrupted) {
-                    Thread.currentThread().interrupt();
-                }
             }
         }
 
         @Override
         public void walkIfContains(String resourceDirName, PathVisitor visitor) {
             lock.readLock().lock();
-            final boolean interrupted = Thread.interrupted();
             try {
                 ensureOpen();
                 super.walkIfContains(resourceDirName, visitor);
             } finally {
                 lock.readLock().unlock();
-                if (interrupted) {
-                    Thread.currentThread().interrupt();
-                }
             }
         }
 
@@ -382,30 +392,38 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
         @Override
         public boolean contains(String resourceName) {
             lock.readLock().lock();
-            final boolean interrupted = Thread.interrupted();
             try {
                 ensureOpen();
+                if (roFs != null) {
+                    PathTreeVisit.ensureResourcePath(roFs, resourceName);
+                    if (!PathFilter.isVisible(pathFilter, resourceName)) {
+                        return false;
+                    }
+                    String entryName = manifestEnabled ? toMultiReleaseResourceName(resourceName) : resourceName;
+                    return roFs.entryExists(entryName);
+                }
                 return super.contains(resourceName);
             } finally {
                 lock.readLock().unlock();
-                if (interrupted) {
-                    Thread.currentThread().interrupt();
-                }
             }
         }
 
         @Override
         public Path getPath(String resourceName) {
             lock.readLock().lock();
-            final boolean interrupted = Thread.interrupted();
             try {
                 ensureOpen();
+                if (roFs != null) {
+                    PathTreeVisit.ensureResourcePath(roFs, resourceName);
+                    if (!PathFilter.isVisible(pathFilter, resourceName)) {
+                        return null;
+                    }
+                    String entryName = manifestEnabled ? toMultiReleaseResourceName(resourceName) : resourceName;
+                    return roFs.entryExists(entryName) ? rootPath.resolve(entryName) : null;
+                }
                 return super.getPath(resourceName);
             } finally {
                 lock.readLock().unlock();
-                if (interrupted) {
-                    Thread.currentThread().interrupt();
-                }
             }
         }
 
@@ -435,6 +453,7 @@ public class ArchivePathTree extends PathTreeWithManifest implements PathTree {
                 // and typically the cen, which is quite large
                 // let's make sure the fs is nullified for it to be garbage collected
                 fs = null;
+                roFs = null;
                 lock.writeLock().unlock();
             }
         }
