@@ -104,7 +104,7 @@ public final class ModuleTreeShaker {
      *
      * @param graphDead the set of graph-unreachable module names with reachable classes
      */
-    private void logGraphDeadWithReachableClasses(Set<String> graphDead) {
+    public static void logGraphDeadWithReachableClasses(Set<String> graphDead) {
         StringBuilder sb = new StringBuilder();
         sb.append("Module tree-shaking: ").append(graphDead.size())
                 .append(" module(s) are graph-unreachable but contain reachable classes (keeping them):");
@@ -157,6 +157,24 @@ public final class ModuleTreeShaker {
      * @return the set of graph-unreachable module names that are not class-dead (may be empty)
      */
     Set<String> findGraphUnreachableModules(Set<String> classDead) {
+        return findGraphUnreachableModules(model, classDead);
+    }
+
+    /**
+     * Walk the module dependency graph from root modules and find modules that
+     * are not reachable from any root. Root modules are the application module
+     * and any boot modules that are not class-dead.
+     * <p>
+     * A module may have reachable classes yet still be graph-unreachable — for example
+     * because it is accessed via reflection, service loading, or from an automatic module
+     * without an explicit {@code requires} directive. Such modules are <em>not</em> treated
+     * as dead; they are only logged as warnings to help diagnose missing dependency declarations.
+     *
+     * @param model the application module model
+     * @param classDead modules already identified as dead by class-level analysis
+     * @return the set of graph-unreachable module names that are not class-dead (may be empty)
+     */
+    public static Set<String> findGraphUnreachableModules(AppModuleModel model, Set<String> classDead) {
         Set<String> visited = new HashSet<>();
         Queue<String> queue = new ArrayDeque<>();
 
@@ -214,21 +232,32 @@ public final class ModuleTreeShaker {
 
     /**
      * Determine whether a module contains at least one reachable class.
+     *
+     * @param moduleInfo the module to inspect
+     * @return {@code true} if the module should be kept alive
+     */
+    private boolean hasReachableClass(ModuleInfo moduleInfo) {
+        return isModuleAlive(moduleInfo.resolvedArtifact().getContentTree(), moduleInfo.name(), reachableClassNames);
+    }
+
+    /**
+     * Determine whether a module's content tree contains at least one reachable class.
      * <p>
-     * Walks the module's content tree looking for {@code .class} entries (excluding
+     * Walks the content tree looking for {@code .class} entries (excluding
      * {@code module-info.class}). Returns {@code true} on the first reachable class found
      * (early exit). If the content tree is empty, returns {@code false} — the module has
      * no content to contribute. If the module contains no class files at all (a resource-only
      * JAR), returns {@code true} to keep it alive — it may provide configuration files,
      * native libraries, or other resources needed at runtime.
      *
-     * @param moduleInfo the module to inspect
+     * @param contentTree the module's content tree
+     * @param moduleName the module name (used for debug logging)
+     * @param reachableClassNames dot-separated names of reachable classes
      * @return {@code true} if the module should be kept alive
      */
-    private boolean hasReachableClass(ModuleInfo moduleInfo) {
-        PathTree contentTree = moduleInfo.resolvedArtifact().getContentTree();
+    public static boolean isModuleAlive(PathTree contentTree, String moduleName, Set<String> reachableClassNames) {
         if (contentTree.isEmpty()) {
-            log.debugf("Module %s: content tree is empty, treating as dead", moduleInfo.name());
+            log.debugf("Module %s: content tree is empty, treating as dead", moduleName);
             return false;
         }
         boolean[] hasClasses = { false };
@@ -245,9 +274,9 @@ public final class ModuleTreeShaker {
             }
         });
         if (!hasClasses[0]) {
-            log.debugf("Module %s: no class entries found, treating as alive (resource-only)", moduleInfo.name());
+            log.debugf("Module %s: no class entries found, treating as alive (resource-only)", moduleName);
         } else if (!found[0]) {
-            log.debugf("Module %s: has classes but none reachable, treating as dead", moduleInfo.name());
+            log.debugf("Module %s: has classes but none reachable, treating as dead", moduleName);
         }
         return !hasClasses[0] || found[0];
     }
@@ -347,10 +376,25 @@ public final class ModuleTreeShaker {
      * @return the cleaned module, or the same instance if no changes were needed
      */
     private ModuleInfo cleanModule(ModuleInfo moduleInfo, Set<String> deadModules) {
+        return cleanModule(moduleInfo, deadModules, reachableClassNames, neededJdkModules);
+    }
+
+    /**
+     * Apply descriptor cleanup operations to a module, removing references to dead modules,
+     * unreachable service implementations, and expanding {@code requires java.se}.
+     *
+     * @param moduleInfo the module to clean up
+     * @param deadModules the set of dead module names
+     * @param reachableClassNames dot-separated names of reachable classes
+     * @param neededJdkModules the set of JDK module names needed by reachable code
+     * @return the cleaned module, or the same instance if no changes were needed
+     */
+    public static ModuleInfo cleanModule(ModuleInfo moduleInfo, Set<String> deadModules,
+            Set<String> reachableClassNames, Set<String> neededJdkModules) {
         moduleInfo = cleanDependencies(moduleInfo, deadModules);
         moduleInfo = cleanAutoDependencies(moduleInfo, deadModules);
-        moduleInfo = cleanProvides(moduleInfo);
-        moduleInfo = expandJavaSe(moduleInfo);
+        moduleInfo = cleanProvides(moduleInfo, reachableClassNames);
+        moduleInfo = expandJavaSe(moduleInfo, neededJdkModules);
         return moduleInfo;
     }
 
@@ -364,7 +408,7 @@ public final class ModuleTreeShaker {
      * @param moduleInfo the module to process
      * @return the module with {@code java.se} expanded, or the same instance if unchanged
      */
-    private ModuleInfo expandJavaSe(ModuleInfo moduleInfo) {
+    private static ModuleInfo expandJavaSe(ModuleInfo moduleInfo, Set<String> neededJdkModules) {
         if (neededJdkModules.isEmpty()) {
             return moduleInfo;
         }
@@ -515,14 +559,14 @@ public final class ModuleTreeShaker {
      * @param moduleInfo the module to clean
      * @return the module with dead service impls removed, or the same instance if unchanged
      */
-    private ModuleInfo cleanProvides(ModuleInfo moduleInfo) {
+    private static ModuleInfo cleanProvides(ModuleInfo moduleInfo, Set<String> reachableClassNames) {
         Map<String, List<String>> provides = moduleInfo.provides();
         if (provides.isEmpty()) {
             return moduleInfo;
         }
         Map<String, List<String>> filtered = null;
         for (var entry : provides.entrySet()) {
-            List<String> aliveImpls = filterReachableImpls(entry.getValue());
+            List<String> aliveImpls = filterReachableImpls(entry.getValue(), reachableClassNames);
             if (aliveImpls != entry.getValue()) {
                 if (filtered == null) {
                     filtered = new HashMap<>(provides);
@@ -537,13 +581,7 @@ public final class ModuleTreeShaker {
         return filtered != null ? moduleInfo.withProvides(filtered) : moduleInfo;
     }
 
-    /**
-     * Filter a list of service implementation class names, keeping only those that are reachable.
-     *
-     * @param impls the implementation class names to filter
-     * @return a list containing only the reachable implementations
-     */
-    private List<String> filterReachableImpls(List<String> impls) {
+    private static List<String> filterReachableImpls(List<String> impls, Set<String> reachableClassNames) {
         List<String> alive = null;
         for (int i = 0; i < impls.size(); i++) {
             String impl = impls.get(i);
@@ -568,7 +606,7 @@ public final class ModuleTreeShaker {
      * @param moduleInfo the module to scan
      * @param jdkModules the set to add JDK module names to
      */
-    private static void collectJdkModules(ModuleInfo moduleInfo, Set<String> jdkModules) {
+    public static void collectJdkModules(ModuleInfo moduleInfo, Set<String> jdkModules) {
         for (DependencyInfo dep : moduleInfo.dependencies()) {
             addIfJdk(dep.moduleName(), jdkModules);
         }
@@ -604,7 +642,7 @@ public final class ModuleTreeShaker {
      * @param referencedJdkPackages the JDK package names referenced by reachable code
      * @return the set of JDK module names needed (never empty — always contains {@code java.base})
      */
-    private static Set<String> computeNeededJdkModules(Set<String> referencedJdkPackages) {
+    public static Set<String> computeNeededJdkModules(Set<String> referencedJdkPackages) {
         if (referencedJdkPackages.isEmpty()) {
             return Set.of();
         }

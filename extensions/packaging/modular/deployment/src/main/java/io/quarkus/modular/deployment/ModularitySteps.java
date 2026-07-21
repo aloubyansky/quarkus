@@ -325,6 +325,34 @@ public final class ModularitySteps {
         extraDepsMap.computeIfAbsent("io.vertx.core", ModularitySteps::newMap)
                 .put("io.quarkus.vertx", Modifier.Set.of(Modifier.READ, Modifier.LINKED, Modifier.SYNTHETIC));
 
+        // When tree-shaking is active, pre-scan dependencies to identify dead modules
+        // so we can skip the expensive getModuleInfo() call for them.
+        final boolean treeShakeActive = treeShakeResult.isClassesShaken();
+        final Set<String> deadModules;
+        final Set<String> reachableClassNames;
+        final Set<String> neededJdkModules;
+        if (treeShakeActive) {
+            reachableClassNames = treeShakeResult.getReachableClassNames();
+            neededJdkModules = ModuleTreeShaker.computeNeededJdkModules(treeShakeResult.getReferencedJdkPackages());
+            deadModules = new HashSet<>();
+            for (ResolvedDependency dep : knownNamedModules.values()) {
+                if (!dep.isRuntimeCp()) {
+                    continue;
+                }
+                String mn = dep.getModuleName();
+                if (mn.equals(appModuleName)) {
+                    continue;
+                }
+                if (!ModuleTreeShaker.isModuleAlive(dep.getContentTree(), mn, reachableClassNames)) {
+                    deadModules.add(mn);
+                }
+            }
+        } else {
+            deadModules = Set.of();
+            reachableClassNames = Set.of();
+            neededJdkModules = Set.of();
+        }
+
         // Now go through the process to build a (Quarkus) module descriptor for each artifact.
         for (ResolvedDependency dependency : knownNamedModules.values()) {
             if (!dependency.isRuntimeCp()) {
@@ -333,6 +361,9 @@ public final class ModularitySteps {
             String moduleName = dependency.getModuleName();
             if (moduleName.equals(appModuleName)) {
                 // we do app module at the end
+                continue;
+            }
+            if (deadModules.contains(moduleName)) {
                 continue;
             }
             // Get the module info.
@@ -404,24 +435,30 @@ public final class ModularitySteps {
                                                     Collectors.toMap(Function.identity(), ignored -> PackageAccess.OPEN))))
                                     .toList());
                         }
-                        // tabulate any used JDK modules.
-                        mi.dependencies().stream()
-                                .map(DependencyInfo::moduleName)
-                                .filter(n -> n.startsWith("java.") || n.startsWith("jdk.") || n.startsWith("ibm."))
-                                .forEach(usedJdkModuleNames::add);
+                        // tabulate any used JDK modules (skipped when tree-shaking recomputes them).
+                        if (!treeShakeActive) {
+                            mi.dependencies().stream()
+                                    .map(DependencyInfo::moduleName)
+                                    .filter(n -> n.startsWith("java.") || n.startsWith("jdk.") || n.startsWith("ibm."))
+                                    .forEach(usedJdkModuleNames::add);
+                        }
                         return mi;
                     });
+            // Apply tree-shaking cleanup to the surviving module.
+            ModuleInfo cleanedModule = treeShakeActive
+                    ? ModuleTreeShaker.cleanModule(depModule, deadModules, reachableClassNames, neededJdkModules)
+                    : depModule;
             // Add the module to the index.
             if (modulesByName.containsKey(moduleName)) {
                 ModuleInfo existing = modulesByName.get(moduleName);
-                if (existing.equals(depModule)) {
+                if (existing.equals(cleanedModule)) {
                     // no harm; it's just in there twice for some reason
                     continue;
                 }
                 throw new IllegalStateException("Module '" + moduleName + "' has been defined twice, in: " +
-                        depModule.resolvedArtifact() + " and " + existing.resolvedArtifact());
+                        cleanedModule.resolvedArtifact() + " and " + existing.resolvedArtifact());
             }
-            modulesByName.put(moduleName, depModule);
+            modulesByName.put(moduleName, cleanedModule);
             // Warn about any split packages (temporary until #44657; then we don't care as much about it).
             depModule.packages().keySet().forEach(pn -> {
                 String existing = modulesByPackageTemporary.putIfAbsent(pn, moduleName);
@@ -493,16 +530,23 @@ public final class ModularitySteps {
                             .stream()
                             .map((e) -> new DependencyInfo(e.getKey(), e.getValue(), Map.of()))
                             .toList());
-                    // tabulate any used JDK modules.
-                    mi.dependencies().stream()
-                            .map(DependencyInfo::moduleName)
-                            .filter(n -> n.startsWith("java.") || n.startsWith("jdk.") || n.startsWith("ibm."))
-                            .forEach(usedJdkModuleNames::add);
+                    // tabulate any used JDK modules (skipped when tree-shaking recomputes them).
+                    if (!treeShakeActive) {
+                        mi.dependencies().stream()
+                                .map(DependencyInfo::moduleName)
+                                .filter(n -> n.startsWith("java.") || n.startsWith("jdk.") || n.startsWith("ibm."))
+                                .forEach(usedJdkModuleNames::add);
+                    }
                     return mi;
                 });
 
+        // Apply tree-shaking cleanup to the app module.
+        ModuleInfo cleanedAppModule = treeShakeActive
+                ? ModuleTreeShaker.cleanModule(appModule, deadModules, reachableClassNames, neededJdkModules)
+                : appModule;
+
         // Register the app module with the others.
-        modulesByName.put(appModuleName, appModule);
+        modulesByName.put(appModuleName, cleanedAppModule);
 
         // -----------------------------------
         // at this point, appModule is frozen!
@@ -519,15 +563,31 @@ public final class ModularitySteps {
         }
         // Build and return the final modular model.
         AppModuleModel.Builder amb = AppModuleModel.builder();
-        amb.appModuleInfo(appModule);
-        usedJdkModuleNames.forEach(amb::jdkModuleUsed);
+        amb.appModuleInfo(cleanedAppModule);
+        if (treeShakeActive) {
+            // Recompute JDK modules from cleaned surviving modules only.
+            Set<String> cleanedJdkModules = new HashSet<>();
+            for (ModuleInfo mi : modulesByName.values()) {
+                ModuleTreeShaker.collectJdkModules(mi, cleanedJdkModules);
+            }
+            cleanedJdkModules.forEach(amb::jdkModuleUsed);
+        } else {
+            usedJdkModuleNames.forEach(amb::jdkModuleUsed);
+        }
         bootModuleSet.forEach(m -> amb.bootModule(m.name()));
         modulesByName.values().forEach(amb::moduleInfo);
         AppModuleModel appModuleModel = amb.build();
 
-        if (treeShakeResult.isClassesShaken()) {
-            appModuleModel = new ModuleTreeShaker(appModuleModel, treeShakeResult.getReachableClassNames(),
-                    treeShakeResult.getReferencedJdkPackages()).shake();
+        if (treeShakeActive) {
+            // Warn about modules that are graph-unreachable but contain reachable classes.
+            Set<String> graphDead = ModuleTreeShaker.findGraphUnreachableModules(appModuleModel, deadModules);
+            if (!graphDead.isEmpty()) {
+                ModuleTreeShaker.logGraphDeadWithReachableClasses(graphDead);
+            }
+            if (!deadModules.isEmpty()) {
+                log.infof("Module tree-shaking removed %d unreachable modules; image will contain %d app + %d JDK modules",
+                        deadModules.size(), modulesByName.size(), appModuleModel.jdkModulesUsed().size());
+            }
         }
 
         return new ApplicationModuleInfoBuildItem(appModuleModel);
