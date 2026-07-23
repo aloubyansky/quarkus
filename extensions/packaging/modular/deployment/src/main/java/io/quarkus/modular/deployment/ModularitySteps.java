@@ -289,8 +289,6 @@ public final class ModularitySteps {
 
         // now start creating the module set
 
-        Set<String> usedJdkModuleNames = new HashSet<>();
-
         // This is just an index of each artifact by groupId+artifactId.
         Map<ArtifactKey, ResolvedDependency> allDependenciesByKey = knownNamedModules.values().stream().map(
                 d -> Map.entry(keyOf(d), d)).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
@@ -370,44 +368,12 @@ public final class ModularitySteps {
             // todo: we're doing a lot of extra transformations here that will eventually move out.
             final ModuleInfo depModule = getModuleInfo(dependency, generatedByPackageAndPath, moduleInfoClassModels,
                     allDependenciesByKey, Map.of(), knownNamedModules, mi -> {
-                        // Transformations for a given module.
-                        // These flags ensure we don't add dependencies twice (see #52933).
-                        boolean arcAdded = false;
-                        boolean arcRuntimeAdded = false;
                         // Add the native-access flag if a build item says to do so.
                         if (nativeAccessNames.contains(moduleName)) {
                             mi = mi.withModifier(ModuleDescriptor.Modifier.NATIVE_ACCESS);
                         }
-                        for (String pkg : mi.packages().keySet()) {
-                            // Add service providers found in build items.
-                            if (extraServicesByPackage.containsKey(pkg)) {
-                                mi = mi.withMoreServices(extraServicesByPackage.remove(pkg));
-                            }
-                            // Handle the ArC stuff (#52933).
-                            // TODO: use build items to do this more efficiently up front
-                            if (!arcAdded && arcGeneratedPackages.contains(pkg)) {
-                                if (!mi.name().equals("io.quarkus.arc")) {
-                                    mi = mi.withMoreDependencies(List.of(new DependencyInfo(
-                                            "io.quarkus.arc",
-                                            Modifier.Set.of(Modifier.LINKED, Modifier.READ, Modifier.SYNTHETIC),
-                                            Map.of())));
-                                }
-                                if (!mi.name().equals("jakarta.cdi")) {
-                                    mi = mi.withMoreDependencies(List.of(new DependencyInfo("jakarta.cdi",
-                                            Modifier.Set.of(Modifier.LINKED, Modifier.READ, Modifier.SYNTHETIC),
-                                            Map.of())));
-                                }
-                                arcAdded = true;
-                            }
-                            if (!arcRuntimeAdded && arcRuntimeGeneratedPackages.contains(pkg)
-                                    && !mi.name().equals("io.quarkus.arc.runtime")) {
-                                mi = mi.withMoreDependencies(List.of(new DependencyInfo(
-                                        "io.quarkus.arc.runtime",
-                                        Modifier.Set.of(Modifier.LINKED, Modifier.READ, Modifier.SYNTHETIC),
-                                        Map.of())));
-                                arcRuntimeAdded = true;
-                            }
-                        }
+                        mi = addArcDepsAndServices(mi, arcGeneratedPackages, arcRuntimeGeneratedPackages,
+                                extraServicesByPackage, deadModules);
                         // TODO: Temporary fixups; remove when we can.
                         switch (moduleName) {
                             // todo: needs resteasy release
@@ -416,49 +382,23 @@ public final class ModularitySteps {
                                         PackageAccess.PRIVATE, Set.of(), Set.of("org.jboss.logging"))));
                             }
                         }
-                        // Add extra dependencies from build items.
-                        mi = mi.withMoreDependencies(extraDepsMap.getOrDefault(mi.name(), Map.of())
-                                .entrySet()
-                                .stream()
-                                .map((e) -> new DependencyInfo(e.getKey(), e.getValue(), Map.of()))
-                                .toList());
-                        // Add extra opens from build items.
-                        Map<String, Set<String>> obi = addOpensByModule.getOrDefault(moduleName, Map.of());
-                        if (!obi.isEmpty()) {
-                            mi = mi.withMoreDependencies(obi
-                                    .entrySet()
-                                    .stream()
-                                    .map((e) -> new DependencyInfo(
-                                            e.getKey(),
-                                            Modifier.Set.of(Modifier.READ, Modifier.OPTIONAL),
-                                            e.getValue().stream().collect(
-                                                    Collectors.toMap(Function.identity(), ignored -> PackageAccess.OPEN))))
-                                    .toList());
-                        }
-                        // tabulate any used JDK modules (skipped when tree-shaking recomputes them).
-                        if (!treeShakeActive) {
-                            mi.dependencies().stream()
-                                    .map(DependencyInfo::moduleName)
-                                    .filter(n -> n.startsWith("java.") || n.startsWith("jdk.") || n.startsWith("ibm."))
-                                    .forEach(usedJdkModuleNames::add);
+                        mi = addExtraDeps(mi, moduleName, extraDepsMap, addOpensByModule, deadModules);
+                        if (treeShakeActive) {
+                            mi = ModuleTreeShaker.cleanModule(mi, deadModules, reachableClassNames, neededJdkModules);
                         }
                         return mi;
                     });
-            // Apply tree-shaking cleanup to the surviving module.
-            ModuleInfo cleanedModule = treeShakeActive
-                    ? ModuleTreeShaker.cleanModule(depModule, deadModules, reachableClassNames, neededJdkModules)
-                    : depModule;
             // Add the module to the index.
             if (modulesByName.containsKey(moduleName)) {
                 ModuleInfo existing = modulesByName.get(moduleName);
-                if (existing.equals(cleanedModule)) {
+                if (existing.equals(depModule)) {
                     // no harm; it's just in there twice for some reason
                     continue;
                 }
                 throw new IllegalStateException("Module '" + moduleName + "' has been defined twice, in: " +
-                        cleanedModule.resolvedArtifact() + " and " + existing.resolvedArtifact());
+                        depModule.resolvedArtifact() + " and " + existing.resolvedArtifact());
             }
-            modulesByName.put(moduleName, cleanedModule);
+            modulesByName.put(moduleName, depModule);
             // Warn about any split packages (temporary until #44657; then we don't care as much about it).
             depModule.packages().keySet().forEach(pn -> {
                 String existing = modulesByPackageTemporary.putIfAbsent(pn, moduleName);
@@ -511,12 +451,16 @@ public final class ModularitySteps {
                         }
                         // TODO: use build items to do this more efficiently up front
                         if (!arcAdded && arcGeneratedPackages.contains(pkg)) {
-                            mi = mi.withMoreDependencies(List.of(new DependencyInfo(
-                                    "io.quarkus.arc", Modifier.Set.of(Modifier.LINKED, Modifier.READ, Modifier.SYNTHETIC),
-                                    Map.of())));
+                            if (!deadModules.contains("io.quarkus.arc")) {
+                                mi = mi.withMoreDependencies(List.of(new DependencyInfo(
+                                        "io.quarkus.arc",
+                                        Modifier.Set.of(Modifier.LINKED, Modifier.READ, Modifier.SYNTHETIC),
+                                        Map.of())));
+                            }
                             arcAdded = true;
                         }
-                        if (!arcRuntimeAdded && arcRuntimeGeneratedPackages.contains(pkg)) {
+                        if (!arcRuntimeAdded && arcRuntimeGeneratedPackages.contains(pkg)
+                                && !deadModules.contains("io.quarkus.arc.runtime")) {
                             mi = mi.withMoreDependencies(List.of(new DependencyInfo(
                                     "io.quarkus.arc.runtime",
                                     Modifier.Set.of(Modifier.LINKED, Modifier.READ, Modifier.SYNTHETIC),
@@ -528,25 +472,17 @@ public final class ModularitySteps {
                     mi = mi.withMoreDependencies(extraDepsMap.getOrDefault(mi.name(), Map.of())
                             .entrySet()
                             .stream()
+                            .filter(e -> !deadModules.contains(e.getKey()))
                             .map((e) -> new DependencyInfo(e.getKey(), e.getValue(), Map.of()))
                             .toList());
-                    // tabulate any used JDK modules (skipped when tree-shaking recomputes them).
-                    if (!treeShakeActive) {
-                        mi.dependencies().stream()
-                                .map(DependencyInfo::moduleName)
-                                .filter(n -> n.startsWith("java.") || n.startsWith("jdk.") || n.startsWith("ibm."))
-                                .forEach(usedJdkModuleNames::add);
+                    if (treeShakeActive) {
+                        mi = ModuleTreeShaker.cleanModule(mi, deadModules, reachableClassNames, neededJdkModules);
                     }
                     return mi;
                 });
 
-        // Apply tree-shaking cleanup to the app module.
-        ModuleInfo cleanedAppModule = treeShakeActive
-                ? ModuleTreeShaker.cleanModule(appModule, deadModules, reachableClassNames, neededJdkModules)
-                : appModule;
-
         // Register the app module with the others.
-        modulesByName.put(appModuleName, cleanedAppModule);
+        modulesByName.put(appModuleName, appModule);
 
         // -----------------------------------
         // at this point, appModule is frozen!
@@ -563,17 +499,13 @@ public final class ModularitySteps {
         }
         // Build and return the final modular model.
         AppModuleModel.Builder amb = AppModuleModel.builder();
-        amb.appModuleInfo(cleanedAppModule);
-        if (treeShakeActive) {
-            // Recompute JDK modules from cleaned surviving modules only.
-            Set<String> cleanedJdkModules = new HashSet<>();
-            for (ModuleInfo mi : modulesByName.values()) {
-                ModuleTreeShaker.collectJdkModules(mi, cleanedJdkModules);
-            }
-            cleanedJdkModules.forEach(amb::jdkModuleUsed);
-        } else {
-            usedJdkModuleNames.forEach(amb::jdkModuleUsed);
+        amb.appModuleInfo(appModule);
+        // Collect JDK modules referenced by all surviving modules in a single pass.
+        Set<String> jdkModules = new HashSet<>();
+        for (ModuleInfo mi : modulesByName.values()) {
+            ModuleTreeShaker.collectJdkModules(mi, jdkModules);
         }
+        jdkModules.forEach(amb::jdkModuleUsed);
         bootModuleSet.forEach(m -> amb.bootModule(m.name()));
         modulesByName.values().forEach(amb::moduleInfo);
         AppModuleModel appModuleModel = amb.build();
@@ -591,6 +523,97 @@ public final class ModularitySteps {
         }
 
         return new ApplicationModuleInfoBuildItem(appModuleModel);
+    }
+
+    /**
+     * Add ArC-related dependencies and generated service providers to a module descriptor.
+     * This handles the temporary ArC dependency logic (see #52933) and merges any extra
+     * service providers discovered during build item processing.
+     *
+     * @param mi the module descriptor to augment (must not be {@code null})
+     * @param arcGeneratedPackages packages containing ArC-generated beans
+     * @param arcRuntimeGeneratedPackages packages containing ArC runtime-generated classes
+     * @param extraServicesByPackage mutable map of extra services by package (entries are consumed)
+     * @param deadModules the set of dead module names to filter against
+     * @return the augmented module descriptor (not {@code null})
+     */
+    private static ModuleInfo addArcDepsAndServices(
+            ModuleInfo mi,
+            Set<String> arcGeneratedPackages,
+            Set<String> arcRuntimeGeneratedPackages,
+            Map<String, Map<String, List<String>>> extraServicesByPackage,
+            Set<String> deadModules) {
+        boolean arcAdded = false;
+        boolean arcRuntimeAdded = false;
+        for (String pkg : mi.packages().keySet()) {
+            if (extraServicesByPackage.containsKey(pkg)) {
+                mi = mi.withMoreServices(extraServicesByPackage.remove(pkg));
+            }
+            // TODO: use build items to do this more efficiently up front
+            if (!arcAdded && arcGeneratedPackages.contains(pkg)) {
+                if (!mi.name().equals("io.quarkus.arc") && !deadModules.contains("io.quarkus.arc")) {
+                    mi = mi.withMoreDependencies(List.of(new DependencyInfo(
+                            "io.quarkus.arc",
+                            Modifier.Set.of(Modifier.LINKED, Modifier.READ, Modifier.SYNTHETIC),
+                            Map.of())));
+                }
+                if (!mi.name().equals("jakarta.cdi") && !deadModules.contains("jakarta.cdi")) {
+                    mi = mi.withMoreDependencies(List.of(new DependencyInfo("jakarta.cdi",
+                            Modifier.Set.of(Modifier.LINKED, Modifier.READ, Modifier.SYNTHETIC),
+                            Map.of())));
+                }
+                arcAdded = true;
+            }
+            if (!arcRuntimeAdded && arcRuntimeGeneratedPackages.contains(pkg)
+                    && !mi.name().equals("io.quarkus.arc.runtime")
+                    && !deadModules.contains("io.quarkus.arc.runtime")) {
+                mi = mi.withMoreDependencies(List.of(new DependencyInfo(
+                        "io.quarkus.arc.runtime",
+                        Modifier.Set.of(Modifier.LINKED, Modifier.READ, Modifier.SYNTHETIC),
+                        Map.of())));
+                arcRuntimeAdded = true;
+            }
+        }
+        return mi;
+    }
+
+    /**
+     * Add extra dependencies and opens from build items to a module descriptor,
+     * filtering out dependencies on dead modules.
+     *
+     * @param mi the module descriptor to augment (must not be {@code null})
+     * @param moduleName the name of the module being processed
+     * @param extraDepsMap extra dependencies by source module and target module
+     * @param addOpensByModule extra opens by opening module and opened module
+     * @param deadModules the set of dead module names to filter against
+     * @return the augmented module descriptor (not {@code null})
+     */
+    private static ModuleInfo addExtraDeps(
+            ModuleInfo mi,
+            String moduleName,
+            Map<String, Map<String, Modifier.Set>> extraDepsMap,
+            Map<String, Map<String, Set<String>>> addOpensByModule,
+            Set<String> deadModules) {
+        mi = mi.withMoreDependencies(extraDepsMap.getOrDefault(mi.name(), Map.of())
+                .entrySet()
+                .stream()
+                .filter(e -> !deadModules.contains(e.getKey()))
+                .map((e) -> new DependencyInfo(e.getKey(), e.getValue(), Map.of()))
+                .toList());
+        Map<String, Set<String>> obi = addOpensByModule.getOrDefault(moduleName, Map.of());
+        if (!obi.isEmpty()) {
+            mi = mi.withMoreDependencies(obi
+                    .entrySet()
+                    .stream()
+                    .filter(e -> !deadModules.contains(e.getKey()))
+                    .map((e) -> new DependencyInfo(
+                            e.getKey(),
+                            Modifier.Set.of(Modifier.READ, Modifier.OPTIONAL),
+                            e.getValue().stream().collect(
+                                    Collectors.toMap(Function.identity(), ignored -> PackageAccess.OPEN))))
+                    .toList());
+        }
+        return mi;
     }
 
     private static final Set<String> bootLayerNames = ModuleLayer.boot().modules().stream().map(Module::getName)

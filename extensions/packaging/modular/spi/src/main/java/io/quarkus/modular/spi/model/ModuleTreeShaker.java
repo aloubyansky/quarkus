@@ -66,22 +66,6 @@ public final class ModuleTreeShaker {
     }
 
     /**
-     * Run the module-level tree-shaking analysis and return the pruned model.
-     * <p>
-     * If no modules are dead, the original model instance is returned unchanged.
-     *
-     * @return a pruned {@link AppModuleModel}, or the original if nothing was pruned
-     */
-    public AppModuleModel shake() {
-        Set<String> classDead = identifyDeadModules();
-        Set<String> graphDead = findGraphUnreachableModules(classDead);
-        if (!graphDead.isEmpty()) {
-            logGraphDeadWithReachableClasses(graphDead);
-        }
-        return shake(classDead);
-    }
-
-    /**
      * Apply module-level tree-shaking with an explicitly provided set of dead module names.
      * <p>
      * This overload is package-private to allow unit tests to supply a known set of dead modules
@@ -110,37 +94,6 @@ public final class ModuleTreeShaker {
                 .append(" module(s) are graph-unreachable but contain reachable classes (keeping them):");
         graphDead.stream().sorted().forEach(name -> sb.append(System.lineSeparator()).append("  - ").append(name));
         log.warn(sb.toString());
-    }
-
-    /**
-     * Scan all modules and classify each as alive or dead.
-     * <p>
-     * The application module is always classified as alive. All other modules —
-     * including boot modules — are alive only if they have at least one reachable class.
-     * Boot modules are expected to have reachable classes because the jlink extension
-     * registers their entry points as tree-shake roots.
-     * <p>
-     * A module with no {@code .class} entries at all (a resource-only JAR) is treated
-     * as alive — it may provide configuration files or other resources needed at runtime.
-     *
-     * @return the set of dead module names (may be empty, never {@code null})
-     */
-    private Set<String> identifyDeadModules() {
-        Map<String, ModuleInfo> modulesByName = model.modulesByName();
-        String appModuleName = model.appModuleInfo().name();
-
-        Set<String> deadModules = new HashSet<>();
-        log.debugf("Analyzing %d modules for class-level liveness (app=%s)", modulesByName.size(), appModuleName);
-        for (ModuleInfo moduleInfo : modulesByName.values()) {
-            String name = moduleInfo.name();
-            if (name.equals(appModuleName)) {
-                continue;
-            }
-            if (!hasReachableClass(moduleInfo)) {
-                deadModules.add(name);
-            }
-        }
-        return deadModules;
     }
 
     /**
@@ -228,16 +181,6 @@ public final class ModuleTreeShaker {
         if (!dead.contains(name) && !visited.contains(name) && !isJdkModule(name)) {
             queue.add(name);
         }
-    }
-
-    /**
-     * Determine whether a module contains at least one reachable class.
-     *
-     * @param moduleInfo the module to inspect
-     * @return {@code true} if the module should be kept alive
-     */
-    private boolean hasReachableClass(ModuleInfo moduleInfo) {
-        return isModuleAlive(moduleInfo.resolvedArtifact().getContentTree(), moduleInfo.name(), reachableClassNames);
     }
 
     /**
