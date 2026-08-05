@@ -65,6 +65,7 @@
         <networknt-schema-validator.version>3.0.6</networknt-schema-validator.version>
     </properties>
     <modules>
+        <module>registry-catalog</module>
         <module>registry-client</module>
         <module>message-writer</module>
         <module>devtools-testing</module>
@@ -119,6 +120,11 @@
                 <groupId>io.quarkus</groupId>
                 <artifactId>quarkus-devtools-testing</artifactId>
                 <scope>test</scope>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-registry-catalog</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

@@ -16,6 +16,10 @@
     <dependencies>
         <dependency>
             <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-registry-catalog</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
             <artifactId>quarkus-devtools-message-writer</artifactId>
         </dependency>
         <dependency>

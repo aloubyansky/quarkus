@@ -273,7 +273,7 @@ public class RegistriesConfigImpl implements RegistriesConfig {
                             builder.addRegistry(config);
                         }
                     }
-                    JsonBuilder.ensureNextToken(p, JsonToken.END_OBJECT, ctxt);
+                    JsonConfigHelper.ensureNextToken(p, JsonToken.END_OBJECT, ctxt);
                 }
             }
 
