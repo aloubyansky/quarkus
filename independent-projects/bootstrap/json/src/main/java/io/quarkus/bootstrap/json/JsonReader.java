@@ -1,7 +1,7 @@
 package io.quarkus.bootstrap.json;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -89,7 +89,7 @@ public class JsonReader {
     private JsonValue readObject() {
         position++;
 
-        Map<JsonString, JsonValue> members = new HashMap<>();
+        Map<JsonString, JsonValue> members = new LinkedHashMap<>();
 
         while (position < length) {
             ignoreWhitespace();
