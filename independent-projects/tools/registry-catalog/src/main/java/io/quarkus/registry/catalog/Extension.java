@@ -60,13 +60,13 @@ public interface Extension {
     }
 
     /**
-     * Persist this configuration to the specified file.
+     * Persist this extension to the specified file as JSON.
      *
-     * @param p Target path
-     * @throws IOException if the specified file can not be written to.
+     * @param p target path
+     * @throws IOException if the file cannot be written
      */
     default void persist(Path p) throws IOException {
-        CatalogMapperHelper.serialize(this, p);
+        ExtensionCatalogJsonWriter.serializeExtension(this).writeTo(p);
     }
 
     interface Mutable extends Extension, JsonBuilder<Extension> {
@@ -103,20 +103,22 @@ public interface Extension {
     }
 
     /**
-     * Read config from the specified file
+     * Read an extension from a file (JSON or YAML). Requires Jackson on the classpath for YAML support.
      *
-     * @param path File to read from (yaml or json)
+     * @param path file to read from
      * @return read-only Extension object
+     * @throws IOException if the file cannot be read
      */
     static Extension fromFile(Path path) throws IOException {
         return mutableFromFile(path).build();
     }
 
     /**
-     * Read config from the specified file
+     * Read an extension from a file (JSON or YAML). Requires Jackson on the classpath for YAML support.
      *
-     * @param path File to read from (yaml or json)
-     * @return read-only Extension object (empty/default for an empty file)
+     * @param path file to read from
+     * @return mutable Extension object (empty/default for an empty file)
+     * @throws IOException if the file cannot be read
      */
     static Extension.Mutable mutableFromFile(Path path) throws IOException {
         Extension.Mutable mutable = CatalogMapperHelper.deserialize(path, ExtensionImpl.Builder.class);

@@ -2,11 +2,15 @@ package io.quarkus.registry.catalog;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
+import io.quarkus.bootstrap.json.JsonObject;
+import io.quarkus.bootstrap.json.JsonReader;
 import io.quarkus.maven.dependency.ArtifactCoords;
 
 public interface ExtensionCatalog extends ExtensionOrigin {
@@ -65,13 +69,13 @@ public interface ExtensionCatalog extends ExtensionOrigin {
     }
 
     /**
-     * Persist this configuration to the specified file.
+     * Persist this configuration to the specified file as JSON.
      *
-     * @param p Target path
-     * @throws IOException if the specified file can not be written to.
+     * @param p target path
+     * @throws IOException if the file cannot be written
      */
     default void persist(Path p) throws IOException {
-        CatalogMapperHelper.serialize(this, p);
+        ExtensionCatalogJsonWriter.serializeExtensionCatalog(this).writeTo(p);
     }
 
     interface Mutable extends ExtensionCatalog, ExtensionOrigin.Mutable {
@@ -105,7 +109,7 @@ public interface ExtensionCatalog extends ExtensionOrigin {
         ExtensionCatalog build();
 
         default void persist(Path p) throws IOException {
-            CatalogMapperHelper.serialize(this.build(), p);
+            build().persist(p);
         }
     }
 
@@ -117,34 +121,41 @@ public interface ExtensionCatalog extends ExtensionOrigin {
     }
 
     /**
-     * Read config from the specified file
+     * Read an extension catalog from a JSON file.
      *
-     * @param path File to read from (yaml or json)
+     * @param path JSON file to read from
      * @return read-only ExtensionCatalog object
+     * @throws IOException if the file cannot be read
      */
     static ExtensionCatalog fromFile(Path path) throws IOException {
         return mutableFromFile(path).build();
     }
 
     /**
-     * Read config from the specified file
+     * Read config from a JSON file.
      *
-     * @param path File to read from (yaml or json)
-     * @return read-only ExtensionCatalog object (empty/default for an empty file)
+     * @param path JSON file to read from
+     * @return mutable ExtensionCatalog object (empty/default for an empty file)
+     * @throws IOException if the file cannot be read
      */
     static ExtensionCatalog.Mutable mutableFromFile(Path path) throws IOException {
-        ExtensionCatalog.Mutable mutable = CatalogMapperHelper.deserialize(path, ExtensionCatalogImpl.Builder.class);
-        return mutable == null ? ExtensionCatalog.builder() : mutable;
+        JsonObject json = JsonReader.of(Files.readString(path)).read();
+        return ExtensionCatalogJsonReader.deserializeMutableExtensionCatalog(json);
     }
 
     /**
-     * Read config from an input stream
+     * Read config from an input stream containing JSON.
      *
      * @param inputStream input stream to read from
-     * @return read-only ExtensionCatalog object (empty/default for an empty file)
+     * @return read-only ExtensionCatalog object (empty/default for empty input)
+     * @throws IOException if the stream cannot be read
      */
     static ExtensionCatalog fromStream(InputStream inputStream) throws IOException {
-        ExtensionCatalog.Mutable mutable = CatalogMapperHelper.deserialize(inputStream, ExtensionCatalogImpl.Builder.class);
-        return mutable == null ? ExtensionCatalog.builder().build() : mutable.build();
+        String content = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+        if (content.isEmpty()) {
+            return ExtensionCatalog.builder().build();
+        }
+        JsonObject json = JsonReader.of(content).read();
+        return ExtensionCatalogJsonReader.deserializeExtensionCatalog(json);
     }
 }

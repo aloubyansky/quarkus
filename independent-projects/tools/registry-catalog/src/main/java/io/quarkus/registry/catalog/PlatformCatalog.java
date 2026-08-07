@@ -1,12 +1,15 @@
 package io.quarkus.registry.catalog;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
+import io.quarkus.bootstrap.json.JsonObject;
+import io.quarkus.bootstrap.json.JsonReader;
 import io.quarkus.registry.json.JsonBuilder;
 
 public interface PlatformCatalog {
@@ -31,13 +34,13 @@ public interface PlatformCatalog {
     }
 
     /**
-     * Persist this configuration to the specified file.
+     * Persist this configuration to the specified file as JSON.
      *
-     * @param p Target path
-     * @throws IOException if the specified file can not be written to.
+     * @param p target path
+     * @throws IOException if the file cannot be written
      */
     default void persist(Path p) throws IOException {
-        CatalogMapperHelper.serialize(this, p);
+        ExtensionCatalogJsonWriter.serializePlatformCatalog(this).writeTo(p);
     }
 
     interface Mutable extends PlatformCatalog, JsonBuilder<PlatformCatalog> {
@@ -55,7 +58,7 @@ public interface PlatformCatalog {
         PlatformCatalog build();
 
         default void persist(Path p) throws IOException {
-            CatalogMapperHelper.serialize(this.build(), p);
+            build().persist(p);
         }
     }
 
@@ -67,23 +70,25 @@ public interface PlatformCatalog {
     }
 
     /**
-     * Read config from the specified file
+     * Read a platform catalog from a JSON file.
      *
-     * @param path File to read from (yaml or json)
+     * @param path JSON file to read from
      * @return read-only PlatformCatalog object
+     * @throws IOException if the file cannot be read
      */
     static PlatformCatalog fromFile(Path path) throws IOException {
         return mutableFromFile(path).build();
     }
 
     /**
-     * Read config from the specified file
+     * Read a platform catalog from a JSON file.
      *
-     * @param path File to read from (yaml or json)
-     * @return read-only PlatformCatalog object (empty/default for an empty file)
+     * @param path JSON file to read from
+     * @return mutable PlatformCatalog object (empty/default for an empty file)
+     * @throws IOException if the file cannot be read
      */
     static PlatformCatalog.Mutable mutableFromFile(Path path) throws IOException {
-        PlatformCatalog.Mutable mutable = CatalogMapperHelper.deserialize(path, PlatformCatalogImpl.Builder.class);
-        return mutable == null ? PlatformCatalog.builder() : mutable;
+        JsonObject json = JsonReader.of(Files.readString(path)).read();
+        return ExtensionCatalogJsonReader.deserializeMutablePlatformCatalog(json);
     }
 }
