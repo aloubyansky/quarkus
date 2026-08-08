@@ -119,8 +119,14 @@ public class ExtensionDescriptorTask extends DefaultTask {
     @OutputFile
     public File getExtensionDescriptorFile() {
         return outputResourcesDir.toPath()
-                .resolve(BootstrapConstants.META_INF)
-                .resolve(BootstrapConstants.QUARKUS_EXTENSION_FILE_NAME)
+                .resolve(BootstrapConstants.EXTENSION_METADATA_PATH)
+                .toFile();
+    }
+
+    @OutputFile
+    public File getExtensionJsonDescriptorFile() {
+        return outputResourcesDir.toPath()
+                .resolve(BootstrapConstants.EXTENSION_JSON_METADATA_PATH)
                 .toFile();
     }
 
@@ -361,6 +367,17 @@ public class ExtensionDescriptorTask extends DefaultTask {
             throw new GradleException(
                     "Failed to persist " + outputMetaInfDirectory.resolve(BootstrapConstants.QUARKUS_EXTENSION_FILE_NAME), e);
         }
+
+        ObjectMapper jsonMapper = getJsonMapper();
+        try (BufferedWriter bw = Files
+                .newBufferedWriter(outputMetaInfDirectory.resolve(BootstrapConstants.QUARKUS_EXTENSION_JSON_FILE_NAME))) {
+            bw.write(jsonMapper.writer(prettyPrinter).writeValueAsString(extObject));
+        } catch (IOException e) {
+            throw new GradleException(
+                    "Failed to persist "
+                            + outputMetaInfDirectory.resolve(BootstrapConstants.QUARKUS_EXTENSION_JSON_FILE_NAME),
+                    e);
+        }
     }
 
     private void computeProjectName(ObjectNode extObject) {
@@ -533,6 +550,11 @@ public class ExtensionDescriptorTask extends DefaultTask {
     private ObjectMapper getMapper() {
         YAMLFactory yf = new YAMLFactory();
         return new ObjectMapper(yf)
+                .setPropertyNamingStrategy(PropertyNamingStrategies.KEBAB_CASE);
+    }
+
+    private ObjectMapper getJsonMapper() {
+        return new ObjectMapper()
                 .setPropertyNamingStrategy(PropertyNamingStrategies.KEBAB_CASE);
     }
 
