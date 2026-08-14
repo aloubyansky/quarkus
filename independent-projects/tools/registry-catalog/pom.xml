@@ -10,29 +10,31 @@
         <version>999-SNAPSHOT</version>
     </parent>
 
-    <artifactId>quarkus-devtools-registry-client</artifactId>
-    <name>Quarkus - Dev tools - Registry Client API</name>
+    <artifactId>quarkus-registry-catalog</artifactId>
+    <name>Quarkus - Dev tools - Registry Catalog</name>
 
     <dependencies>
         <dependency>
             <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-registry-catalog</artifactId>
+            <artifactId>quarkus-bootstrap-app-model</artifactId>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-devtools-message-writer</artifactId>
+            <artifactId>quarkus-bootstrap-json</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
         </dependency>
         <dependency>
             <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>tools.jackson.dataformat</groupId>
             <artifactId>jackson-dataformat-yaml</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-bootstrap-maven-resolver</artifactId>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -45,21 +47,4 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>io.smallrye</groupId>
-                <artifactId>jandex-maven-plugin</artifactId>
-                <version>${jandex.version}</version>
-                <executions>
-                    <execution>
-                        <id>make-index</id>
-                        <goals>
-                            <goal>jandex</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
 </project>

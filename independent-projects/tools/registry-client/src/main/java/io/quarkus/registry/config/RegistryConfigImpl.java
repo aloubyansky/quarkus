@@ -416,12 +416,12 @@ public class RegistryConfigImpl implements RegistryConfig {
                 if (ctx.getParent() == null || ctx.getParent().inRoot()) {
                     builder = p.readValueAs(RegistryConfigImpl.Builder.class);
                 } else {
-                    JsonBuilder.ensureNextToken(p, JsonToken.PROPERTY_NAME, dctx);
+                    JsonConfigHelper.ensureNextToken(p, JsonToken.PROPERTY_NAME, dctx);
                     final String qerId = p.currentName();
-                    JsonBuilder.ensureNextToken(p, JsonToken.START_OBJECT, dctx);
+                    JsonConfigHelper.ensureNextToken(p, JsonToken.START_OBJECT, dctx);
                     builder = p.readValueAs(RegistryConfigImpl.Builder.class);
                     builder.setId(qerId);
-                    JsonBuilder.ensureNextToken(p, JsonToken.END_OBJECT, dctx);
+                    JsonConfigHelper.ensureNextToken(p, JsonToken.END_OBJECT, dctx);
                 }
                 return builder;
             }

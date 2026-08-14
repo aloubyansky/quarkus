@@ -8,14 +8,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
-import io.quarkus.registry.config.RegistryConfigImpl;
 import tools.jackson.core.JsonGenerator;
-import tools.jackson.core.JsonParser;
-import tools.jackson.core.JsonToken;
-import tools.jackson.databind.DeserializationContext;
 import tools.jackson.databind.SerializationContext;
 import tools.jackson.databind.ValueSerializer;
-import tools.jackson.databind.exc.InvalidFormatException;
 
 /**
  * Serialization detail. Not part of the Catalog or Config API.
@@ -108,9 +103,4 @@ public interface JsonBuilder<T> {
         return Collections.unmodifiableMap(result);
     }
 
-    static void ensureNextToken(JsonParser p, JsonToken expected, DeserializationContext ctxt) {
-        if (p.nextToken() != expected) {
-            throw InvalidFormatException.from(p, "Expected " + expected, ctxt, RegistryConfigImpl.Builder.class);
-        }
-    }
 }
