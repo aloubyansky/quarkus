@@ -22,11 +22,11 @@ public class NativeImageProxyConfigStep {
         for (NativeImageProxyDefinitionBuildItem proxy : proxies) {
             JsonArrayBuilder interfaces = Json.array();
             for (String cl : proxy.getClasses()) {
-                interfaces.add(cl);
+                interfaces.append(cl);
             }
             JsonObjectBuilder proxyJson = Json.object();
-            proxyJson.put("interfaces", interfaces);
-            root.add(proxyJson);
+            proxyJson.set("interfaces", interfaces);
+            root.append(proxyJson);
         }
 
         proxyConfig.produce(new GeneratedResourceBuildItem("META-INF/native-image/proxy-config.json",

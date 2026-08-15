@@ -206,17 +206,18 @@ class JsonSerializerTest {
     }
 
     @Test
-    void testBoxedTypeOverloads() throws IOException {
+    void testChaining() throws IOException {
         JsonObjectBuilder obj = Json.object();
-        obj.put("bar", Json.object().put("val", Long.valueOf(30)));
+        obj.set("bar", Json.object().set("val", 30L));
         JsonArrayBuilder arr = Json.array();
-        obj.put("foo", arr.add(Long.valueOf(30)));
+        arr.append(30L);
+        obj.set("foo", arr);
         assertEquals("{\"bar\":{\"val\":30},\"foo\":[30]}", toJson(obj));
 
         obj = Json.object();
-        obj.put("i", Json.object().put("v", Integer.valueOf(42)));
-        obj.put("d", Json.object().put("v", Double.valueOf(3.14)));
-        obj.put("b", Json.object().put("v", Boolean.valueOf(true)));
+        obj.set("i", Json.object().set("v", 42));
+        obj.set("d", Json.object().set("v", 3.14));
+        obj.set("b", Json.object().set("v", true));
         assertEquals("{\"i\":{\"v\":42},\"d\":{\"v\":3.14},\"b\":{\"v\":true}}", toJson(obj));
     }
 }

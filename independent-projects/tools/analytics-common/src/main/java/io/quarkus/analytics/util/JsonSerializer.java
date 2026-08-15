@@ -29,15 +29,15 @@ public final class JsonSerializer {
 
     public static String toJson(RemoteConfig config) {
         Json.JsonObjectBuilder builder = Json.object();
-        builder.put("active", config.isActive());
+        builder.set("active", config.isActive());
         if (config.getDenyAnonymousIds() != null) {
-            builder.put("deny_anonymous_ids", toJsonArray(config.getDenyAnonymousIds()));
+            builder.set("deny_anonymous_ids", toJsonArray(config.getDenyAnonymousIds()));
         }
         if (config.getDenyQuarkusVersions() != null) {
-            builder.put("deny_quarkus_versions", toJsonArray(config.getDenyQuarkusVersions()));
+            builder.set("deny_quarkus_versions", toJsonArray(config.getDenyQuarkusVersions()));
         }
         if (config.getRefreshInterval() != null) {
-            builder.put("refresh_interval", config.getRefreshInterval().toString());
+            builder.set("refresh_interval", config.getRefreshInterval().toString());
         }
         return toJsonString(builder);
     }
@@ -77,7 +77,7 @@ public final class JsonSerializer {
 
     public static String toJson(LocalConfig config) {
         Json.JsonObjectBuilder builder = Json.object();
-        builder.put("disabled", config.isDisabled());
+        builder.set("disabled", config.isDisabled());
         return toJsonString(builder);
     }
 
@@ -96,13 +96,13 @@ public final class JsonSerializer {
     public static String toJson(Identity identity) {
         Json.JsonObjectBuilder builder = Json.object();
         if (identity.getUserId() != null) {
-            builder.put("userId", identity.getUserId());
+            builder.set("userId", identity.getUserId());
         }
         if (identity.getContext() != null) {
-            builder.put("context", toJsonObject(identity.getContext()));
+            builder.set("context", toJsonObject(identity.getContext()));
         }
         if (identity.getTimestamp() != null) {
-            builder.put("timestamp", identity.getTimestamp().toString());
+            builder.set("timestamp", identity.getTimestamp().toString());
         }
         return toJsonString(builder);
     }
@@ -110,19 +110,19 @@ public final class JsonSerializer {
     public static String toJson(Track track) {
         Json.JsonObjectBuilder builder = Json.object();
         if (track.getUserId() != null) {
-            builder.put("userId", track.getUserId());
+            builder.set("userId", track.getUserId());
         }
         if (track.getEvent() != null) {
-            builder.put("event", track.getEvent().name());
+            builder.set("event", track.getEvent().name());
         }
         if (track.getProperties() != null) {
-            builder.put("properties", toJsonObject(track.getProperties()));
+            builder.set("properties", toJsonObject(track.getProperties()));
         }
         if (track.getContext() != null) {
-            builder.put("context", toJsonObject(track.getContext()));
+            builder.set("context", toJsonObject(track.getContext()));
         }
         if (track.getTimestamp() != null) {
-            builder.put("timestamp", track.getTimestamp().toString());
+            builder.set("timestamp", track.getTimestamp().toString());
         }
         return toJsonString(builder);
     }
@@ -202,9 +202,9 @@ public final class JsonSerializer {
         if (props.getAppExtensions() != null) {
             Json.JsonArrayBuilder arrayBuilder = Json.array();
             for (TrackProperties.AppExtension ext : props.getAppExtensions()) {
-                arrayBuilder.add(toJsonObject(ext));
+                arrayBuilder.append(toJsonObject(ext));
             }
-            builder.put("app_extensions", arrayBuilder);
+            builder.set("app_extensions", arrayBuilder);
         }
         return builder;
     }
@@ -212,13 +212,13 @@ public final class JsonSerializer {
     private static Json.JsonObjectBuilder toJsonObject(TrackProperties.AppExtension ext) {
         Json.JsonObjectBuilder builder = Json.object();
         if (ext.getGroupId() != null) {
-            builder.put("group_id", ext.getGroupId());
+            builder.set("group_id", ext.getGroupId());
         }
         if (ext.getArtifactId() != null) {
-            builder.put("artifact_id", ext.getArtifactId());
+            builder.set("artifact_id", ext.getArtifactId());
         }
         if (ext.getVersion() != null) {
-            builder.put("version", ext.getVersion());
+            builder.set("version", ext.getVersion());
         }
         return builder;
     }
@@ -229,19 +229,19 @@ public final class JsonSerializer {
         for (Map.Entry<String, Object> entry : map.entrySet()) {
             Object value = entry.getValue();
             if (value instanceof String str) {
-                builder.put(entry.getKey(), str);
+                builder.set(entry.getKey(), str);
             } else if (value instanceof Boolean bool) {
-                builder.put(entry.getKey(), bool);
+                builder.set(entry.getKey(), bool);
             } else if (value instanceof Integer intVal) {
-                builder.put(entry.getKey(), intVal);
+                builder.set(entry.getKey(), intVal);
             } else if (value instanceof Long longVal) {
-                builder.put(entry.getKey(), longVal);
+                builder.set(entry.getKey(), longVal);
             } else if (value instanceof Map) {
-                builder.put(entry.getKey(), toJsonObject((Map<String, Object>) value));
+                builder.set(entry.getKey(), toJsonObject((Map<String, Object>) value));
             } else if (value instanceof List) {
-                builder.put(entry.getKey(), toJsonArrayFromObjects((List<Object>) value));
+                builder.set(entry.getKey(), toJsonArrayFromObjects((List<Object>) value));
             } else if (value != null) {
-                builder.put(entry.getKey(), value.toString());
+                builder.set(entry.getKey(), value.toString());
             }
         }
         return builder;
@@ -258,19 +258,19 @@ public final class JsonSerializer {
         Json.JsonArrayBuilder builder = Json.array();
         for (Object item : list) {
             if (item instanceof String str) {
-                builder.add(str);
+                builder.append(str);
             } else if (item instanceof Boolean bool) {
-                builder.add(bool);
+                builder.append(bool);
             } else if (item instanceof Integer intVal) {
-                builder.add(intVal);
+                builder.append(intVal);
             } else if (item instanceof Long longVal) {
-                builder.add(longVal);
+                builder.append(longVal);
             } else if (item instanceof Map) {
-                builder.add(toJsonObject((Map<String, Object>) item));
+                builder.append(toJsonObject((Map<String, Object>) item));
             } else if (item instanceof List) {
-                builder.add(toJsonArrayFromObjects((List<Object>) item));
+                builder.append(toJsonArrayFromObjects((List<Object>) item));
             } else if (item != null) {
-                builder.add(item.toString());
+                builder.append(item.toString());
             }
         }
         return builder;
