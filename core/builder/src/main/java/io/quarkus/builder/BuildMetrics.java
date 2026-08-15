@@ -122,29 +122,29 @@ public class BuildMetrics {
             });
 
             JsonObjectBuilder json = Json.object();
-            json.put("buildTarget", buildTargetName);
-            json.put("started", started.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-            json.put("duration", duration);
+            json.set("buildTarget", buildTargetName);
+            json.set("started", started.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+            json.set("duration", duration);
 
             JsonArrayBuilder steps = Json.array();
-            json.put("records", steps);
+            json.set("records", steps);
             for (BuildStepRecord rec : sortedSteps) {
                 JsonObjectBuilder recObject = Json.object();
-                recObject.put("id", rec.id);
-                recObject.put("stepId", rec.stepInfo.getBuildStep().getId());
-                recObject.put("thread", rec.thread);
-                recObject.put("started", rec.started.format(formatter));
-                recObject.put("duration", rec.duration);
+                recObject.set("id", rec.id);
+                recObject.set("stepId", rec.stepInfo.getBuildStep().getId());
+                recObject.set("thread", rec.thread);
+                recObject.set("started", rec.started.format(formatter));
+                recObject.set("duration", rec.duration);
                 JsonArrayBuilder dependentsArray = Json.array();
                 for (StepInfo dependent : rec.stepInfo.getDependents()) {
                     BuildStepRecord dependentRecord = records.get(dependent.getBuildStep().getId());
                     if (dependentRecord != null) {
-                        dependentsArray.add(dependentRecord.id);
+                        dependentsArray.append(dependentRecord.id);
                     } else {
                         LOG.warnf("Dependent record not found for stepId: %s", dependent.getBuildStep().getId());
                     }
                 }
-                recObject.put("dependents", dependentsArray);
+                recObject.set("dependents", dependentsArray);
                 if (buildItemsExtended != null) {
                     List<String> items = buildItemsExtended.get(rec.stepInfo.getBuildStep().getId());
                     if (items != null) {
@@ -156,14 +156,14 @@ public class BuildMetrics {
                         List<Entry<String, Long>> sortedItems = new ArrayList<>(counts.entrySet());
                         sortedItems.sort(this::compareBuildItems);
                         for (Entry<String, Long> e : sortedItems) {
-                            producedItems.add(Json.object()
-                                    .put("item", e.getKey())
-                                    .put("count", e.getValue().longValue()));
+                            producedItems.append(Json.object()
+                                    .set("item", e.getKey())
+                                    .set("count", e.getValue().longValue()));
                         }
-                        recObject.put("producedItems", producedItems);
+                        recObject.set("producedItems", producedItems);
                     }
                 }
-                steps.add(recObject);
+                steps.append(recObject);
             }
 
             List<Entry<String, Long>> sortedItems;
@@ -180,16 +180,16 @@ public class BuildMetrics {
             }
             sortedItems.sort(this::compareBuildItems);
             JsonArrayBuilder items = Json.array();
-            json.put("items", items);
+            json.set("items", items);
             long itemsCount = 0;
             for (Entry<String, Long> e : sortedItems) {
                 JsonObjectBuilder itemObject = Json.object();
-                itemObject.put("class", e.getKey());
-                itemObject.put("count", e.getValue());
-                items.add(itemObject);
+                itemObject.set("class", e.getKey());
+                itemObject.set("count", e.getValue());
+                items.append(itemObject);
                 itemsCount += e.getValue();
             }
-            json.put("itemsCount", itemsCount);
+            json.set("itemsCount", itemsCount);
 
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(file.toFile(), StandardCharsets.UTF_8))) {
                 json.appendTo(writer);

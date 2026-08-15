@@ -91,7 +91,7 @@ public class ApplicationModelSerializer {
         if (JOS) {
             serializeWithJos(model, serializedModel);
         } else {
-            ((Json.JsonObjectBuilder) model.asMap(JSON_CONTAINER_FACTORY)).writeTo(serializedModel);
+            Json.fromMap(model.asMap()).writeTo(serializedModel);
         }
         return serializedModel;
     }

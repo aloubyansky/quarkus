@@ -77,32 +77,32 @@ public class NativeImageReflectConfigStep {
         for (Map.Entry<String, ReflectionInfo> entry : reflectiveClasses.entrySet()) {
             JsonObjectBuilder json = Json.object();
 
-            json.put("name", entry.getKey());
+            json.set("name", entry.getKey());
 
             ReflectionInfo info = entry.getValue();
             JsonArrayBuilder methodsArray = Json.array();
             JsonArrayBuilder queriedMethodsArray = Json.array();
             if (info.typeReachable != null) {
-                json.put("condition", Json.object().put("typeReachable", info.typeReachable));
+                json.set("condition", Json.object().set("typeReachable", info.typeReachable));
             }
             if (info.constructors) {
-                json.put("allDeclaredConstructors", true);
+                json.set("allDeclaredConstructors", true);
             } else {
                 if (info.queryConstructors) {
-                    json.put("queryAllDeclaredConstructors", true);
+                    json.set("queryAllDeclaredConstructors", true);
                 }
                 if (!info.ctorSet.isEmpty()) {
                     extractToJsonArray(info.ctorSet, methodsArray);
                 }
             }
             if (info.publicConstructors) {
-                json.put("allPublicConstructors", true);
+                json.set("allPublicConstructors", true);
             }
             if (info.methods) {
-                json.put("allDeclaredMethods", true);
+                json.set("allDeclaredMethods", true);
             } else {
                 if (info.queryMethods) {
-                    json.put("queryAllDeclaredMethods", true);
+                    json.set("queryAllDeclaredMethods", true);
                 }
                 if (!info.methodSet.isEmpty()) {
                     extractToJsonArray(info.methodSet, methodsArray);
@@ -112,39 +112,39 @@ public class NativeImageReflectConfigStep {
                 }
             }
             if (info.publicMethods) {
-                json.put("allPublicMethods", true);
+                json.set("allPublicMethods", true);
             }
             if (!methodsArray.isEmpty()) {
-                json.put("methods", methodsArray);
+                json.set("methods", methodsArray);
             }
             if (!queriedMethodsArray.isEmpty()) {
-                json.put("queriedMethods", queriedMethodsArray);
+                json.set("queriedMethods", queriedMethodsArray);
             }
 
             if (info.fields) {
-                json.put("allDeclaredFields", true);
+                json.set("allDeclaredFields", true);
             } else if (!info.fieldSet.isEmpty()) {
                 JsonArrayBuilder fieldsArray = Json.array();
                 for (String fieldName : info.fieldSet) {
-                    fieldsArray.add(Json.object().put("name", fieldName));
+                    fieldsArray.append(Json.object().set("name", fieldName));
                 }
-                json.put("fields", fieldsArray);
+                json.set("fields", fieldsArray);
             }
             if (info.classes) {
-                json.put("allDeclaredClasses", true);
+                json.set("allDeclaredClasses", true);
             }
             if (info.unsafeAllocated) {
-                json.put("unsafeAllocated", true);
+                json.set("unsafeAllocated", true);
             }
             if (nativeConfig.includeReasonsInConfigFiles() && info.reasons != null) {
                 JsonArrayBuilder reasonsArray = Json.array();
                 for (String reason : info.reasons) {
-                    reasonsArray.add(reason);
+                    reasonsArray.append(reason);
                 }
-                json.put("reasons", reasonsArray);
+                json.set("reasons", reasonsArray);
             }
 
-            root.add(json);
+            root.append(json);
         }
 
         reflectConfig.produce(new GeneratedResourceBuildItem("META-INF/native-image/reflect-config.json",
@@ -154,13 +154,13 @@ public class NativeImageReflectConfigStep {
     private static void extractToJsonArray(Set<ReflectiveMethodBuildItem> methodSet, JsonArrayBuilder methodsArray) {
         for (ReflectiveMethodBuildItem method : methodSet) {
             JsonObjectBuilder methodObject = Json.object();
-            methodObject.put("name", method.getName());
+            methodObject.set("name", method.getName());
             JsonArrayBuilder paramsArray = Json.array();
             for (int i = 0; i < method.getParams().length; ++i) {
-                paramsArray.add(method.getParams()[i]);
+                paramsArray.append(method.getParams()[i]);
             }
-            methodObject.put("parameterTypes", paramsArray);
-            methodsArray.add(methodObject);
+            methodObject.set("parameterTypes", paramsArray);
+            methodsArray.append(methodObject);
         }
     }
 

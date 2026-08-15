@@ -33,22 +33,22 @@ public class NativeImageResourceConfigStep {
         for (NativeImageResourceBuildItem i : resources) {
             for (String path : i.getResources()) {
                 JsonObjectBuilder pat = Json.object();
-                pat.put("pattern", Pattern.quote(path));
-                includes.add(pat);
+                pat.set("pattern", Pattern.quote(path));
+                includes.append(pat);
             }
         }
 
         for (ServiceProviderBuildItem i : serviceProviderBuildItems) {
-            includes.add(Json.object().put("pattern", Pattern.quote(i.serviceDescriptorFile())));
+            includes.append(Json.object().set("pattern", Pattern.quote(i.serviceDescriptorFile())));
         }
 
         for (NativeImageResourcePatternsBuildItem resourcePatternsItem : resourcePatterns) {
             addListToJsonArray(includes, resourcePatternsItem.getIncludePatterns());
             addListToJsonArray(excludes, resourcePatternsItem.getExcludePatterns());
         }
-        resourcesJs.put("includes", includes);
-        resourcesJs.put("excludes", excludes);
-        root.put("resources", resourcesJs);
+        resourcesJs.set("includes", includes);
+        resourcesJs.set("excludes", excludes);
+        root.set("resources", resourcesJs);
 
         JsonArrayBuilder bundles = Json.array();
         for (NativeImageResourceBundleBuildItem i : resourceBundles) {
@@ -59,10 +59,10 @@ public class NativeImageResourceConfigStep {
                 sb.append(moduleName).append(":");
             }
             sb.append(i.getBundleName().replace("/", "."));
-            bundle.put("name", sb.toString());
-            bundles.add(bundle);
+            bundle.set("name", sb.toString());
+            bundles.append(bundle);
         }
-        root.put("bundles", bundles);
+        root.set("bundles", bundles);
 
         resourceConfig.produce(new GeneratedResourceBuildItem("META-INF/native-image/resource-config.json",
                 root.toJsonString().getBytes(StandardCharsets.UTF_8)));
@@ -71,8 +71,8 @@ public class NativeImageResourceConfigStep {
     private void addListToJsonArray(JsonArrayBuilder array, List<String> patterns) {
         for (String pattern : patterns) {
             JsonObjectBuilder pat = Json.object();
-            pat.put("pattern", pattern);
-            array.add(pat);
+            pat.set("pattern", pattern);
+            array.append(pat);
         }
     }
 }

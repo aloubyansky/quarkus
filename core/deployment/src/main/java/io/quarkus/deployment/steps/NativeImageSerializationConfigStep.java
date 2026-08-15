@@ -34,17 +34,17 @@ public class NativeImageSerializationConfigStep {
         JsonObjectBuilder root = Json.object();
         JsonArrayBuilder types = Json.array();
         for (String serializableClass : serializableClasses) {
-            types.add(Json.object().put("name", serializableClass));
+            types.append(Json.object().set("name", serializableClass));
         }
-        root.put("types", types);
+        root.set("types", types);
 
         JsonArrayBuilder lambdaCapturingTypes = Json.array();
         if (!lambdaCapturingTypeBuildItems.isEmpty()) {
             for (LambdaCapturingTypeBuildItem i : lambdaCapturingTypeBuildItems) {
-                lambdaCapturingTypes.add(Json.object().put("name", i.getClassName()));
+                lambdaCapturingTypes.append(Json.object().set("name", i.getClassName()));
             }
         }
-        root.put("lambdaCapturingTypes", lambdaCapturingTypes);
+        root.set("lambdaCapturingTypes", lambdaCapturingTypes);
 
         serializationConfig.produce(new GeneratedResourceBuildItem("META-INF/native-image/serialization-config.json",
                 root.toJsonString().getBytes(StandardCharsets.UTF_8)));

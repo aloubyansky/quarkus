@@ -35,53 +35,53 @@ public class NativeImageJNIConfigStep {
         for (Map.Entry<String, JniInfo> entry : jniClasses.entrySet()) {
             JsonObjectBuilder json = Json.object();
 
-            json.put("name", entry.getKey());
+            json.set("name", entry.getKey());
 
             JniInfo info = entry.getValue();
             JsonArrayBuilder methodsArray = Json.array();
             if (info.constructors) {
-                json.put("allDeclaredConstructors", true);
+                json.set("allDeclaredConstructors", true);
             } else if (!info.ctorSet.isEmpty()) {
                 for (JniRuntimeAccessMethodBuildItem ctor : info.ctorSet) {
                     JsonObjectBuilder methodObject = Json.object();
-                    methodObject.put("name", ctor.getName());
+                    methodObject.set("name", ctor.getName());
                     JsonArrayBuilder paramsArray = Json.array();
                     for (int i = 0; i < ctor.getParams().length; ++i) {
-                        paramsArray.add(ctor.getParams()[i]);
+                        paramsArray.append(ctor.getParams()[i]);
                     }
-                    methodObject.put("parameterTypes", paramsArray);
-                    methodsArray.add(methodObject);
+                    methodObject.set("parameterTypes", paramsArray);
+                    methodsArray.append(methodObject);
                 }
             }
             if (info.methods) {
-                json.put("allDeclaredMethods", true);
+                json.set("allDeclaredMethods", true);
             } else if (!info.methodSet.isEmpty()) {
                 for (JniRuntimeAccessMethodBuildItem method : info.methodSet) {
                     JsonObjectBuilder methodObject = Json.object();
-                    methodObject.put("name", method.getName());
+                    methodObject.set("name", method.getName());
                     JsonArrayBuilder paramsArray = Json.array();
                     for (int i = 0; i < method.getParams().length; ++i) {
-                        paramsArray.add(method.getParams()[i]);
+                        paramsArray.append(method.getParams()[i]);
                     }
-                    methodObject.put("parameterTypes", paramsArray);
-                    methodsArray.add(methodObject);
+                    methodObject.set("parameterTypes", paramsArray);
+                    methodsArray.append(methodObject);
                 }
             }
             if (!methodsArray.isEmpty()) {
-                json.put("methods", methodsArray);
+                json.set("methods", methodsArray);
             }
 
             if (info.fields) {
-                json.put("allDeclaredFields", true);
+                json.set("allDeclaredFields", true);
             } else if (!info.fieldSet.isEmpty()) {
                 JsonArrayBuilder fieldsArray = Json.array();
                 for (String fieldName : info.fieldSet) {
-                    fieldsArray.add(Json.object().put("name", fieldName));
+                    fieldsArray.append(Json.object().set("name", fieldName));
                 }
-                json.put("fields", fieldsArray);
+                json.set("fields", fieldsArray);
             }
 
-            root.add(json);
+            root.append(json);
         }
 
         jniConfig.produce(new GeneratedResourceBuildItem("META-INF/native-image/jni-config.json",

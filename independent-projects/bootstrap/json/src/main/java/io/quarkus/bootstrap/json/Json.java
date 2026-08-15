@@ -217,59 +217,155 @@ public final class Json {
             this.values = new ArrayList<>(initialCapacity);
         }
 
+        /**
+         * Appends a JSON string value to this array.
+         *
+         * @param value string value (ignored if {@code null})
+         * @return this builder
+         */
+        public JsonArrayBuilder append(String value) {
+            addInternal(value);
+            return this;
+        }
+
+        /**
+         * Appends a JSON boolean value to this array.
+         *
+         * @param value boolean value
+         * @return this builder
+         */
+        public JsonArrayBuilder append(boolean value) {
+            addInternal(value);
+            return this;
+        }
+
+        /**
+         * Appends a JSON integer value to this array.
+         *
+         * @param value int value
+         * @return this builder
+         */
+        public JsonArrayBuilder append(int value) {
+            addInternal(value);
+            return this;
+        }
+
+        /**
+         * Appends a JSON integer value to this array.
+         *
+         * @param value long value
+         * @return this builder
+         */
+        public JsonArrayBuilder append(long value) {
+            addInternal(value);
+            return this;
+        }
+
+        /**
+         * Appends a JSON number value to this array.
+         *
+         * @param value double value
+         * @return this builder
+         */
+        public JsonArrayBuilder append(double value) {
+            addInternal(value);
+            return this;
+        }
+
+        /**
+         * Appends a nested JSON object to this array.
+         *
+         * @param value object builder (ignored if {@code null})
+         * @return this builder
+         */
+        public JsonArrayBuilder append(JsonObjectBuilder value) {
+            addInternal(value);
+            return this;
+        }
+
+        /**
+         * Appends a nested JSON array to this array.
+         *
+         * @param value array builder (ignored if {@code null})
+         * @return this builder
+         */
+        public JsonArrayBuilder append(JsonArrayBuilder value) {
+            addInternal(value);
+            return this;
+        }
+
+        /**
+         * @deprecated Use {@link #append(JsonArrayBuilder)} instead. The {@code add} methods
+         *             are deprecated because {@code JsonArrayBuilder} implements {@link Collection},
+         *             whose {@link Collection#add(Object)} method has different return semantics
+         *             ({@code boolean}) and can cause silent issues when chaining with boxed types.
+         */
+        @Deprecated(forRemoval = true)
         public JsonArrayBuilder add(JsonArrayBuilder value) {
-            addInternal(value);
-            return this;
+            return append(value);
         }
 
+        /**
+         * @deprecated Use {@link #append(JsonObjectBuilder)} instead.
+         *             See {@link #add(JsonArrayBuilder)} for details.
+         */
+        @Deprecated(forRemoval = true)
         public JsonArrayBuilder add(JsonObjectBuilder value) {
-            addInternal(value);
-            return this;
+            return append(value);
         }
 
+        /**
+         * @deprecated Use {@link #append(String)} instead.
+         *             See {@link #add(JsonArrayBuilder)} for details.
+         */
+        @Deprecated(forRemoval = true)
         public JsonArrayBuilder add(String value) {
-            addInternal(value);
-            return this;
+            return append(value);
         }
 
+        /**
+         * @deprecated Use {@link #append(boolean)} instead.
+         *             See {@link #add(JsonArrayBuilder)} for details.
+         */
+        @Deprecated(forRemoval = true)
         public JsonArrayBuilder add(boolean value) {
-            addInternal(value);
-            return this;
+            return append(value);
         }
 
+        /**
+         * @deprecated Use {@link #append(boolean)} instead.
+         *             See {@link #add(JsonArrayBuilder)} for details.
+         */
+        @Deprecated(forRemoval = true)
         public JsonArrayBuilder add(Boolean value) {
-            addInternal(value);
-            return this;
+            return append(value);
         }
 
+        /**
+         * @deprecated Use {@link #append(int)} instead.
+         *             See {@link #add(JsonArrayBuilder)} for details.
+         */
+        @Deprecated(forRemoval = true)
         public JsonArrayBuilder add(int value) {
-            addInternal(value);
-            return this;
+            return append(value);
         }
 
-        public JsonArrayBuilder add(Integer value) {
-            addInternal(value);
-            return this;
-        }
-
+        /**
+         * @deprecated Use {@link #append(long)} instead.
+         *             See {@link #add(JsonArrayBuilder)} for details.
+         */
+        @Deprecated(forRemoval = true)
         public JsonArrayBuilder add(long value) {
-            addInternal(value);
-            return this;
+            return append(value);
         }
 
-        public JsonArrayBuilder add(Long value) {
-            addInternal(value);
-            return this;
-        }
-
+        /**
+         * @deprecated Use {@link #append(double)} instead.
+         *             See {@link #add(JsonArrayBuilder)} for details.
+         */
+        @Deprecated(forRemoval = true)
         public JsonArrayBuilder add(double value) {
-            addInternal(value);
-            return this;
-        }
-
-        public JsonArrayBuilder add(Double value) {
-            addInternal(value);
-            return this;
+            return append(value);
         }
 
         public JsonArrayBuilder addAll(List<JsonObjectBuilder> value) {
@@ -377,28 +473,28 @@ public final class Json {
         @Override
         void add(JsonValue element) {
             if (element instanceof JsonString jsonStr) {
-                add(jsonStr.value());
+                append(jsonStr.value());
             } else if (element instanceof JsonInteger jsonInt) {
                 final long longValue = jsonInt.longValue();
                 final int intValue = (int) longValue;
                 if (longValue == intValue) {
-                    add(intValue);
+                    append(intValue);
                 } else {
-                    add(longValue);
+                    append(longValue);
                 }
             } else if (element instanceof JsonBoolean jsonBoolean) {
-                add(jsonBoolean.value());
+                append(jsonBoolean.value());
             } else if (element instanceof JsonArray jsonArray) {
                 final JsonArrayBuilder arrayBuilder = Json.array(ignoreEmptyBuilders);
                 arrayBuilder.transform(jsonArray, transform);
                 if (!arrayBuilder.isEmpty()) {
-                    add(arrayBuilder);
+                    append(arrayBuilder);
                 }
             } else if (element instanceof JsonObject jsonObj) {
                 final JsonObjectBuilder objectBuilder = Json.object(ignoreEmptyBuilders);
                 objectBuilder.transform(jsonObj, transform);
                 if (!objectBuilder.isEmpty()) {
-                    add(objectBuilder);
+                    append(objectBuilder);
                 }
             }
         }
@@ -421,70 +517,99 @@ public final class Json {
             this.properties = new LinkedHashMap<>(initialCapacity);
         }
 
-        public JsonObjectBuilder put(String name, String value) {
+        /**
+         * Sets a JSON string property.
+         *
+         * @param name property name
+         * @param value string value (ignored if {@code null})
+         * @return this builder
+         */
+        public JsonObjectBuilder set(String name, String value) {
             putInternal(name, value);
             return this;
         }
 
-        public JsonObjectBuilder put(String name, JsonObjectBuilder value) {
+        /**
+         * Sets a JSON boolean property.
+         *
+         * @param name property name
+         * @param value boolean value
+         * @return this builder
+         */
+        public JsonObjectBuilder set(String name, boolean value) {
             putInternal(name, value);
             return this;
         }
 
-        public JsonObjectBuilder put(String name, JsonArrayBuilder value) {
+        /**
+         * Sets a JSON integer property.
+         *
+         * @param name property name
+         * @param value int value
+         * @return this builder
+         */
+        public JsonObjectBuilder set(String name, int value) {
             putInternal(name, value);
             return this;
         }
 
-        public JsonObjectBuilder put(String name, boolean value) {
+        /**
+         * Sets a JSON integer property.
+         *
+         * @param name property name
+         * @param value long value
+         * @return this builder
+         */
+        public JsonObjectBuilder set(String name, long value) {
             putInternal(name, value);
             return this;
         }
 
-        public JsonObjectBuilder put(String name, Boolean value) {
+        /**
+         * Sets a JSON number property.
+         *
+         * @param name property name
+         * @param value double value
+         * @return this builder
+         */
+        public JsonObjectBuilder set(String name, double value) {
             putInternal(name, value);
             return this;
         }
 
-        public JsonObjectBuilder put(String name, int value) {
+        /**
+         * Sets a nested JSON object property.
+         *
+         * @param name property name
+         * @param value object builder (ignored if {@code null})
+         * @return this builder
+         */
+        public JsonObjectBuilder set(String name, JsonObjectBuilder value) {
             putInternal(name, value);
             return this;
         }
 
-        public JsonObjectBuilder put(String name, Integer value) {
-            putInternal(name, value);
-            return this;
-        }
-
-        public JsonObjectBuilder put(String name, long value) {
-            putInternal(name, value);
-            return this;
-        }
-
-        public JsonObjectBuilder put(String name, Long value) {
-            putInternal(name, value);
-            return this;
-        }
-
-        public JsonObjectBuilder put(String name, double value) {
-            putInternal(name, value);
-            return this;
-        }
-
-        public JsonObjectBuilder put(String name, Double value) {
+        /**
+         * Sets a nested JSON array property.
+         *
+         * @param name property name
+         * @param value array builder (ignored if {@code null})
+         * @return this builder
+         */
+        public JsonObjectBuilder set(String name, JsonArrayBuilder value) {
             putInternal(name, value);
             return this;
         }
 
         /**
          * Recursively converts the map to nested {@link JsonObjectBuilder} and {@link JsonArrayBuilder}
-         * instances and adds the result under the given name.
+         * instances and sets the result under the given name.
          *
          * @param name property name
          * @param map map to convert (may be {@code null})
          * @return this builder
          */
-        public JsonObjectBuilder put(String name, Map<String, ?> map) {
+        public JsonObjectBuilder set(String name, Map<String, ?> map) {
             if (map != null && !map.isEmpty()) {
                 putInternal(name, fromMap(map));
             }
@@ -493,17 +618,101 @@ public final class Json {
 
         /**
          * Recursively converts the collection to a {@link JsonArrayBuilder}
-         * and adds the result under the given name.
+         * and sets the result under the given name.
          *
          * @param name property name
          * @param collection collection to convert (may be {@code null})
          * @return this builder
          */
-        public JsonObjectBuilder put(String name, Collection<?> collection) {
+        public JsonObjectBuilder set(String name, Collection<?> collection) {
             if (collection != null && !collection.isEmpty()) {
                 putInternal(name, fromCollection(collection));
             }
             return this;
+        }
+
+        /**
+         * @deprecated Use {@link #set(String, String)} instead. The {@code put} methods
+         *             are deprecated because {@code JsonObjectBuilder} implements {@link Map},
+         *             whose {@link Map#put(Object, Object)} method has different return semantics
+         *             (returns the previous value, not the builder) and can cause silent issues
+         *             when chaining with boxed types.
+         */
+        @Deprecated(forRemoval = true)
+        public JsonObjectBuilder put(String name, String value) {
+            return set(name, value);
+        }
+
+        /**
+         * @deprecated Use {@link #set(String, JsonObjectBuilder)} instead.
+         *             See {@link #put(String, String)} for details.
+         */
+        @Deprecated(forRemoval = true)
+        public JsonObjectBuilder put(String name, JsonObjectBuilder value) {
+            return set(name, value);
+        }
+
+        /**
+         * @deprecated Use {@link #set(String, JsonArrayBuilder)} instead.
+         *             See {@link #put(String, String)} for details.
+         */
+        @Deprecated(forRemoval = true)
+        public JsonObjectBuilder put(String name, JsonArrayBuilder value) {
+            return set(name, value);
+        }
+
+        /**
+         * @deprecated Use {@link #set(String, boolean)} instead.
+         *             See {@link #put(String, String)} for details.
+         */
+        @Deprecated(forRemoval = true)
+        public JsonObjectBuilder put(String name, boolean value) {
+            return set(name, value);
+        }
+
+        /**
+         * @deprecated Use {@link #set(String, int)} instead.
+         *             See {@link #put(String, String)} for details.
+         */
+        @Deprecated(forRemoval = true)
+        public JsonObjectBuilder put(String name, int value) {
+            return set(name, value);
+        }
+
+        /**
+         * @deprecated Use {@link #set(String, long)} instead.
+         *             See {@link #put(String, String)} for details.
+         */
+        @Deprecated(forRemoval = true)
+        public JsonObjectBuilder put(String name, long value) {
+            return set(name, value);
+        }
+
+        /**
+         * @deprecated Use {@link #set(String, double)} instead.
+         *             See {@link #put(String, String)} for details.
+         */
+        @Deprecated(forRemoval = true)
+        public JsonObjectBuilder put(String name, double value) {
+            return set(name, value);
+        }
+
+        /**
+         * @deprecated Use {@link #set(String, Map)} instead.
+         *             See {@link #put(String, String)} for details.
+         */
+        @Deprecated(forRemoval = true)
+        public JsonObjectBuilder put(String name, Map<String, ?> map) {
+            return set(name, map);
+        }
+
+        /**
+         * @deprecated Use {@link #set(String, Collection)} instead.
+         *             See {@link #put(String, String)} for details.
+         */
+        @Deprecated(forRemoval = true)
+        public JsonObjectBuilder put(String name, Collection<?> collection) {
+            return set(name, collection);
         }
 
         public boolean has(String name) {
@@ -611,28 +820,28 @@ public final class Json {
                 final String attribute = member.attributeName();
                 final JsonValue value = member.value();
                 if (value instanceof JsonString jsonStr) {
-                    put(attribute, jsonStr.value());
+                    set(attribute, jsonStr.value());
                 } else if (value instanceof JsonInteger jsonInt) {
                     final long longValue = jsonInt.longValue();
                     final int intValue = (int) longValue;
                     if (longValue == intValue) {
-                        put(attribute, intValue);
+                        set(attribute, intValue);
                     } else {
-                        put(attribute, longValue);
+                        set(attribute, longValue);
                     }
                 } else if (value instanceof JsonBoolean jsonBool) {
-                    put(attribute, jsonBool.value());
+                    set(attribute, jsonBool.value());
                 } else if (value instanceof JsonArray jsonArr) {
                     final JsonArrayBuilder arrayBuilder = Json.array(ignoreEmptyBuilders);
                     arrayBuilder.transform(jsonArr, transform);
                     if (!arrayBuilder.isEmpty()) {
-                        put(attribute, arrayBuilder);
+                        set(attribute, arrayBuilder);
                     }
                 } else if (value instanceof JsonObject jsonObj) {
                     final JsonObjectBuilder objectBuilder = Json.object(ignoreEmptyBuilders);
                     objectBuilder.transform(jsonObj, transform);
                     if (!objectBuilder.isEmpty()) {
-                        put(attribute, objectBuilder);
+                        set(attribute, objectBuilder);
                     }
                 }
             }
@@ -690,23 +899,23 @@ public final class Json {
         for (Map.Entry<String, ?> entry : map.entrySet()) {
             Object v = entry.getValue();
             if (v instanceof String s) {
-                builder.put(entry.getKey(), s);
+                builder.set(entry.getKey(), s);
             } else if (v instanceof Integer i) {
-                builder.put(entry.getKey(), i);
+                builder.set(entry.getKey(), (int) i);
             } else if (v instanceof Long l) {
-                builder.put(entry.getKey(), l);
+                builder.set(entry.getKey(), (long) l);
             } else if (v instanceof Double d) {
-                builder.put(entry.getKey(), d);
+                builder.set(entry.getKey(), (double) d);
             } else if (v instanceof Float f) {
-                builder.put(entry.getKey(), (double) f);
+                builder.set(entry.getKey(), (double) f);
             } else if (v instanceof Boolean b) {
-                builder.put(entry.getKey(), b);
+                builder.set(entry.getKey(), (boolean) b);
             } else if (v instanceof Map<?, ?> m) {
-                builder.put(entry.getKey(), fromMap((Map<String, ?>) m));
+                builder.set(entry.getKey(), fromMap((Map<String, ?>) m));
             } else if (v instanceof Collection<?> c) {
-                builder.put(entry.getKey(), fromCollection(c));
+                builder.set(entry.getKey(), fromCollection(c));
             } else if (v != null) {
-                builder.put(entry.getKey(), v.toString());
+                builder.set(entry.getKey(), v.toString());
             }
         }
         return builder;
@@ -724,23 +933,23 @@ public final class Json {
         JsonArrayBuilder builder = array(collection.size());
         for (Object v : collection) {
             if (v instanceof String s) {
-                builder.add(s);
+                builder.append(s);
             } else if (v instanceof Integer i) {
-                builder.add(i);
+                builder.append((int) i);
             } else if (v instanceof Long l) {
-                builder.add(l);
+                builder.append((long) l);
             } else if (v instanceof Double d) {
-                builder.add(d);
+                builder.append((double) d);
             } else if (v instanceof Float f) {
-                builder.add((double) f);
+                builder.append((double) f);
             } else if (v instanceof Boolean b) {
-                builder.add(b);
+                builder.append((boolean) b);
             } else if (v instanceof Map<?, ?> m) {
-                builder.add(fromMap((Map<String, ?>) m));
+                builder.append(fromMap((Map<String, ?>) m));
             } else if (v instanceof Collection<?> c) {
-                builder.add(fromCollection(c));
+                builder.append(fromCollection(c));
             } else if (v != null) {
-                builder.add(v.toString());
+                builder.append(v.toString());
             }
         }
         return builder;

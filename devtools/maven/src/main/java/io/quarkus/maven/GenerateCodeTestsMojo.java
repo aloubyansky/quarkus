@@ -90,13 +90,13 @@ public class GenerateCodeTestsMojo extends GenerateCodeMojo {
 
         final Json.JsonArrayBuilder rules = Json.array();
         packageNames.stream()
-                .map(packageName -> Json.object().put("excludeClasses", packageName + ".**"))
-                .forEach(rules::add);
-        result.put("rules", rules);
+                .map(packageName -> Json.object().set("excludeClasses", packageName + ".**"))
+                .forEach(rules::append);
+        result.set("rules", rules);
 
         final Json.JsonArrayBuilder regexRules = Json.array();
-        regexRules.add(Json.object().put("excludeClasses", ".*_Bean"));
-        result.put("regexRules", regexRules);
+        regexRules.append(Json.object().set("excludeClasses", ".*_Bean"));
+        result.set("regexRules", regexRules);
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(path.toFile(), StandardCharsets.UTF_8))) {
             result.appendTo(writer);

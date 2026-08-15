@@ -34,28 +34,28 @@ public class NativeImageFFMConfigStep {
             final JsonArrayBuilder downcallsArray = Json.array();
             downcalls.stream().distinct().forEach(downcall -> {
                 final JsonObjectBuilder dcb = Json.object();
-                dcb.put("returnType", downcall.getReturnType());
+                dcb.set("returnType", downcall.getReturnType());
                 final JsonArrayBuilder paramsArray = Json.array();
                 paramsArray.addAll(downcall.getParameterTypes());
-                dcb.put("parameterTypes", paramsArray);
-                downcallsArray.add(dcb);
+                dcb.set("parameterTypes", paramsArray);
+                downcallsArray.append(dcb);
             });
-            foreignJson.put("downcalls", downcallsArray);
+            foreignJson.set("downcalls", downcallsArray);
         }
         if (!upcalls.isEmpty()) {
             final JsonArrayBuilder upcallsArray = Json.array();
             upcalls.stream().distinct().forEach(upcall -> {
                 final JsonObjectBuilder ucb = Json.object();
-                ucb.put("returnType", upcall.getReturnType());
+                ucb.set("returnType", upcall.getReturnType());
                 final JsonArrayBuilder paramsArray = Json.array();
                 paramsArray.addAll(upcall.getParameterTypes());
-                ucb.put("parameterTypes", paramsArray);
-                upcallsArray.add(ucb);
+                ucb.set("parameterTypes", paramsArray);
+                upcallsArray.append(ucb);
             });
-            foreignJson.put("upcalls", upcallsArray);
+            foreignJson.set("upcalls", upcallsArray);
         }
         final JsonObjectBuilder root = Json.object();
-        root.put("foreign", foreignJson);
+        root.set("foreign", foreignJson);
         // The nested location seems important to the native-image metadata lookup.
         reachabilityMetadata.produce(new GeneratedResourceBuildItem(
                 /*
