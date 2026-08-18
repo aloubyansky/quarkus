@@ -94,6 +94,16 @@ public class LazySourceDir implements SourceDir, Serializable {
     }
 
     @Override
+    public PathFilter getSourceFilter() {
+        return srcFilter;
+    }
+
+    @Override
+    public PathFilter getDestinationFilter() {
+        return destFilter;
+    }
+
+    @Override
     public PathTree getOutputTree() {
         return new DirectoryPathTree(destDir, destFilter);
     }

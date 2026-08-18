@@ -7,6 +7,7 @@ import java.util.Map;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.model.Mappable;
 import io.quarkus.bootstrap.model.MappableCollectionFactory;
+import io.quarkus.paths.PathFilter;
 import io.quarkus.paths.PathTree;
 
 public interface SourceDir extends Mappable {
@@ -31,6 +32,14 @@ public interface SourceDir extends Mappable {
     Path getOutputDir();
 
     Path getAptSourcesDir();
+
+    default PathFilter getSourceFilter() {
+        return null;
+    }
+
+    default PathFilter getDestinationFilter() {
+        return null;
+    }
 
     PathTree getOutputTree();
 

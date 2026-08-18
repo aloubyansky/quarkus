@@ -41,7 +41,7 @@ public class MutableStandardJvmOption extends MutableBaseJvmOption<MutableStanda
     }
 
     @Override
-    protected String getPropertyGroupPrefix() {
+    public String getPropertyGroupPrefix() {
         return PROPERTY_GROUP_PREFIX;
     }
 

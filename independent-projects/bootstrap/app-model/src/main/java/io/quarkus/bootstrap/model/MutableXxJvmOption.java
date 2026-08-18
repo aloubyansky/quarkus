@@ -32,7 +32,7 @@ public class MutableXxJvmOption extends MutableBaseJvmOption<MutableXxJvmOption>
     }
 
     @Override
-    protected String getPropertyGroupPrefix() {
+    public String getPropertyGroupPrefix() {
         return PROPERTY_GROUP_PREFIX;
     }
 

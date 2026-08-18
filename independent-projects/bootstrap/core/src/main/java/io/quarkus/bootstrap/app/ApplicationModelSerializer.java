@@ -12,21 +12,17 @@ import java.util.HashMap;
 import java.util.Map;
 
 import io.quarkus.bootstrap.BootstrapConstants;
-import io.quarkus.bootstrap.json.Json;
 import io.quarkus.bootstrap.json.JsonArray;
 import io.quarkus.bootstrap.json.JsonObject;
 import io.quarkus.bootstrap.json.JsonReader;
 import io.quarkus.bootstrap.json.JsonValue;
 import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.bootstrap.model.ApplicationModelBuilder;
-import io.quarkus.bootstrap.model.MappableCollectionFactory;
 
 /**
  * Utility class providing various serializing and deserializing methods for {@link ApplicationModel}
  */
 public class ApplicationModelSerializer {
-
-    private static final MappableCollectionFactory JSON_CONTAINER_FACTORY = new JsonCollectionFactory();
 
     private static final String QUARKUS_APPLICATION_MODEL_SERIALIZATION_FORMAT_PROP = "quarkus.bootstrap.application-model.serialization.format";
     // whether to use Java Object Serialization as a format
@@ -91,7 +87,7 @@ public class ApplicationModelSerializer {
         if (JOS) {
             serializeWithJos(model, serializedModel);
         } else {
-            Json.fromMap(model.asMap()).writeTo(serializedModel);
+            ApplicationModelJsonSerializer.toJson(model).writeTo(serializedModel);
         }
         return serializedModel;
     }
@@ -173,7 +169,7 @@ public class ApplicationModelSerializer {
      * @throws IOException in case of a failure
      */
     private static void toJson(ApplicationModel appModel, Path file) throws IOException {
-        ((Json.JsonObjectBuilder) appModel.asMap(JSON_CONTAINER_FACTORY)).writeTo(file);
+        ApplicationModelJsonSerializer.toJson(appModel).writeTo(file);
     }
 
     /**
@@ -260,25 +256,4 @@ public class ApplicationModelSerializer {
         }
     }
 
-    private static class JsonCollectionFactory implements MappableCollectionFactory {
-        @Override
-        public Map<String, Object> newMap() {
-            return Json.object();
-        }
-
-        @Override
-        public Map<String, Object> newMap(int initialCapacity) {
-            return Json.object(initialCapacity);
-        }
-
-        @Override
-        public Collection<Object> newCollection() {
-            return Json.array();
-        }
-
-        @Override
-        public Collection<Object> newCollection(int initialCapacity) {
-            return Json.array(initialCapacity);
-        }
-    }
 }

@@ -47,7 +47,8 @@ public abstract class MutableBaseJvmOption<T extends MutableBaseJvmOption<T>> im
         return (T) this;
     }
 
-    protected abstract String getPropertyGroupPrefix();
+    @Override
+    public abstract String getPropertyGroupPrefix();
 
     protected abstract String getQuarkusExtensionPropertyPrefix();
 

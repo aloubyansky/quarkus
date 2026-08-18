@@ -60,6 +60,14 @@ public class PathFilter implements Mappable, Serializable {
         this.excludes = excludes;
     }
 
+    public List<Pattern> getIncludes() {
+        return includes == null ? List.of() : includes;
+    }
+
+    public List<Pattern> getExcludes() {
+        return excludes == null ? List.of() : excludes;
+    }
+
     public boolean isVisible(String resourceName) {
         if (includes != null && !includes.isEmpty()) {
             int i = 0;

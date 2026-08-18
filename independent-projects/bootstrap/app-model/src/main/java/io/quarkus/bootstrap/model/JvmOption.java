@@ -33,6 +33,13 @@ public interface JvmOption extends Mappable {
     Collection<String> getValues();
 
     /**
+     * Property group prefix for serialization.
+     *
+     * @return property group prefix
+     */
+    String getPropertyGroupPrefix();
+
+    /**
      * Adds an option with its values as a property.
      *
      * @param props properties to add an argument to
