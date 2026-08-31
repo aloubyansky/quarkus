@@ -84,6 +84,14 @@ public interface CycloneDxConfig {
     boolean includeQuarkusComponentScope();
 
     /**
+     * In case Quarkus platform members include product information (CPE, extensions with support scopes
+     * bound to offerings) when this option is enabled, each product will be represented in an SBOM as a component
+     * of type framework and have all the artifacts that belong to it linked as its direct dependencies.
+     */
+    @WithDefault("true")
+    boolean productAttribution();
+
+    /**
      * Embedded dependency SBOM configuration
      */
     @ConfigDocSection
