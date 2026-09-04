@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
@@ -292,16 +293,15 @@ public class CycloneDxSbomGenerator {
         applyProjectLicenseToFiles(bom);
 
         // Record dependency relationships
+        final boolean providesSupported = getSchemaVersion().getVersion() >= 1.6;
         final Map<String, Dependency> dependencyMap = new LinkedHashMap<>();
         for (ComponentDependencies dep : allDependencies) {
-            Dependency d = new Dependency(dep.getBomRef());
-            List<String> sortedDeps = new ArrayList<>(dep.getDependsOn());
-            Collections.sort(sortedDeps);
-            for (String depRef : sortedDeps) {
-                if (!excludedBomRefs.contains(depRef)) {
-                    d.addDependency(new Dependency(depRef));
-                }
-            }
+            // "provides" is a CycloneDX 1.6 construct; on older schema versions the provided refs
+            // are represented as plain dependsOn relationships instead.
+            boolean provides = providesSupported && !dep.getProvides().isEmpty();
+            Dependency d = provides ? new ProvidesDependency(dep.getBomRef()) : new Dependency(dep.getBomRef());
+            addSortedRefs(d, dep.getDependsOn(), excludedBomRefs, false);
+            addSortedRefs(d, dep.getProvides(), excludedBomRefs, provides);
             dependencyMap.put(dep.getBomRef(), d);
         }
 
@@ -322,6 +322,34 @@ public class CycloneDxSbomGenerator {
         bom.setSerialNumber(generateSerialNumber(bom));
 
         return bom;
+    }
+
+    /**
+     * Adds the given bom-refs to a dependency node in sorted order, skipping excluded refs.
+     *
+     * @param d the dependency node to populate
+     * @param refs the bom-refs to add
+     * @param excludedBomRefs refs that must not appear in the output
+     * @param asProvides when {@code true} the refs are added as {@code provides} relationships
+     *        (requires {@code d} to be a {@link ProvidesDependency}); otherwise as {@code dependsOn}
+     */
+    private static void addSortedRefs(Dependency d, Collection<String> refs, Set<String> excludedBomRefs,
+            boolean asProvides) {
+        if (refs.isEmpty()) {
+            return;
+        }
+        List<String> sorted = new ArrayList<>(refs);
+        Collections.sort(sorted);
+        for (String ref : sorted) {
+            if (excludedBomRefs.contains(ref)) {
+                continue;
+            }
+            if (asProvides) {
+                ((ProvidesDependency) d).addProvides(ref);
+            } else {
+                d.addDependency(new Dependency(ref));
+            }
+        }
     }
 
     private void resolveContributionMetadata() {
@@ -438,7 +466,7 @@ public class CycloneDxSbomGenerator {
     private String generateSerialNumber(Bom bom) {
         final String content;
         try {
-            content = BomGeneratorFactory.createJson(getSchemaVersion(), bom).toJsonString(false);
+            content = new ProvidesAwareBomJsonGenerator(bom, getSchemaVersion()).toJsonString(false);
         } catch (Throwable e) {
             throw new RuntimeException("Failed to serialize the SBOM to compute its serial number", e);
         }
@@ -913,7 +941,7 @@ public class CycloneDxSbomGenerator {
         final String sbomContent;
         if (format.equalsIgnoreCase("json")) {
             try {
-                sbomContent = BomGeneratorFactory.createJson(specVersion, bom).toJsonString(prettyPrint);
+                sbomContent = new ProvidesAwareBomJsonGenerator(bom, specVersion).toJsonString(prettyPrint);
             } catch (Throwable e) {
                 throw new RuntimeException("Failed to generate an SBOM in JSON format", e);
             }
