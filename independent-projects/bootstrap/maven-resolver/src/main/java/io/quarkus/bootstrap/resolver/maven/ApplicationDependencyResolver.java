@@ -16,14 +16,18 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.function.BiConsumer;
 
+import org.apache.maven.model.Model;
+import org.apache.maven.model.Relocation;
 import org.eclipse.aether.DefaultRepositorySystemSession;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
@@ -48,6 +52,7 @@ import io.quarkus.bootstrap.BootstrapDependencyProcessingException;
 import io.quarkus.bootstrap.model.ApplicationModelBuilder;
 import io.quarkus.bootstrap.model.PlatformImportsImpl;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
+import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.bootstrap.util.DependencyUtils;
 import io.quarkus.bootstrap.workspace.WorkspaceModule;
 import io.quarkus.maven.dependency.ArtifactCoords;
@@ -98,6 +103,7 @@ public class ApplicationDependencyResolver {
     private MavenArtifactResolver resolver;
     private Map<ArtifactKey, Dependency> managedDeps;
     private ApplicationModelBuilder appBuilder;
+    private final Map<ArtifactKey, ArtifactKey> relocationCache = new HashMap<>();
     private boolean collectReloadableModules;
     private DependencyLoggingConfig depLogging;
     private List<Dependency> collectCompileOnly;
@@ -228,6 +234,9 @@ public class ApplicationDependencyResolver {
         final Collection<Dependency> collectedDeps = depsMap.getDependencies();
         final List<io.quarkus.maven.dependency.Dependency> directDeps = new ArrayList<>(collectedDeps.size());
         final List<ArtifactCoords> depCoords = new ArrayList<>(collectedDeps.size());
+        // Track resolved keys to avoid duplicates (Maven's dependency collector may include both
+        // original and relocated artifacts in collectedDeps)
+        final Set<ArtifactKey> resolvedKeys = new HashSet<>(collectedDeps.size());
         for (Dependency dep : collectedDeps) {
             final Artifact a = dep.getArtifact();
             var depBuilder = DependencyBuilder.newInstance()
@@ -237,7 +246,22 @@ public class ApplicationDependencyResolver {
                     .setType(DependencyUtils.getType(a))
                     .setVersion(a.getVersion())
                     .setScope(dep.getScope());
-            var appDep = appBuilder.getDependency(depBuilder.getKey());
+            var depKey = depBuilder.getKey();
+            var appDep = appBuilder.getDependency(depKey);
+            if (appDep == null) {
+                appDep = resolveRelocation(a, depBuilder);
+            }
+            // Determine the final resolved key (after relocation if any)
+            final ArtifactKey resolvedKey;
+            if (appDep != null) {
+                resolvedKey = appDep.getKey();
+            } else {
+                resolvedKey = depKey;
+            }
+            // Skip if we've already processed this resolved dependency
+            if (!resolvedKeys.add(resolvedKey)) {
+                continue;
+            }
             if (appDep == null) {
                 depBuilder.setFlags(DependencyFlags.MISSING_FROM_APPLICATION);
             } else {
@@ -254,6 +278,106 @@ public class ApplicationDependencyResolver {
         }
         builder.setDependencies(depCoords)
                 .setDirectDependencies(directDeps);
+    }
+
+    /**
+     * When a dependency is not found in the application model, check if it was relocated
+     * by resolving its artifact descriptor. If a relocation is found and the relocation target
+     * exists in the application model, update the dependency builder coordinates and return
+     * the target dependency.
+     */
+    private ResolvedDependencyBuilder resolveRelocation(Artifact artifact, DependencyBuilder depBuilder) {
+        var artifactKey = getKey(artifact);
+        var cachedKey = relocationCache.get(artifactKey);
+        if (cachedKey != null) {
+            if (!cachedKey.equals(artifactKey)) {
+                depBuilder.setGroupId(cachedKey.getGroupId())
+                        .setArtifactId(cachedKey.getArtifactId());
+                return appBuilder.getDependency(cachedKey);
+            }
+            return null;
+        }
+
+        Artifact targetArtifact = resolveTargetArtifact(artifact, getManagedVersion(artifactKey));
+        depBuilder.setVersion(targetArtifact.getVersion());
+        if (!targetArtifact.getGroupId().equals(artifactKey.getGroupId())
+                || !targetArtifact.getArtifactId().equals(artifactKey.getArtifactId())) {
+            var relocatedKey = getKey(targetArtifact);
+            relocationCache.put(artifactKey, relocatedKey);
+            depBuilder.setGroupId(relocatedKey.getGroupId());
+            depBuilder.setArtifactId(relocatedKey.getArtifactId());
+            return appBuilder.getDependency(relocatedKey);
+        }
+        relocationCache.put(artifactKey, artifactKey);
+        return null;
+    }
+
+    private String getManagedVersion(ArtifactKey artifactKey) {
+        var managed = managedDeps != null ? managedDeps.get(artifactKey) : null;
+        return managed != null ? managed.getArtifact().getVersion() : null;
+    }
+
+    /**
+     * Checks whether the artifact has a configured relocation and, if so, returns the target artifact.
+     * Otherwise, returns the original artifact.
+     *
+     * @param artifact artifact to resolve the POM for
+     * @return relocation target or the original artifact in case relocation was not configured or could not be resolved
+     */
+    private Artifact resolveTargetArtifact(Artifact artifact, String managedVersion) {
+        if (managedVersion != null && !managedVersion.equals(artifact.getVersion())) {
+            artifact = artifact.setVersion(artifact.getVersion());
+        }
+        try {
+            Artifact pomArtifact = new DefaultArtifact(artifact.getGroupId(), artifact.getArtifactId(),
+                    ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_POM,
+                    managedVersion == null ? artifact.getVersion() : managedVersion);
+
+            var pomResult = resolver.resolve(pomArtifact);
+            if (pomResult.getArtifact().getFile() == null) {
+                return artifact;
+            }
+
+            Model model = ModelUtils.readModel(pomResult.getArtifact().getFile().toPath());
+            Relocation relocation = model.getDistributionManagement() == null ? null
+                    : model.getDistributionManagement().getRelocation();
+            if (relocation == null) {
+                return artifact;
+            }
+
+            if (hasUnresolvedProperties(relocation)) {
+                return resolver.resolveDescriptor(artifact).getArtifact();
+            }
+
+            managedVersion = getManagedVersion(ArtifactKey.of(relocation.getGroupId(), relocation.getArtifactId(),
+                    artifact.getClassifier(), artifact.getExtension()));
+
+            Artifact target = new DefaultArtifact(
+                    relocation.getGroupId(),
+                    relocation.getArtifactId(),
+                    artifact.getClassifier(),
+                    artifact.getExtension(),
+                    managedVersion == null ? relocation.getVersion() : managedVersion);
+
+            return resolveTargetArtifact(target, null);
+        } catch (BootstrapMavenException | IOException e) {
+            log.debugf("Failed to resolve POM for relocation check %s:%s:%s: %s",
+                    artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion(), e.getMessage());
+            return artifact;
+        }
+    }
+
+    /**
+     * Checks if the relocation contains unresolved property placeholders (e.g., ${version}).
+     */
+    private boolean hasUnresolvedProperties(Relocation relocation) {
+        return containsPropertyExpr(relocation.getGroupId())
+                || containsPropertyExpr(relocation.getArtifactId())
+                || containsPropertyExpr(relocation.getVersion());
+    }
+
+    private static boolean containsPropertyExpr(String s) {
+        return s != null && s.contains("${");
     }
 
     private static ArtifactCoords toPlainArtifactCoords(io.quarkus.maven.dependency.Dependency dep) {
@@ -316,14 +440,20 @@ public class ApplicationDependencyResolver {
         handleExcludedArtifacts();
 
         // set collected direct dependencies
-        setDirectDeps(appBuilder.getApplicationArtifact());
-        for (var d : appBuilder.getDependencies()) {
-            setDirectDeps(d);
-        }
+        setDirectDeps();
 
         if (depLogging != null) {
             new AppDepLogger().log(app);
         }
+    }
+
+    private void setDirectDeps() {
+        ModelResolutionTaskRunner taskRunner = getTaskRunner();
+        taskRunner.run(() -> setDirectDeps(appBuilder.getApplicationArtifact()));
+        for (var d : appBuilder.getDependencies()) {
+            taskRunner.run(() -> setDirectDeps(d));
+        }
+        taskRunner.waitForCompletion();
     }
 
     private void handleExcludedArtifacts() {
