@@ -17,6 +17,10 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 import org.jboss.logging.Logger;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassVisitor;
+import org.objectweb.asm.ModuleVisitor;
+import org.objectweb.asm.Opcodes;
 
 import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.commons.classloading.ClassLoaderHelper;
@@ -52,6 +56,7 @@ class JarTreeShakeInput implements AutoCloseable {
     private static final String SISU_NAMED_RESOURCE = "META-INF/sisu/javax.inject.Named";
     private static final String META_INF_VERSIONS = "META-INF/versions";
     private static final String META_INF_SERVICES = "META-INF/services/";
+    private static final String MODULE_INFO_CLASS = "module-info.class";
 
     /** Configured tree-shake mode controlling analysis aggressiveness. */
     final TreeShakeConfig.TreeShakeMode treeShakeMode;
@@ -316,6 +321,10 @@ class JarTreeShakeInput implements AutoCloseable {
             }
             openPathTree(dep, openTrees).walkRaw(visit -> {
                 String entry = visit.getResourceName();
+                if (isModuleInfoEntry(entry)) {
+                    parseModuleInfoProviders(visit.getPath(), serviceProviders);
+                    return;
+                }
                 if (isClassEntry(entry)) {
                     processRuntimeClassEntry(entry, visit.getPath(), dep, appJavaVersion, addClassesAsRoots,
                             roots, depBytecode, classToDep, depBytecodeVersion,
@@ -450,6 +459,10 @@ class JarTreeShakeInput implements AutoCloseable {
             Map<ArtifactKey, OpenPathTree> openTrees) {
         openPathTree(appModel.getAppArtifact(), openTrees).walk(visit -> {
             String entry = visit.getResourceName();
+            if (isModuleInfoEntry(entry)) {
+                parseModuleInfoProviders(visit.getPath(), serviceProviders);
+                return;
+            }
             if (isClassEntry(entry)) {
                 appBytecode.put(classNameOf(entry), new BytecodeSupplier(visit.getPath()));
                 return;
@@ -602,6 +615,53 @@ class JarTreeShakeInput implements AutoCloseable {
      */
     static String classNameOf(String resourceName, int classNameStartIndex) {
         return resourceName.substring(classNameStartIndex, resourceName.length() - 6).replace('/', '.');
+    }
+
+    /**
+     * Checks whether the entry is a module descriptor, either at the root
+     * or in a multi-release {@code META-INF/versions/N/} directory.
+     */
+    static boolean isModuleInfoEntry(String resourceName) {
+        if (resourceName.equals(MODULE_INFO_CLASS)) {
+            return true;
+        }
+        if (!resourceName.startsWith(META_INF_VERSIONS + "/") || !resourceName.endsWith("/" + MODULE_INFO_CLASS)) {
+            return false;
+        }
+        // the version directory must be the only one between the prefix and the descriptor
+        int versionEnd = resourceName.indexOf('/', META_INF_VERSIONS.length() + 1);
+        return versionEnd == resourceName.length() - MODULE_INFO_CLASS.length() - 1;
+    }
+
+    /**
+     * Parses the {@code provides} directives of a {@code module-info.class}, grouping provider
+     * class names by service interface. Modules may register service providers only in their
+     * descriptor (without a {@code META-INF/services/} file), in which case they are found
+     * by {@code ServiceLoader} when the application runs on the module path.
+     */
+    static void parseModuleInfoProviders(Path file, Map<String, Set<String>> serviceProviders) {
+        final byte[] bytecode;
+        try {
+            bytecode = Files.readAllBytes(file);
+        } catch (IOException e) {
+            log.debugf(e, "Failed to read module descriptor: %s", file);
+            return;
+        }
+        new ClassReader(bytecode).accept(new ClassVisitor(Opcodes.ASM9) {
+            @Override
+            public ModuleVisitor visitModule(String name, int access, String version) {
+                return new ModuleVisitor(Opcodes.ASM9) {
+                    @Override
+                    public void visitProvide(String service, String... providers) {
+                        Set<String> names = serviceProviders.computeIfAbsent(service.replace('/', '.'),
+                                k -> new HashSet<>());
+                        for (String provider : providers) {
+                            names.add(provider.replace('/', '.'));
+                        }
+                    }
+                };
+            }
+        }, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
     }
 
     /**
