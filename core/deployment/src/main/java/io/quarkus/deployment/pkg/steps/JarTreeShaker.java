@@ -137,7 +137,14 @@ class JarTreeShaker {
         // These variants may reference classes not present in the analyzed version
         // (e.g. BouncyCastle's version-25 SSLSessionUtil references ImportSSLSession_25).
         if (!input.higherVersionBytecode.isEmpty()) {
-            traceHigherVersionReferences(reachable);
+            // Classes reached through higher-version bytecode may satisfy conditional roots,
+            // whose classes may in turn have higher-version bytecode.
+            int preSize;
+            do {
+                preSize = reachable.size();
+                traceHigherVersionReferences(reachable);
+                reachable = evaluateConditionalRoots(reachable);
+            } while (reachable.size() != preSize);
         }
 
         if (bfsScanned != null) {

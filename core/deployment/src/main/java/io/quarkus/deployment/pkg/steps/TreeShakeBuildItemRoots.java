@@ -8,6 +8,7 @@ import io.quarkus.deployment.builditem.nativeimage.JniRuntimeAccessBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.JniRuntimeAccessFieldBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.JniRuntimeAccessMethodBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.NativeImageConfigBuildItem;
+import io.quarkus.deployment.builditem.nativeimage.NativeImageSecurityProviderBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.ReflectiveClassBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.ReflectiveFieldBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.ReflectiveMethodBuildItem;
@@ -72,7 +73,7 @@ final class TreeShakeBuildItemRoots {
 
     /**
      * Roots from build items that are only meaningful to {@code native-image}:
-     * class initialization settings and GraalVM Features.
+     * class initialization settings, GraalVM Features and security providers.
      *
      * @param roots receives the dot-separated names of root classes, possibly more than once
      */
@@ -81,6 +82,7 @@ final class TreeShakeBuildItemRoots {
             List<RuntimeReinitializedClassBuildItem> runtimeReinitializedClasses,
             List<NativeImageFeatureBuildItem> nativeImageFeatures,
             List<NativeImageConfigBuildItem> nativeImageConfigs,
+            List<NativeImageSecurityProviderBuildItem> securityProviders,
             Consumer<String> roots) {
         for (RuntimeInitializedClassBuildItem item : runtimeInitializedClasses) {
             roots.accept(item.getClassName());
@@ -95,6 +97,9 @@ final class TreeShakeBuildItemRoots {
             for (String className : item.getRuntimeInitializedClasses()) {
                 roots.accept(className);
             }
+        }
+        for (NativeImageSecurityProviderBuildItem item : securityProviders) {
+            roots.accept(item.getSecurityProvider());
         }
     }
 }

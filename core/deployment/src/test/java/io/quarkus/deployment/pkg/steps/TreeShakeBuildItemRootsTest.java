@@ -13,6 +13,7 @@ import io.quarkus.deployment.builditem.nativeimage.JniRuntimeAccessBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.JniRuntimeAccessFieldBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.JniRuntimeAccessMethodBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.NativeImageConfigBuildItem;
+import io.quarkus.deployment.builditem.nativeimage.NativeImageSecurityProviderBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.ReflectiveClassBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.ReflectiveFieldBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.ReflectiveMethodBuildItem;
@@ -49,9 +50,11 @@ class TreeShakeBuildItemRootsTest {
                 List.of(new RuntimeReinitializedClassBuildItem("n.Reinit")),
                 List.of(new NativeImageFeatureBuildItem("n.Feature")),
                 List.of(NativeImageConfigBuildItem.builder().addRuntimeInitializedClass("n.ConfigRun").build()),
+                List.of(new NativeImageSecurityProviderBuildItem("n.Provider")),
                 roots::add);
 
-        assertThat(roots).containsExactlyInAnyOrder("n.Run", "n.Reinit", "n.Feature", "n.ConfigRun");
+        assertThat(roots).containsExactlyInAnyOrder("n.Run", "n.Reinit", "n.Feature", "n.ConfigRun",
+                "n.Provider");
     }
 
     @Test
@@ -59,7 +62,7 @@ class TreeShakeBuildItemRootsTest {
         Set<String> roots = new HashSet<>();
         TreeShakeBuildItemRoots.allModes(List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
                 roots::add);
-        TreeShakeBuildItemRoots.nativeOnly(List.of(), List.of(), List.of(), List.of(), roots::add);
+        TreeShakeBuildItemRoots.nativeOnly(List.of(), List.of(), List.of(), List.of(), List.of(), roots::add);
         assertThat(roots).isEmpty();
     }
 }

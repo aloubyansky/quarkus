@@ -55,6 +55,72 @@ class JarTreeShakerReachabilityTest {
     }
 
     @Test
+    void substitutionWithReachableTargetIsKept() {
+        JarTreeShakeInput input = TreeShakeInputFixture.builder()
+                .application(classReferencing("app.App", "lib.Target"))
+                .dependency(LIB,
+                        classReferencing("lib.Target"),
+                        classReferencing("lib.Subst", "lib.Helper"),
+                        classReferencing("lib.Helper"),
+                        classReferencing("lib.Other"))
+                .conditionalRoot("lib.Target", "lib.Subst")
+                .build();
+
+        assertThat(keptDependencyClasses(input)).containsExactlyInAnyOrder("lib.Target", "lib.Subst", "lib.Helper");
+    }
+
+    @Test
+    void substitutionWithUnreachableTargetIsRemoved() {
+        JarTreeShakeInput input = TreeShakeInputFixture.builder()
+                .application(classReferencing("app.App"))
+                .dependency(LIB,
+                        classReferencing("lib.Target"),
+                        classReferencing("lib.Subst", "lib.Helper"),
+                        classReferencing("lib.Helper"))
+                .conditionalRoot("lib.Target", "lib.Subst")
+                .build();
+
+        assertThat(keptDependencyClasses(input)).isEmpty();
+    }
+
+    @Test
+    void referencedSubstitutionKeepsItsTarget() {
+        JarTreeShakeInput input = TreeShakeInputFixture.builder()
+                .application(classReferencing("app.App", "lib.Subst"))
+                .dependency(LIB, classReferencing("lib.Target"), classReferencing("lib.Subst"))
+                .conditionalRoot("lib.Target", "lib.Subst")
+                .conditionalRoot("lib.Subst", "lib.Target")
+                .build();
+
+        assertThat(keptDependencyClasses(input)).containsExactlyInAnyOrder("lib.Target", "lib.Subst");
+    }
+
+    @Test
+    void conditionsAreReevaluatedAfterHigherVersionReferences() {
+        JarTreeShakeInput input = TreeShakeInputFixture.builder()
+                .application(classReferencing("app.App", "lib.A"))
+                .dependency(LIB,
+                        classReferencing("lib.A"),
+                        classReferencing("lib.Target"),
+                        classReferencing("lib.Subst"))
+                .higherVersion(classReferencing("lib.A", "lib.Target"))
+                .conditionalRoot("lib.Target", "lib.Subst")
+                .build();
+
+        assertThat(keptDependencyClasses(input)).containsExactlyInAnyOrder("lib.A", "lib.Target", "lib.Subst");
+    }
+
+    @Test
+    void rootBytecodeReferencesAreKept() {
+        JarTreeShakeInput input = TreeShakeInputFixture.builder()
+                .rootBytecode(classReferencing("predef.Foo", "lib.Base"))
+                .dependency(LIB, classReferencing("lib.Base"), classReferencing("lib.Other"))
+                .build();
+
+        assertThat(keptDependencyClasses(input)).containsExactly("lib.Base");
+    }
+
+    @Test
     void annotationClassLiteralIsTraced() {
         JarTreeShakeInput input = TreeShakeInputFixture.builder()
                 .dependency(LIB,
