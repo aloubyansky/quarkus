@@ -294,6 +294,10 @@ public class TreeShakeIT extends MojoTestBase {
         assertJarNotContains(libDir, "lib-native-substitution", "org/acme/substitution/AppSubstitutionHelper.class");
         assertJarContains(libDir, "lib-native-substitution", "org/acme/substitution/InnerHolder$Used.class");
         assertJarNotContains(libDir, "lib-native-substitution", "org/acme/substitution/Target_InnerHolder_Used.class");
+        // the enclosing class of a reachable member class is kept, but a member class that isn't reachable
+        // itself is removed, unless getDeclaredClasses() is called on the enclosing class (native mode here)
+        assertJarContains(libDir, "lib-native-substitution", "org/acme/substitution/InnerHolder.class");
+        assertJarNotContains(libDir, "lib-native-substitution", "org/acme/substitution/InnerHolder$Unused.class");
         assertJarNotContains(libDir, "lib-native-substitution", "org/acme/substitution/UnusedBase.class");
         assertJarNotContains(libDir, "lib-native-substitution", "org/acme/substitution/UnusedHelper.class");
 
@@ -306,6 +310,10 @@ public class TreeShakeIT extends MojoTestBase {
         assertJarContains(libDir, "lib-loadclass-chain", "org/acme/loadchain/AlphaTarget.class");
         assertJarContains(libDir, "lib-loadclass-chain", "org/acme/loadchain/BetaTarget.class");
         assertJarContains(libDir, "lib-loadclass-chain", "org/acme/loadchain/ChainProvider.class");
+        // the member class is only discovered by the chain analysis, and its enclosing class is only kept
+        // because ChainProvider calls getSimpleName() on it
+        assertJarContains(libDir, "lib-loadclass-chain", "org/acme/loadchain/ChainHolder$GammaTarget.class");
+        assertJarContains(libDir, "lib-loadclass-chain", "org/acme/loadchain/ChainHolder.class");
         assertJarNotContains(libDir, "lib-loadclass-chain", "org/acme/loadchain/UnusedChain.class");
 
         // Package-info classes (must be preserved even though nothing references them in bytecode)
