@@ -8,8 +8,6 @@ import static io.quarkus.deployment.pkg.steps.TreeShakeInputFixture.classWithMem
 import static io.quarkus.deployment.pkg.steps.TreeShakeInputFixture.keptDependencyClasses;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.List;
-
 import org.junit.jupiter.api.Test;
 
 class JarTreeShakerReachabilityTest {
@@ -137,6 +135,34 @@ class JarTreeShakerReachabilityTest {
     }
 
     @Test
+    void memberClassesOfReachableClassAreKept() {
+        JarTreeShakeInput input = TreeShakeInputFixture.builder()
+                .application(classReferencing("app.App", "lib.Outer"))
+                .dependency(LIB,
+                        classWithMembers("lib.Outer", "lib.Outer$Member"),
+                        classReferencing("lib.Outer$Member", "lib.MemberOnly"),
+                        classReferencing("lib.MemberOnly"),
+                        classReferencing("lib.Other"))
+                .build();
+
+        // reflective enumeration of member classes cannot be traced to a receiver, so a reachable class
+        // keeps the member classes it declares; they are only made loadable, so lib.MemberOnly is not kept
+        assertThat(keptDependencyClasses(input)).containsExactlyInAnyOrder("lib.Outer", "lib.Outer$Member");
+    }
+
+    @Test
+    void memberClassesOfUnreachableClassAreRemoved() {
+        JarTreeShakeInput input = TreeShakeInputFixture.builder()
+                .application(classReferencing("app.App"))
+                .dependency(LIB,
+                        classWithMembers("lib.Outer", "lib.Outer$Member"),
+                        classReferencing("lib.Outer$Member"))
+                .build();
+
+        assertThat(keptDependencyClasses(input)).isEmpty();
+    }
+
+    @Test
     void enclosingClassOfReachableMemberClassIsKept() {
         JarTreeShakeInput input = TreeShakeInputFixture.builder()
                 .application(classReferencing("app.App", "lib.Outer$Inner"))
@@ -164,7 +190,7 @@ class JarTreeShakerReachabilityTest {
     }
 
     @Test
-    void enclosingClassIsKeptLoadableWithoutTracingItsCode() {
+    void enclosingClassOfReachableMemberClassIsTraced() {
         JarTreeShakeInput input = TreeShakeInputFixture.builder()
                 .application(classReferencing("app.App", "lib.Outer$Inner"))
                 .dependency(LIB,
@@ -173,8 +199,10 @@ class JarTreeShakerReachabilityTest {
                         classReferencing("lib.OuterOnly"))
                 .build();
 
-        // nothing runs lib.Outer's code, so lib.OuterOnly is not needed
-        assertThat(keptDependencyClasses(input)).containsExactlyInAnyOrder("lib.Outer$Inner", "lib.Outer");
+        // the enclosing class is traced, not just made loadable: native-image builds pass --link-at-build-time,
+        // which verifies every method of a kept class and resolves the classes its bodies reference
+        assertThat(keptDependencyClasses(input))
+                .containsExactlyInAnyOrder("lib.Outer$Inner", "lib.Outer", "lib.OuterOnly");
     }
 
     @Test
@@ -188,79 +216,6 @@ class JarTreeShakerReachabilityTest {
 
         // lib.Weird$Name is a top-level class, lib.Weird is unrelated to it
         assertThat(keptDependencyClasses(input)).containsExactly("lib.Weird$Name");
-    }
-
-    @Test
-    void memberClassesAreLoadableWhenGetDeclaredClassesIsCalledOnTheirEnclosingClass() {
-        JarTreeShakeInput input = getDeclaredClassesCallInput("getDeclaredClasses");
-
-        // lib.Holder.getDeclaredClasses() loads lib.Holder$Member, but nothing runs its code
-        assertThat(keptDependencyClasses(input))
-                .containsExactlyInAnyOrder("lib.Caller", "lib.Holder", "lib.Holder$Member");
-    }
-
-    @Test
-    void memberClassesAreLoadableWhenGetClassesIsCalledOnTheirEnclosingClass() {
-        JarTreeShakeInput input = getDeclaredClassesCallInput("getClasses");
-
-        assertThat(keptDependencyClasses(input))
-                .containsExactlyInAnyOrder("lib.Caller", "lib.Holder", "lib.Holder$Member");
-    }
-
-    @Test
-    void inheritedMemberClassesAreLoadableWhenGetClassesIsCalled() {
-        JarTreeShakeInput input = classHierarchyCallInput("getClasses");
-
-        // lib.Derived.getClasses() returns only the public member classes, but it computes them by calling
-        // getDeclaredClasses() on lib.Derived and lib.Base, which loads the private ones too
-        assertThat(keptDependencyClasses(input)).containsExactlyInAnyOrder(
-                "lib.Caller", "lib.Derived", "lib.Derived$Pub", "lib.Derived$Priv",
-                "lib.Base", "lib.Base$Pub", "lib.Base$Priv");
-    }
-
-    @Test
-    void inheritedMemberClassesAreRemovedWhenGetDeclaredClassesIsCalled() {
-        JarTreeShakeInput input = classHierarchyCallInput("getDeclaredClasses");
-
-        // lib.Derived.getDeclaredClasses() only returns the member classes lib.Derived declares itself
-        assertThat(keptDependencyClasses(input)).containsExactlyInAnyOrder(
-                "lib.Caller", "lib.Derived", "lib.Derived$Pub", "lib.Derived$Priv", "lib.Base");
-    }
-
-    private static JarTreeShakeInput classHierarchyCallInput(String classMethod) {
-        return TreeShakeInputFixture.builder()
-                .application(classReferencing("app.App", "lib.Caller"))
-                .dependency(LIB,
-                        TreeShakeInputFixture.classCallingClassMethod("lib.Caller", classMethod, "lib.Derived"),
-                        TreeShakeInputFixture.classWithMembers("lib.Derived", "lib.Base",
-                                List.of("lib.Derived$Pub"), List.of("lib.Derived$Priv")),
-                        TreeShakeInputFixture.classWithMembers("lib.Base", null,
-                                List.of("lib.Base$Pub"), List.of("lib.Base$Priv")),
-                        classReferencing("lib.Derived$Pub"),
-                        classReferencing("lib.Derived$Priv"),
-                        classReferencing("lib.Base$Pub"),
-                        classReferencing("lib.Base$Priv"),
-                        classReferencing("lib.Other"))
-                .build();
-    }
-
-    @Test
-    void memberClassesAreRemovedWhenAnUnrelatedClassMethodIsCalled() {
-        JarTreeShakeInput input = getDeclaredClassesCallInput("getInterfaces");
-
-        assertThat(keptDependencyClasses(input)).containsExactlyInAnyOrder("lib.Caller", "lib.Holder");
-    }
-
-    private static JarTreeShakeInput getDeclaredClassesCallInput(String classMethod) {
-        return TreeShakeInputFixture.builder()
-                .application(classReferencing("app.App", "lib.Caller"))
-                .dependency(LIB,
-                        TreeShakeInputFixture.classCallingClassMethod("lib.Caller", classMethod, "lib.Holder"),
-                        classWithMembers("lib.Holder", "lib.Holder$Member"),
-                        TreeShakeInputFixture.nestedClass("lib.Holder$Member", "lib.Holder", "lib.MemberOnly"),
-                        classReferencing("lib.MemberOnly"),
-                        classReferencing("lib.Other"))
-                .build();
     }
 
     @Test

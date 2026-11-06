@@ -294,11 +294,12 @@ public class TreeShakeIT extends MojoTestBase {
         assertJarNotContains(libDir, "lib-native-substitution", "org/acme/substitution/AppSubstitutionHelper.class");
         assertJarContains(libDir, "lib-native-substitution", "org/acme/substitution/InnerHolder$Used.class");
         assertJarNotContains(libDir, "lib-native-substitution", "org/acme/substitution/Target_InnerHolder_Used.class");
-        // the enclosing class of a reachable member class is kept, but a member class that isn't reachable
-        // itself is removed, unless getDeclaredClasses() is called on the enclosing class (native mode here)
+        // the enclosing class of a reachable member class is kept, and a reachable class keeps the member
+        // classes it declares, because reflective enumeration of them cannot be traced to a receiver.
+        // Member classes are only made loadable, so their superclasses are kept but their code is not traced.
         assertJarContains(libDir, "lib-native-substitution", "org/acme/substitution/InnerHolder.class");
-        assertJarNotContains(libDir, "lib-native-substitution", "org/acme/substitution/InnerHolder$Unused.class");
-        assertJarNotContains(libDir, "lib-native-substitution", "org/acme/substitution/UnusedBase.class");
+        assertJarContains(libDir, "lib-native-substitution", "org/acme/substitution/InnerHolder$Unused.class");
+        assertJarContains(libDir, "lib-native-substitution", "org/acme/substitution/UnusedBase.class");
         assertJarNotContains(libDir, "lib-native-substitution", "org/acme/substitution/UnusedHelper.class");
 
         // Serialized resource classes (ObjectInputStream + getResource pattern)
