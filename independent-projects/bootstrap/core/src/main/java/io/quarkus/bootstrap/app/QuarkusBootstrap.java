@@ -150,14 +150,47 @@ public class QuarkusBootstrap implements Serializable {
             }
         }
 
-        final ConfiguredClassLoading classLoadingConfig = ConfiguredClassLoading.builder()
+        return new CuratedApplication(this, curationResult, newClassLoadingConfig(curationResult.getApplicationModel()));
+    }
+
+    /**
+     * Reads the class loading configuration of this bootstrap for the given application model.
+     *
+     * @param appModel application model
+     * @return class loading configuration
+     */
+    ConfiguredClassLoading newClassLoadingConfig(ApplicationModel appModel) {
+        return ConfiguredClassLoading.builder()
                 .setApplicationRoot(applicationRoot)
                 .setDefaultFlatTestClassPath(defaultFlatTestClassPath)
                 .setMode(mode)
                 .addParentFirstArtifacts(parentFirstArtifacts)
-                .setApplicationModel(curationResult.getApplicationModel())
+                .setApplicationModel(appModel)
                 .build();
-        return new CuratedApplication(this, curationResult, classLoadingConfig);
+    }
+
+    /**
+     * Creates a copy of this bootstrap that differs only by its application root, base name and application model.
+     * <p>
+     * Unlike {@link #clonedBuilder()}, the copy also keeps the auxiliary application and host application flags,
+     * the default flat test class path flag, the parent-first artifacts and the dependency info provider.
+     *
+     * @param applicationRoot application root of the copy
+     * @param baseName base name of the copy
+     * @param appModel already resolved application model the copy will use
+     * @return bootstrap for a {@link CuratedApplication#derive(PathCollection, String) derived application}
+     */
+    QuarkusBootstrap derive(PathCollection applicationRoot, String baseName, ApplicationModel appModel) {
+        final Builder builder = clonedBuilder()
+                .setApplicationRoot(applicationRoot)
+                .setBaseName(baseName)
+                .setExistingModel(appModel)
+                .setAuxiliaryApplication(auxiliaryApplication)
+                .setHostApplicationIsTestOnly(hostApplicationIsTestOnly)
+                .setFlatClassPath(defaultFlatTestClassPath)
+                .setDependencyInfoProvider(depInfoProvider);
+        builder.parentFirstArtifacts.addAll(parentFirstArtifacts);
+        return builder.build();
     }
 
     public BootstrapAppModelFactory newAppModelFactory() {

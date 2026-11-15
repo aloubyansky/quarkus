@@ -183,6 +183,51 @@ public class AppMakerHelper {
         return curatedApplication;
     }
 
+    /**
+     * Creates the application of a test profile from the primary application of a test run.
+     * <p>
+     * The application roots of the new application are the roots of the primary application followed by the
+     * additional paths, such as the directory with the configuration generated for the test profile. Additional
+     * paths that do not exist or are already among the roots are skipped.
+     * <p>
+     * The new application shares the application model and, unless the additional paths change the class loading
+     * configuration, the augmentation class loader of the primary application. The primary application has to stay
+     * open for as long as the new application is in use.
+     *
+     * @param primary primary application of the test run
+     * @param additionalPaths paths to add to the application roots
+     * @param displayName name to use in the base name of the new application
+     * @return application derived from the primary one
+     */
+    public static CuratedApplication deriveApplication(CuratedApplication primary, List<Path> additionalPaths,
+            String displayName) {
+        return primary.derive(appendToApplicationRoots(primary, additionalPaths), displayName + " (QuarkusTest)");
+    }
+
+    /**
+     * Collects the application roots of the given application followed by the existing additional paths that are not
+     * among them yet.
+     *
+     * @param application application providing the initial roots
+     * @param additionalPaths paths to append
+     * @return application roots for an application derived from the given one
+     */
+    private static PathList appendToApplicationRoots(CuratedApplication application, List<Path> additionalPaths) {
+        final PathList.Builder rootBuilder = PathList.builder();
+        for (Path root : application.getQuarkusBootstrap().getApplicationRoot()) {
+            rootBuilder.add(root);
+        }
+        for (Path additionalPath : additionalPaths) {
+            if (additionalPath != null && Files.exists(additionalPath)) {
+                additionalPath = additionalPath.normalize().toAbsolutePath();
+                if (!rootBuilder.contains(additionalPath)) {
+                    rootBuilder.add(additionalPath);
+                }
+            }
+        }
+        return rootBuilder.build();
+    }
+
     // Note that curated application cannot be re-used between restarts, so this application
     // should have been freshly created
     // TODO maybe don't even accept one? is that comment right?

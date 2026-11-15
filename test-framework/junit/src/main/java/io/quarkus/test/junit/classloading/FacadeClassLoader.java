@@ -72,9 +72,14 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
     public static final String DISPLAY_NAME_PREFIX = "JUnit";
     // It would be nice, and maybe theoretically possible, to re-use the curated application? However, the pre-classloadingrewrite version of the codebase did not reuse curated applications between profiles,
     // which suggests it would be a major rewrite to do so. If they are re-used, most things still work, but config when there are multiple profiles does not work; see, for example, integration-tests/smallrye-config
+    // Profile applications are now derived from a primary one and share its augmentation class loader, but not its base runtime class loader.
 
     // We re-use curated applications across application starts; be careful what classloader this class is loaded with
     private static final Map<String, CuratedApplication> curatedApplications = new HashMap<>();
+
+    // The application the profile applications are derived from. It owns the augmentation class loader they share,
+    // it is never used to run tests itself and it is closed when the launcher session is closed
+    private static CuratedApplication primaryApplication;
 
     // JUnit discovery is single threaded, so no need for concurrency on this map
     private final Map<String, QuarkusClassLoader> runtimeClassLoaders = new HashMap<>();
@@ -579,12 +584,62 @@ public final class FacadeClassLoader extends ClassLoader implements Closeable {
         if (curatedApplication == null) {
             String displayName = DISPLAY_NAME_PREFIX + key;
             // TODO should we use clonedBuilder here, like TestSupport does?
-            curatedApplication = AppMakerHelper.makeCuratedApplication(requiredTestClass, additionalPaths, displayName,
-                    isAuxiliaryApplication);
+            curatedApplication = createCuratedApplication(requiredTestClass, additionalPaths, displayName);
             curatedApplications.put(key, curatedApplication);
         }
 
         return curatedApplication;
+    }
+
+    /**
+     * Creates a curated application for the given test class and additional application roots.
+     * <p>
+     * In continuous testing the application is a standalone one. Otherwise, it is derived from the
+     * {@link #getOrCreatePrimaryApplication(Class, boolean) primary application}, so that all the applications of a
+     * test run share one augmentation class loader.
+     *
+     * @param requiredTestClass test class the application is created for, may be {@code null}
+     * @param additionalPaths additional application roots, such as the configuration of a test profile
+     * @param displayName display name of the application
+     * @return new curated application
+     */
+    private CuratedApplication createCuratedApplication(Class<?> requiredTestClass, List<Path> additionalPaths,
+            String displayName) throws Exception {
+        if (isContinuousTesting) {
+            return AppMakerHelper.makeCuratedApplication(requiredTestClass, additionalPaths, displayName,
+                    isAuxiliaryApplication);
+        }
+        return AppMakerHelper.deriveApplication(getOrCreatePrimaryApplication(requiredTestClass, isAuxiliaryApplication),
+                additionalPaths, displayName);
+    }
+
+    /**
+     * Returns the application the profile applications are derived from, creating it on the first call.
+     *
+     * @param requiredTestClass test class used to locate the application, may be {@code null}
+     * @param isAuxiliaryApplication whether the application is an auxiliary one
+     * @return primary application
+     */
+    private static synchronized CuratedApplication getOrCreatePrimaryApplication(Class<?> requiredTestClass,
+            boolean isAuxiliaryApplication) throws Exception {
+        if (primaryApplication == null) {
+            primaryApplication = AppMakerHelper.makeCuratedApplication(requiredTestClass, List.of(),
+                    DISPLAY_NAME_PREFIX + "primary", isAuxiliaryApplication);
+        }
+        return primaryApplication;
+    }
+
+    /**
+     * Closes the primary application and with it the augmentation class loader shared by the profile applications.
+     * <p>
+     * This is meant to be called once no test application is going to be used anymore, which is when the launcher
+     * session is closed.
+     */
+    public static synchronized void closePrimaryApplication() {
+        if (primaryApplication != null) {
+            primaryApplication.close();
+            primaryApplication = null;
+        }
     }
 
     private QuarkusClassLoader getOrCreateBaseClassLoader(String key, Class<?> requiredTestClass) throws Exception {

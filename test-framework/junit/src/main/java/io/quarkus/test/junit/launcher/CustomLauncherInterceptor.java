@@ -146,6 +146,8 @@ public class CustomLauncherInterceptor
     @Override
     public void launcherSessionClosed(LauncherSession session) {
         clearContextClassloader();
+        // Not done when a test plan finishes: failed tests may be re-run in the same session, re-using the applications derived from the primary one
+        FacadeClassLoader.closePrimaryApplication();
     }
 
     private static void clearContextClassloader() {

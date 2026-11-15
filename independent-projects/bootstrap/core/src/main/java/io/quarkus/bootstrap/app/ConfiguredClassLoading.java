@@ -236,4 +236,45 @@ public class ConfiguredClassLoading implements Serializable {
     public Collection<Path> getAdditionalClasspathElements() {
         return additionalPaths;
     }
+
+    /**
+     * Checks whether an augmentation class loader built for this configuration could also be used for the given
+     * configuration.
+     * <p>
+     * Only the settings that affect the content of the augmentation class loader are compared: removed artifacts,
+     * parent-first artifacts, reloadable artifacts and removed resources.
+     * <p>
+     * The flat test class path flag and the additional class path elements are intentionally ignored, since they are
+     * only used when building runtime class loaders.
+     * <p>
+     * A new setting that affects the augmentation class loader has to be added to this check.
+     *
+     * @param other configuration to compare with
+     * @return {@code true} if both configurations result in the same augmentation class loader content
+     */
+    public boolean isCompatibleForAugmentationWith(ConfiguredClassLoading other) {
+        return removedArtifacts.equals(other.removedArtifacts)
+                && parentFirstArtifacts.equals(other.parentFirstArtifacts)
+                && reloadableArtifacts.equals(other.reloadableArtifacts)
+                && sameRemovedResources(other.removedResources);
+    }
+
+    /**
+     * Compares the removed resources of this configuration with the given ones, ignoring the order and the type of
+     * the collections holding the resource names.
+     *
+     * @param otherRemovedResources removed resources of the other configuration
+     * @return {@code true} if the same resources are removed from the same artifacts
+     */
+    private boolean sameRemovedResources(Map<ArtifactKey, Collection<String>> otherRemovedResources) {
+        if (!removedResources.keySet().equals(otherRemovedResources.keySet())) {
+            return false;
+        }
+        for (Map.Entry<ArtifactKey, Collection<String>> e : removedResources.entrySet()) {
+            if (!new HashSet<>(e.getValue()).equals(new HashSet<>(otherRemovedResources.get(e.getKey())))) {
+                return false;
+            }
+        }
+        return true;
+    }
 }

@@ -29,6 +29,7 @@ import io.quarkus.maven.dependency.DependencyFlags;
 import io.quarkus.maven.dependency.ResolvedDependency;
 import io.quarkus.paths.ManifestAttributes;
 import io.quarkus.paths.OpenPathTree;
+import io.quarkus.paths.PathCollection;
 import io.quarkus.paths.PathTree;
 
 /**
@@ -491,16 +492,53 @@ public class CuratedApplication implements Serializable, AutoCloseable {
         if (activeRuntimeClassLoaderCount.get() > 0) {
             return;
         }
-        if (augmentClassLoader != null) {
-            augmentClassLoader.close();
-            augmentClassLoader = null;
-        }
+        closeAugmentClassLoader();
         if (baseRuntimeClassLoader != null) {
             baseRuntimeClassLoader.close();
             baseRuntimeClassLoader = null;
         }
         augmentationElements.clear();
         curatedApplicationContext.clear();
+    }
+
+    /**
+     * Closes the augmentation class loader, if it has been created.
+     * <p>
+     * This is a step of {@link #close()} that can be overridden by applications that do not own their augmentation
+     * class loader.
+     */
+    protected void closeAugmentClassLoader() {
+        if (augmentClassLoader != null) {
+            augmentClassLoader.close();
+            augmentClassLoader = null;
+        }
+    }
+
+    /**
+     * Creates an application that differs from this one only by its application root and base name.
+     * <p>
+     * The new application reuses the application model of this one. If its class loading configuration, which is
+     * read from the new application root, is
+     * {@link ConfiguredClassLoading#isCompatibleForAugmentationWith(ConfiguredClassLoading) compatible} with the
+     * configuration of this application, the new application also shares the augmentation class loader of this
+     * application and never closes it. Otherwise, the new application is a standalone one that creates and closes
+     * its own augmentation class loader.
+     * <p>
+     * The base runtime class loader and the class path elements are never shared.
+     * <p>
+     * The caller has to keep this application open for as long as the applications derived from it are in use.
+     *
+     * @param applicationRoot application root of the new application
+     * @param baseName base name of the new application
+     * @return new application derived from this one
+     */
+    public CuratedApplication derive(PathCollection applicationRoot, String baseName) {
+        final QuarkusBootstrap derivedBootstrap = quarkusBootstrap.derive(applicationRoot, baseName, appModel);
+        final ConfiguredClassLoading derivedClassLoading = derivedBootstrap.newClassLoadingConfig(appModel);
+        if (configuredClassLoading.isCompatibleForAugmentationWith(derivedClassLoading)) {
+            return new DerivedCuratedApplication(this, derivedBootstrap, curationResult, derivedClassLoading);
+        }
+        return new CuratedApplication(derivedBootstrap, curationResult, derivedClassLoading);
     }
 
     /**
