@@ -429,6 +429,43 @@ public class TreeShakeIT extends MojoTestBase {
     }
 
     @Test
+    void testDependencyTrim() throws Exception {
+        RunningInvoker trimInvoker = new RunningInvoker(appDir, false);
+        Properties props = new Properties();
+        // the goal must not depend on the configured tree-shake mode
+        props.setProperty("quarkus.package.jar.tree-shake.mode", "none");
+        MavenProcessInvocationResult result = trimInvoker.execute(
+                List.of("clean compile quarkus:dependency-trim"), Map.of(), props);
+        assertThat(result.getProcess().waitFor()).isEqualTo(0);
+        String log = trimInvoker.log();
+        assertThat(log).containsIgnoringCase("BUILD SUCCESS");
+
+        assertThat(log).contains("Dependency trim report for org.acme.treeshake:tree-shake-app:1.0-SNAPSHOT");
+        // all classes of lib-e are unreachable, it comes in through lib-d
+        assertThat(log).containsPattern("├─ org\\.acme\\.treeshake:lib-d:1\\.0-SNAPSHOT\\R.*"
+                + "└─ org\\.acme\\.treeshake:lib-e:1\\.0-SNAPSHOT +EXCLUDE: no reachable classes \\(2 classes\\)");
+        // a single class of the direct dependency lib-c is reachable
+        assertThat(log).contains("- org.acme.treeshake:lib-c:1.0-SNAPSHOT (1 of 2 classes reachable)",
+                "org.acme.libc.ServiceC");
+        // nothing is packaged
+        assertThat(new File(appDir, "target/quarkus-app")).doesNotExist();
+    }
+
+    @Test
+    void testDependencyTrimForMutableJar() throws Exception {
+        RunningInvoker trimInvoker = new RunningInvoker(appDir, false);
+        Properties props = new Properties();
+        // tree shaking is never performed for a mutable-jar, the goal analyzes a fast-jar instead
+        props.setProperty("quarkus.package.jar.type", "mutable-jar");
+        MavenProcessInvocationResult result = trimInvoker.execute(
+                List.of("clean compile quarkus:dependency-trim"), Map.of(), props);
+        assertThat(result.getProcess().waitFor()).isEqualTo(0);
+        String log = trimInvoker.log();
+        assertThat(log).containsIgnoringCase("BUILD SUCCESS");
+        assertThat(log).containsPattern("org\\.acme\\.treeshake:lib-e:1\\.0-SNAPSHOT +EXCLUDE: no reachable classes");
+    }
+
+    @Test
     void testUberJar() throws Exception {
         RunningInvoker uberInvoker = new RunningInvoker(appDir, false);
         Properties uberProps = new Properties();

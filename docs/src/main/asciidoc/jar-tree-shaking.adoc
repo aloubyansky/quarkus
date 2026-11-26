@@ -240,6 +240,52 @@ All classes from excluded artifacts are preserved regardless of reachability ana
 
 Extensions can also exclude artifacts programmatically by producing a `JarTreeShakeExcludedArtifactBuildItem`.
 
+[[dependency-trim]]
+== Finding unused dependencies
+
+The tree-shake analysis can also help you remove dependencies the application doesn't need, which reduces the application size and the number of artifacts to scan for vulnerabilities.
+The `quarkus:dependency-trim` Maven goal runs the analysis of a production build without packaging the application and logs a report:
+
+[source,bash]
+----
+mvn compile quarkus:dependency-trim
+----
+
+The goal analyzes the application regardless of the configured `quarkus.package.jar.tree-shake.mode`, honoring `quarkus.package.jar.tree-shake.excluded-artifacts`, so the report matches what a build with tree-shaking enabled would remove.
+It doesn't modify the project.
+
+The report starts with the part of the dependency tree that leads to the dependencies that could be trimmed, each placed on its shortest path from the application, the way `quarkus:dependency-tree` would show it.
+Branches with nothing to trim are left out.
+The dependencies in the tree are annotated as follows:
+
+* `EXCLUDE:` marks a dependency with no reachable classes whose exclusion removes only dependencies with no reachable classes, which are shown under it.
+Its parent in the tree is where a Maven `<exclusion>` would go.
+If the dependency is also a dependency of other dependencies that stay, they are named, since it has to be excluded from them as well.
+* A dependency with no reachable classes, whose exclusion would also remove dependencies with reachable classes, is listed again after the tree with those dependencies, which would then have to be added to the project directly.
+* A dependency without classes is marked as such: its resources may still be read at runtime, so the analysis can't tell whether it is used.
+
+Dependencies that are runtime artifacts of Quarkus extensions are marked, since excluding them usually breaks the extension.
+
+[source]
+----
+org.acme:my-app:1.0.0-SNAPSHOT
+└─ com.example:my-lib:1.0
+   ├─ io.grpc:grpc-protobuf:1.81.0                                EXCLUDE: no reachable classes, with 2 dependencies (1007 classes in total)
+   │  ├─ com.google.api.grpc:proto-google-common-protos:2.74.0    no reachable classes (998 classes)
+   │  └─ io.grpc:grpc-protobuf-lite:1.81.0                        no reachable classes (4 classes)
+   └─ org.apache.httpcomponents:httpcore:4.4.16                   EXCLUDE: no reachable classes (253 classes); also a dependency of com.google.http-client:google-http-client
+----
+
+After the tree, the report lists the dependencies with unreachable classes and only a few reachable ones (at most 10 by default), along with the names of the reachable classes, in case that part is easier to re-implement in the application, and the dependencies that were not analyzed, such as the ones excluded from tree-shaking.
+
+The following goal parameters customize the report:
+
+* `quarkus.dependency.trim.barely-used-max-classes`: the maximum number of reachable classes for a dependency with unreachable classes to be reported, `10` by default;
+* `quarkus.dependency.trim.max-listed-classes`: the maximum number of reachable class names listed for each of these dependencies, `20` by default.
+
+The report is based on static analysis and heuristics, so test the application after removing a dependency.
+The results are for a JVM build, unless native is enabled, for example with the `native` profile, since a native build keeps more classes.
+
 == Limitations
 
 * Tree-shaking is not supported for the `mutable-jar` package type, since re-augmentation requires all classes to be present.
