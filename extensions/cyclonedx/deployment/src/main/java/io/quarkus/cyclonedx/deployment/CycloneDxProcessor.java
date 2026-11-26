@@ -232,7 +232,7 @@ public class CycloneDxProcessor {
             return null;
         }
         Map<ArtifactKey, String> pedigrees = new HashMap<>();
-        for (ArtifactKey key : treeShakeResult.getRemovedClasses().keySet()) {
+        for (ArtifactKey key : treeShakeResult.getDependencies().keySet()) {
             String pedigree = treeShakeResult.computePedigree(key);
             if (pedigree != null) {
                 pedigrees.put(key, pedigree);

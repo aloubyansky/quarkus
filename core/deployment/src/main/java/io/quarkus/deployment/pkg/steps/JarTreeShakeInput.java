@@ -30,6 +30,7 @@ import io.quarkus.deployment.pkg.builditem.JarTreeShakeDeclaredClassesBuildItem;
 import io.quarkus.deployment.pkg.builditem.JarTreeShakeExcludedArtifactBuildItem;
 import io.quarkus.deployment.pkg.builditem.JarTreeShakeRootBytecodeBuildItem;
 import io.quarkus.deployment.pkg.builditem.JarTreeShakeRootClassBuildItem;
+import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.maven.dependency.DependencyFlags;
 import io.quarkus.maven.dependency.ResolvedDependency;
@@ -115,6 +116,10 @@ class JarTreeShakeInput implements AutoCloseable {
     final Map<String, Set<String>> conditionalDeclaredClasses = new HashMap<>();
     /** Classes whose declared classes must be loadable regardless of other classes. */
     final Set<String> declaredClassesHolders = new HashSet<>();
+    /** Coordinates of the runtime dependencies in classpath order. */
+    final List<ArtifactCoords> runtimeDependencies = new ArrayList<>();
+    /** Runtime dependencies that contain no classes. */
+    final Set<ArtifactKey> resourcesOnlyDependencies = new HashSet<>();
 
     /**
      * Creates an empty tree-shake input, whose collections are mutable and are filled by {@link #collect}
@@ -249,15 +254,18 @@ class JarTreeShakeInput implements AutoCloseable {
      * class-to-dependency mappings, service provider files, and sisu named components.
      * Classes from {@code quarkus-bootstrap-runner} are added as roots.
      */
-    private void collectRuntimeClasses(ApplicationModel appModel) {
+    void collectRuntimeClasses(ApplicationModel appModel) {
         final Map<String, Integer> depBytecodeVersion = new HashMap<>();
         for (ResolvedDependency dep : appModel.getDependencies(DependencyFlags.RUNTIME_CP)) {
             final boolean addClassesAsRoots = "quarkus-bootstrap-runner".equals(dep.getArtifactId());
+            runtimeDependencies.add(ArtifactCoords.of(dep.getGroupId(), dep.getArtifactId(),
+                    dep.getClassifier(), dep.getType(), dep.getVersion()));
 
             for (Path p : dep.getResolvedPaths()) {
                 depJarPaths.add(p);
             }
             final ModuleDescriptorSelector moduleDescriptors = new ModuleDescriptorSelector(appJavaVersion, serviceProviders);
+            final boolean[] hasClasses = { false };
             openPathTree(dep).walkRaw(visit -> {
                 String entry = visit.getResourceName();
                 if (isModuleInfoEntry(entry)) {
@@ -265,7 +273,8 @@ class JarTreeShakeInput implements AutoCloseable {
                     return;
                 }
                 if (isClassEntry(entry)) {
-                    processRuntimeClassEntry(entry, visit.getPath(), dep, addClassesAsRoots, depBytecodeVersion);
+                    hasClasses[0] |= processRuntimeClassEntry(entry, visit.getPath(), dep, addClassesAsRoots,
+                            depBytecodeVersion);
                     return;
                 }
                 if (entry.startsWith(META_INF_SERVICES) && !entry.endsWith("/")) {
@@ -277,6 +286,9 @@ class JarTreeShakeInput implements AutoCloseable {
                 }
             });
             moduleDescriptors.complete();
+            if (!hasClasses[0]) {
+                resourcesOnlyDependencies.add(dep.getKey());
+            }
         }
     }
 
@@ -284,8 +296,11 @@ class JarTreeShakeInput implements AutoCloseable {
      * Processes a single class entry from a runtime dependency JAR. Handles multi-release
      * resolution (keeping the highest version &le; {@code appJavaVersion}), records the
      * bytecode supplier and class-to-dependency mapping, and optionally adds the class as a root.
+     *
+     * @return {@code false} if the entry is under an invalid multi-release version directory, which the JVM never
+     *         loads, otherwise {@code true}
      */
-    private void processRuntimeClassEntry(
+    private boolean processRuntimeClassEntry(
             String entry,
             Path path,
             ResolvedDependency dep,
@@ -295,7 +310,7 @@ class JarTreeShakeInput implements AutoCloseable {
         final int classJavaVersion = multiReleaseVersion(entry);
         if (classJavaVersion < 0) {
             // not a valid multi-release version directory, the JVM never loads it
-            return;
+            return false;
         }
         final String className = classJavaVersion == 0 ? classNameOf(entry)
                 : classNameOf(entry, entry.indexOf('/', META_INF_VERSIONS_PREFIX.length()) + 1);
@@ -308,7 +323,7 @@ class JarTreeShakeInput implements AutoCloseable {
             higherVersionBytecode.computeIfAbsent(className, k -> new ArrayList<>())
                     .add(new BytecodeSupplier(path));
             classToDep.putIfAbsent(className, dep.getKey());
-            return;
+            return true;
         }
 
         int currentVersion = depBytecodeVersion.getOrDefault(className, -1);
@@ -323,6 +338,7 @@ class JarTreeShakeInput implements AutoCloseable {
         if (addClassesAsRoots) {
             roots.add(className);
         }
+        return true;
     }
 
     /**
@@ -711,6 +727,8 @@ class JarTreeShakeInput implements AutoCloseable {
         excludedArtifacts.clear();
         conditionalDeclaredClasses.clear();
         declaredClassesHolders.clear();
+        runtimeDependencies.clear();
+        resourcesOnlyDependencies.clear();
     }
 
     /**

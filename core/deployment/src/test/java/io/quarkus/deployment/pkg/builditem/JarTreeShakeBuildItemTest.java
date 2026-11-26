@@ -63,6 +63,19 @@ class JarTreeShakeBuildItemTest {
         assertThat(removed).isEmpty();
     }
 
+    @Test
+    void reachableClassesAreCollected() throws Exception {
+        ResolvedDependency dep = dependencyWith("lib/Used.class", "lib/Unused.class",
+                "META-INF/versions/17/lib/Used.class", "META-INF/lib.properties");
+        JarTreeShakeBuildItem item = new JarTreeShakeBuildItem(true, Set.of("lib.Used", "other.Used"), Map.of(),
+                Set.of());
+
+        Set<String> reachable = new HashSet<>();
+        item.collectReachableClasses(dep, reachable);
+
+        assertThat(reachable).containsExactly("lib.Used");
+    }
+
     private Set<String> unreachableEntries(ResolvedDependency dep, String... reachableClassNames) throws IOException {
         JarTreeShakeBuildItem item = new JarTreeShakeBuildItem(true, Set.of(reachableClassNames), Map.of(), Set.of());
         Set<String> removed = new HashSet<>();

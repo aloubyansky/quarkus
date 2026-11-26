@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -31,6 +32,8 @@ import org.objectweb.asm.signature.SignatureVisitor;
 import io.quarkus.deployment.pkg.TreeShakeConfig;
 import io.quarkus.deployment.pkg.builditem.JarTreeShakeBuildItem;
 import io.quarkus.deployment.pkg.builditem.JarTreeShakeDeclaredClassesBuildItem;
+import io.quarkus.deployment.pkg.builditem.JarTreeShakeDependencyInfo;
+import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.paths.OpenPathTree;
 import io.smallrye.classfile.Attributes;
@@ -104,7 +107,8 @@ class JarTreeShaker {
     /**
      * Runs the tree-shake analysis: traces reachable classes from roots via BFS,
      * evaluates conditional roots to a fixed point, computes removal stats,
-     * and returns a {@link JarTreeShakeBuildItem} with the reachable set and per-dependency removals.
+     * and returns a {@link JarTreeShakeBuildItem} with the reachable set, per-dependency removals and class counts,
+     * and the dependencies without classes.
      */
     JarTreeShakeBuildItem run() {
         final long startTime = System.currentTimeMillis();
@@ -166,11 +170,15 @@ class JarTreeShaker {
         int removedClassCount = 0;
         long removedBytes = 0;
         final Map<ArtifactKey, List<String>> removedClassesPerDep = new HashMap<>();
+        final Map<ArtifactKey, int[]> classCounters = new HashMap<>();
         for (var entry : input.depBytecode.entrySet()) {
+            final ArtifactKey dep = input.classToDep.get(entry.getKey());
+            if (dep != null) {
+                classCounters.computeIfAbsent(dep, k -> new int[1])[0]++;
+            }
             if (!reachable.contains(entry.getKey())) {
                 removedClassCount++;
                 removedBytes += bytecodeSize(entry.getValue());
-                ArtifactKey dep = input.classToDep.get(entry.getKey());
                 if (dep != null) {
                     removedClassesPerDep.computeIfAbsent(dep, k -> new ArrayList<>())
                             .add(entry.getKey().replace('.', '/') + ".class");
@@ -181,6 +189,7 @@ class JarTreeShaker {
         for (List<String> list : removedClassesPerDep.values()) {
             Collections.sort(list);
         }
+        final Map<ArtifactKey, JarTreeShakeDependencyInfo> dependencies = dependencyInfos(classCounters, removedClassesPerDep);
 
         // Release all analysis data structures
         input.releaseAnalysisData();
@@ -204,17 +213,37 @@ class JarTreeShaker {
             log.debugf("  Reachable classes: %d", reachableClasses);
             log.debug("------------------------------------------------------------");
             log.debug("  DEPENDENCIES WITH REMOVED CLASSES:");
-            removedClassesPerDep.entrySet().stream()
-                    .sorted(Map.Entry.comparingByKey(Comparator.comparing(ArtifactKey::toGacString)))
-                    .forEach(e -> log.debugf("    - %s  (%d classes removed)",
-                            e.getKey().toGacString(), e.getValue().size()));
+            dependencies.values().stream()
+                    .filter(d -> !d.removedClasses().isEmpty())
+                    .sorted(Comparator.comparing(d -> d.coords().getKey().toGacString()))
+                    .forEach(d -> log.debugf("    - %s  (%d of %d classes removed)",
+                            d.coords().getKey().toGacString(), d.removedClasses().size(), d.originalClassCount()));
             log.debug("------------------------------------------------------------");
             log.debugf("  Done in %dms", System.currentTimeMillis() - startTime);
             log.debug("============================================================");
         }
 
         return new JarTreeShakeBuildItem(input.treeShakeMode == TreeShakeConfig.TreeShakeMode.CLASSES, reachable,
-                removedClassesPerDep, referencedJdkPackages);
+                dependencies, referencedJdkPackages);
+    }
+
+    /**
+     * Creates the analysis result of each runtime dependency, in classpath order.
+     * Must be called before {@link JarTreeShakeInput#releaseAnalysisData()}, which clears the excluded artifacts.
+     */
+    private Map<ArtifactKey, JarTreeShakeDependencyInfo> dependencyInfos(Map<ArtifactKey, int[]> classCounters,
+            Map<ArtifactKey, List<String>> removedClassesPerDep) {
+        final Map<ArtifactKey, JarTreeShakeDependencyInfo> dependencies = new LinkedHashMap<>(input.runtimeDependencies.size());
+        for (ArtifactCoords coords : input.runtimeDependencies) {
+            final ArtifactKey key = coords.getKey();
+            final int[] classCount = classCounters.get(key);
+            dependencies.put(key, new JarTreeShakeDependencyInfo(coords,
+                    input.excludedArtifacts.contains(key),
+                    input.resourcesOnlyDependencies.contains(key),
+                    classCount == null ? 0 : classCount[0],
+                    removedClassesPerDep.getOrDefault(key, List.of())));
+        }
+        return dependencies;
     }
 
     /**

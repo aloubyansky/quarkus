@@ -11,6 +11,8 @@ import java.util.Set;
 
 import io.quarkus.deployment.pkg.TreeShakeConfig;
 import io.quarkus.deployment.pkg.builditem.JarTreeShakeBuildItem;
+import io.quarkus.deployment.pkg.builditem.JarTreeShakeDependencyInfo;
+import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.smallrye.classfile.Annotation;
 import io.smallrye.classfile.AnnotationElement;
@@ -41,6 +43,10 @@ final class TreeShakeInputFixture {
      */
     TreeShakeInputFixture dependency(String artifactKey, byte[]... classes) {
         final ArtifactKey key = ArtifactKey.fromString(artifactKey);
+        if (input.runtimeDependencies.stream().noneMatch(coords -> coords.getKey().equals(key))) {
+            input.runtimeDependencies.add(
+                    ArtifactCoords.jar(key.getGroupId(), key.getArtifactId(), key.getClassifier(), "1.0"));
+        }
         for (byte[] bytecode : classes) {
             final String name = className(bytecode);
             input.depBytecode.put(name, () -> bytecode);
@@ -113,8 +119,8 @@ final class TreeShakeInputFixture {
     static Set<String> keptDependencyClasses(JarTreeShakeInput input) {
         final Set<String> kept = new HashSet<>(input.depBytecode.keySet());
         final JarTreeShakeBuildItem result = new JarTreeShaker(input).run();
-        for (List<String> removed : result.getRemovedClasses().values()) {
-            for (String classFile : removed) {
+        for (JarTreeShakeDependencyInfo dep : result.getDependencies().values()) {
+            for (String classFile : dep.removedClasses()) {
                 kept.remove(classFile.substring(0, classFile.length() - ".class".length()).replace('/', '.'));
             }
         }
